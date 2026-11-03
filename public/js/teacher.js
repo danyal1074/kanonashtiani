@@ -1,4 +1,5 @@
 // پنل معلم
+import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, progress, ring, empty, cdHtml, jdate, jtime, jshort,
   timeAgo, subjIcon, gradeName, dateField, readDate, tehranIso, fileToData, barChart, lineChart, WEEKDAYS, addDays, formData, state, en, icon, kpiCard, nameAvatar, JMONTHS, jparts } from './core.js';
 import { messagesView, announcementsView, accountView } from './common.js';
@@ -12,6 +13,8 @@ export const nav = (me) => [
   { path: '/students', icon: 'users', label: 'عملکرد دانش‌آموزان' },
   { path: '/plans', icon: 'timer', label: 'برنامه پومودوروی هفتگی' },
   { path: '/materials', icon: 'video', label: 'ویدیو و جزوه' },
+  { path: '/manual-scores', icon: 'clipboard', label: 'نمرات مستمر کلاسی' },
+  { path: '/att-log', icon: 'user-check', label: 'لاگ تغییر حضور' },
   { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
   { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌ها' },
   { path: '/account', icon: 'sliders', label: 'حساب کاربری' },
@@ -357,6 +360,8 @@ export const routes = [
   { path: '/students/:id', view: studentDetail },
   { path: '/plans', view: plans },
   { path: '/materials', view: materials },
+  { path: '/manual-scores', view: L.teacherScores },
+  { path: '/att-log', view: L.attLog },
   { path: '/messages', view: messagesView },
   { path: '/messages/:id', view: messagesView },
   { path: '/announcements', view: announcementsView },

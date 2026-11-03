@@ -6,6 +6,7 @@ import { messagesView, announcementsView, passwordCard, bindPassword } from './c
 import { gamesHub, mathRush, storyView } from './games.js';
 import { panelShop } from './shop.js';
 import { sproutArt } from './icons.js';
+import * as L from './legacy.js';
 
 export const nav = (me) => [
   { path: '/home', icon: 'home', label: 'خانه' },
@@ -15,6 +16,11 @@ export const nav = (me) => [
   { path: '/study', icon: 'timer', label: 'مطالعه و پومودورو' },
   { path: '/path', icon: 'sparkles', label: 'مسیر یادگیری هوشمند' },
   { path: '/games', icon: 'gamepad', label: 'بازی و داستان' },
+  { path: '/self-exams', icon: 'target', label: 'آزمون خودسنجی' },
+  { path: '/roadmap', icon: 'award', label: 'نقشه راه رشد' },
+  { path: '/books', icon: 'book', label: 'کتاب‌های هوش' },
+  { path: '/records', icon: 'receipt', label: 'نمرات و فاکتورها' },
+  { path: '/counselor', icon: 'message', label: 'مشاور تحصیلی' },
   { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
   { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌ها', open: true },
   { path: '/profile', icon: 'user', label: 'پروفایل من' },
@@ -459,4 +465,13 @@ export const routes = [
   { path: '/account', view: profile },
   { path: '/payment', view: payment, open: true },
   { path: '/shop', view: panelShop },
+  { path: '/self-exams', view: L.selfExams },
+  { path: '/self-exam/:id', view: L.selfExam },
+  { path: '/roadmap', view: L.roadmap },
+  { path: '/counselor', view: L.counselor },
+  { path: '/books', view: L.books },
+  { path: '/books/:id', view: L.books },
+  { path: '/books/:id/:topic', view: L.books },
+  { path: '/records', view: L.records },
+  { path: '/barpa/:id', view: L.barpaView },
 ];

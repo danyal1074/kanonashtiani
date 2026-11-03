@@ -1,4 +1,5 @@
 // پنل والدین
+import * as L from './legacy.js';
 import { api, esc, fa, pct, money, $, $$, on, setHead, avatar, progress, ring, empty, jdate, jtime, timeAgo, subjIcon, gradeName, lineChart, barChart, state, WEEKDAYS, faWeekday, cdHtml, icon, kpiCard } from './core.js';
 import { messagesView, announcementsView, accountView } from './common.js';
 import { panelShop } from './shop.js';
@@ -8,6 +9,7 @@ export const nav = (me) => [
   { path: '/home', icon: 'home', label: 'نمای کلی فرزند' },
   { path: '/report', icon: 'file-text', label: 'کارنامه و پیشرفت' },
   { path: '/absences', icon: 'calendar', label: 'سوابق غیبت' },
+  { path: '/records', icon: 'receipt', label: 'نمرات و فاکتورها' },
   { path: '/tasks', icon: 'clipboard', label: 'تکالیف و اطلاعیه‌ها' },
   { path: '/messages', icon: 'message', label: 'پیام به معلم', badge: me.unread },
   { path: '/shop', icon: 'bag', label: 'فروشگاه کانون' },
@@ -93,6 +95,8 @@ export const routes = [
   { path: '/home', view: home },
   { path: '/report', view: report },
   { path: '/absences', view: absences },
+  { path: '/records', view: (el, _p, me) => withChild(el, me, (box, _d, cur) => L.parentRecords(box, null, me, cur)) },
+  { path: '/barpa/:id', view: L.barpaView },
   { path: '/tasks', view: tasks },
   { path: '/messages', view: messagesView },
   { path: '/messages/:id', view: messagesView },

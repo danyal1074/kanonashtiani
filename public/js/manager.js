@@ -1,4 +1,5 @@
 // پنل مدیر کانون
+import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, nameAvatar, progress, empty, jdate, jtime, jshort,
   subjIcon, gradeName, dateField, readDate, fileToData, barChart, lineChart, donut, WEEKDAYS, addDays, formData, state, en, logoHtml, timeAgo, printOverlay, icon, hasIcon } from './core.js';
 import { messagesView, accountView } from './common.js';
@@ -12,6 +13,11 @@ export const nav = (me) => [
   { path: '/fees', icon: 'card', label: 'حق عضویت و رسیدها' },
   { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌رسانی' },
   { path: '/accounting', icon: 'wallet', label: 'حسابداری' },
+  { path: '/invoices', icon: 'receipt', label: 'فاکتورهای دوره‌ای' },
+  { path: '/sms-outbox', icon: 'message', label: 'صندوق پیامک' },
+  { path: '/barpa', icon: 'trophy', label: 'کارنامه‌های برپا' },
+  { path: '/manual-scores', icon: 'clipboard', label: 'نمرات مستمر کلاسی' },
+  { path: '/att-log', icon: 'user-check', label: 'لاگ تغییر حضور' },
   { path: '/comprehensive', icon: 'trophy', label: 'آزمون جامع کانون' },
   { path: '/performance', icon: 'trend', label: 'عملکرد دانش‌آموزان' },
   { path: '/shop', icon: 'bag', label: 'مدیریت فروشگاه' },
@@ -229,10 +235,11 @@ async function fees(el) {
     const list = await api(`/api/manager/receipts?status=${tab}`);
     $('#rq', el).innerHTML = list.length ? `<div class="grid c2">${list.map((p) => `<div class="card flat"><div class="row">${nameAvatar(p.full_name, 'sm')}<div class="grow"><b class="small">${esc(p.full_name)}</b><div class="tiny muted">${gradeName(p.grade)} ${esc(p.class_name || '')} • ${timeAgo(p.created_at)}</div></div><b class="small">${money(p.amount)}</b></div>
       ${p.receipt_path ? `<a href="/uploads/${esc(p.receipt_path)}" target="_blank" aria-label="مشاهده تصویر رسید ${esc(p.full_name)}"><img src="/uploads/${esc(p.receipt_path)}" alt="رسید" loading="lazy" style="width:100%;max-height:220px;object-fit:contain;background:var(--bg);border-radius:12px;margin:10px 0"></a>` : ''}
-      ${p.status === 'pending' ? `<div class="row"><button class="btn green grow" data-ok="${p.id}">${icon('check-circle', { size: 16 })} تأیید</button><button class="btn red grow" data-no="${p.id}">${icon('x', { size: 16 })} رد</button></div>` : p.status === 'rejected' ? `<div class="small" style="color:var(--red)">علت: ${esc(p.reject_reason)}</div>` : `<span class="badge green">تأیید شد ${jdate(p.reviewed_at)}</span>`}</div>`).join('')}</div>` : empty(tab === 'pending' ? 'check-circle' : 'inbox', tab === 'pending' ? 'رسیدی در صف بررسی نیست' : 'موردی نیست');
+      ${p.status === 'pending' ? `<div class="row"><button class="btn green grow" data-ok="${p.id}">${icon('check-circle', { size: 16 })} تأیید</button><button class="btn red grow" data-no="${p.id}">${icon('x', { size: 16 })} رد</button></div>` : p.status === 'rejected' ? `<div class="small" style="color:var(--red)">علت: ${esc(p.reject_reason)}</div>` : `<div class="row"><span class="badge green">تأیید شد ${jdate(p.reviewed_at)}</span><button class="btn sm ghost" style="margin-inline-start:auto" data-rev="${p.id}">برگشت رسید</button></div>`}</div>`).join('')}</div>` : empty(tab === 'pending' ? 'check-circle' : 'inbox', tab === 'pending' ? 'رسیدی در صف بررسی نیست' : 'موردی نیست');
   };
   drawQueue();
   on(el, 'click', '[data-tab]', (e, b) => { tab = b.dataset.tab; $$('[data-tab]', el).forEach((x) => x.classList.toggle('on', x === b)); drawQueue(); });
+  on(el, 'click', '[data-rev]', (e, b) => modal({ title: 'برگشت رسید تأییدشده', body: '<p class="small muted" style="margin-top:0">رسید باطل و یک سند هزینه‌ی اصلاحی در حسابداری ثبت می‌شود. این کار برگشت‌پذیر نیست.</p><div class="field"><label for="revWhy">علت برگشت</label><input class="input" id="revWhy" maxlength="200" required></div>', actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ثبت برگشت', cls: 'red', onClick: async (m) => { const reason = m.querySelector('#revWhy').value.trim(); if (!reason) { toast('علت را بنویسید'); return false; } await post(`/api/manager/receipts/${b.dataset.rev}/reverse`, { reason }); toast('رسید برگشت خورد و سند اصلاحی ثبت شد', 'ok'); drawQueue(); } }] }));
   on(el, 'click', '[data-ok]', (e, b) => busy(b, async () => { await post(`/api/manager/receipts/${b.dataset.ok}/approve`); toast('رسید تأیید شد و در صندوق ثبت شد', 'ok'); drawQueue(); }));
   on(el, 'click', '[data-no]', (e, b) => modal({
     title: ' رد رسید', body: `<div class="label" style="margin-bottom:8px">علت رد (برای دانش‌آموز نمایش داده می‌شود)</div><div class="chips" style="margin-bottom:10px">${REJECT_REASONS.map((r) => `<button class="chip" data-reason="${esc(r)}">${esc(r)}</button>`).join('')}</div><textarea class="input" id="reason" placeholder="یا علت دیگری بنویسید…"></textarea>`,
@@ -443,6 +450,12 @@ export const routes = [
   { path: '/fees', view: fees },
   { path: '/announcements', view: announcements },
   { path: '/accounting', view: accounting },
+  { path: '/invoices', view: L.mgrInvoices },
+  { path: '/sms-outbox', view: L.smsOutbox },
+  { path: '/barpa', view: L.mgrBarpa },
+  { path: '/barpa/:id', view: L.barpaView },
+  { path: '/manual-scores', view: L.mgrScores },
+  { path: '/att-log', view: L.attLog },
   { path: '/comprehensive', view: comprehensive },
   { path: '/comprehensive/:id', view: compDetail },
   { path: '/performance', view: performance },
