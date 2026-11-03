@@ -71,15 +71,26 @@ export default function register(r) {
   r.get('/api/parent/children/:id/invoices', P, (ctx) => {
     const s = ownChild(ctx);
     return all(`
-      SELECT i.id, i.fee_type, i.period, i.amount, i.created_at,
-             COALESCE((SELECT SUM(amount) FROM payments p WHERE p.invoice_id=i.id AND p.status='approved'), 0) paid
+      SELECT i.id, i.id invoice_id, i.fee_type, i.period, i.amount, i.paid, i.status, i.created_at,
+             COALESCE((SELECT SUM(amount) FROM payments p WHERE p.invoice_id=i.id AND p.status='approved'), 0) paid_calc
       FROM fee_invoices i
       WHERE i.student_id=? ORDER BY i.id DESC
-    `, s.user_id).map((r) => ({
-      ...r,
-      remaining: Math.max(0, r.amount - r.paid),
-      status: r.paid >= r.amount ? 'settled' : (r.paid > 0 ? 'partially_paid' : 'unpaid')
-    }));
+    `, s.user_id).map((r) => {
+      const paid = r.paid ?? r.paid_calc ?? 0;
+      const remaining = Math.max(0, r.amount - paid);
+      const status = paid >= r.amount ? 'paid' : (paid > 0 ? 'partial' : 'issued');
+      return {
+        id: r.id,
+        invoice_id: r.id,
+        fee_type: r.fee_type,
+        period: r.period,
+        amount: r.amount,
+        paid,
+        remaining,
+        status,
+        created_at: r.created_at
+      };
+    });
   });
 
   r.get('/api/parent/children/:id/barpa-reports', P, (ctx) => {

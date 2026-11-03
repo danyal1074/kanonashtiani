@@ -4,7 +4,8 @@ import path from 'node:path';
 import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
 import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
 import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
-import { feeStatus, announcementAudience, saveExamResult } from '../logic.js';
+import { feeStatus, announcementAudience, saveExamResult, recalcInvoice } from '../logic.js';
+export { recalcInvoice };
 import { importStudents } from '../importer.js';
 import { sendSms, smsProvider } from '../sms.js';
 import { parseQuestions, examWithResults, performanceList, studentDetail } from './teacher.js';
@@ -59,8 +60,8 @@ function linkParent(ctx, studentId, phone, studentName) {
 }
 
 function paymentStateSql() {
-  return `CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved') THEN 'paid'
-    WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='pending') THEN 'pending' ELSE 'unpaid' END`;
+  return `CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL) THEN 'paid'
+    WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='pending' AND p.invoice_id IS NULL) THEN 'pending' ELSE 'unpaid' END`;
 }
 
 export default function register(r) {
@@ -284,7 +285,7 @@ export default function register(r) {
     return all(`SELECT u.id, u.full_name, s.avatar, ${paymentStateSql()} st FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.active=1 ORDER BY st DESC, u.full_name`, c.id);
   });
   r.get('/api/manager/receipts', M, (ctx) => {
-    const status = ['pending', 'approved', 'rejected'].includes(ctx.query.status) ? ctx.query.status : 'pending';
+    const status = ['pending', 'approved', 'rejected', 'reversed'].includes(ctx.query.status) ? ctx.query.status : 'pending';
     return all(`SELECT p.*, u.full_name, s.grade, c.name class_name, s.avatar FROM payments p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id
       WHERE u.center_id=? AND p.status=? ORDER BY p.id ${status === 'pending' ? 'ASC' : 'DESC'} LIMIT 200`, ctx.user.center_id, status);
   });
@@ -298,8 +299,15 @@ export default function register(r) {
     const p = ownPayment(ctx);
     tx(() => {
       run(`UPDATE payments SET status='approved', reviewed_at=datetime('now') WHERE id=?`, p.id);
-      run(`INSERT INTO transactions (center_id, type, amount, title, category, date, ref) VALUES (?,?,?,?,?,?,?)`, ctx.user.center_id, 'income', p.amount, `حق عضویت - ${p.full_name}`, 'حق عضویت', ymd(), `pay:${p.id}`);
-      run(`DELETE FROM points WHERE student_id=? AND ref LIKE 'fee:%'`, p.student_id);
+      if (p.invoice_id) {
+        const inv = get('SELECT fee_type, period FROM fee_invoices WHERE id=?', p.invoice_id);
+        const title = inv ? `فاکتور ${inv.fee_type || ''} ${inv.period || ''} - ${p.full_name}`.trim() : `فاکتور - ${p.full_name}`;
+        run(`INSERT INTO transactions (center_id, type, amount, title, category, date, ref) VALUES (?,?,?,?,?,?,?)`, ctx.user.center_id, 'income', p.amount, title, 'فاکتور', ymd(), `pay:${p.id}`);
+        recalcInvoice(p.invoice_id);
+      } else {
+        run(`INSERT INTO transactions (center_id, type, amount, title, category, date, ref) VALUES (?,?,?,?,?,?,?)`, ctx.user.center_id, 'income', p.amount, `حق عضویت - ${p.full_name}`, 'حق عضویت', ymd(), `pay:${p.id}`);
+        run(`DELETE FROM points WHERE student_id=? AND ref LIKE 'fee:%'`, p.student_id);
+      }
     });
     return { ok: true };
   });
@@ -307,7 +315,12 @@ export default function register(r) {
     const p = ownPayment(ctx);
     const reason = clampStr(ctx.body.reason, 200);
     if (!reason) fail(400, 'علت رد رسید را مشخص کنید');
-    run(`UPDATE payments SET status='rejected', reject_reason=?, reviewed_at=datetime('now') WHERE id=?`, reason, p.id);
+    tx(() => {
+      run(`UPDATE payments SET status='rejected', reject_reason=?, reviewed_at=datetime('now') WHERE id=?`, reason, p.id);
+      if (p.invoice_id) {
+        recalcInvoice(p.invoice_id);
+      }
+    });
     return { ok: true };
   });
 
@@ -470,10 +483,13 @@ export default function register(r) {
     const reason = clampStr(ctx.body.reason, 200) || 'برگشت توسط مدیریت کانون';
 
     tx(() => {
-      run(`UPDATE payments SET status='rejected', reversed_at=datetime('now'), reversed_by=?, reverse_reason=?, reject_reason=? WHERE id=?`,
+      run(`UPDATE payments SET status='reversed', reversed_at=datetime('now'), reversed_by=?, reverse_reason=?, reject_reason=? WHERE id=?`,
         ctx.user.id, reason, `برگشت رسید تأییدشده: ${reason}`, p.id);
       run(`INSERT INTO transactions (center_id, type, amount, title, category, date, ref) VALUES (?,?,?,?,?,?,?)`,
         ctx.user.center_id, 'expense', p.amount, `سند اصلاحی برگشت رسید - ${p.full_name}`, 'اصلاحیه', ymd(), `reversal:${p.id}`);
+      if (p.invoice_id) {
+        recalcInvoice(p.invoice_id);
+      }
     });
 
     return { ok: true, id: p.id, reversed: true, reason };
@@ -489,11 +505,17 @@ export default function register(r) {
       LEFT JOIN students s ON s.user_id=u.id
       LEFT JOIN classes c ON c.id=s.class_id
       WHERE i.center_id=? ORDER BY i.id DESC
-    `, ctx.user.center_id).map((r) => ({
-      ...r,
-      remaining: Math.max(0, r.amount - r.paid),
-      status: r.paid >= r.amount ? 'settled' : (r.paid > 0 ? 'partially_paid' : 'unpaid')
-    }));
+    `, ctx.user.center_id).map((r) => {
+      const paid = Number(r.paid) || 0;
+      const amount = Number(r.amount) || 0;
+      const status = paid >= amount ? 'paid' : (paid > 0 ? 'partial' : 'issued');
+      return {
+        ...r,
+        paid,
+        remaining: Math.max(0, amount - paid),
+        status,
+      };
+    });
   });
 
   r.post('/api/manager/invoices', M, (ctx) => {
@@ -505,26 +527,31 @@ export default function register(r) {
 
     const studentIds = [];
     if (b.class_id) {
-      const studs = all('SELECT user_id FROM students WHERE class_id=?', Number(b.class_id));
+      const cls = get('SELECT id FROM classes WHERE id=? AND center_id=?', Number(b.class_id), ctx.user.center_id);
+      if (!cls) fail(404, 'کلاس یافت نشد یا متعلق به این کانون نیست');
+      const studs = all("SELECT s.user_id FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.center_id=? AND u.role='student'", cls.id, ctx.user.center_id);
       for (const s of studs) studentIds.push(s.user_id);
     } else if (b.student_id) {
-      studentIds.push(Number(b.student_id));
+      const stu = get("SELECT id FROM users WHERE id=? AND center_id=? AND role='student'", Number(b.student_id), ctx.user.center_id);
+      if (!stu) fail(404, 'دانش‌آموز یافت نشد یا متعلق به این کانون نیست');
+      studentIds.push(stu.id);
     }
     if (!studentIds.length) fail(400, 'دانش‌آموز یا کلاس انتخاب نشده است');
 
     const createdIds = [];
     tx(() => {
       for (const sid of studentIds) {
-        const res = run(`
+        run(`
           INSERT INTO fee_invoices (center_id, student_id, fee_type, period, amount)
           VALUES (?,?,?,?,?)
           ON CONFLICT(student_id, fee_type, period) DO UPDATE SET amount=excluded.amount
         `, ctx.user.center_id, sid, fee_type, period, amount);
-        createdIds.push(res.lastInsertRowid);
+        const inv = get('SELECT id FROM fee_invoices WHERE student_id=? AND fee_type=? AND period=?', sid, fee_type, period);
+        createdIds.push(inv.id);
       }
     });
 
-    return { ok: true, count: createdIds.length, ids: createdIds };
+    return { ok: true, id: createdIds[0], count: createdIds.length, ids: createdIds };
   });
 
   // ---------- صندوق خروجی و صف پیامک‌ها (Option 12) ----------
@@ -540,6 +567,7 @@ export default function register(r) {
   r.post('/api/manager/sms-outbox/:id/retry', M, async (ctx) => {
     const msg = get('SELECT * FROM sms_outbox WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id);
     if (!msg) fail(404, 'پیامک در صندوق خروجی یافت نشد');
+    if (msg.status !== 'failed') fail(400, 'فقط پیام‌های ناموفق (failed) قابل تلاش مجدد هستند');
     const r = await sendSms(msg.recipient_phone, msg.content);
     if (r.ok) {
       run(`UPDATE sms_outbox SET status='sent', sent_at=datetime('now'), error_message=NULL WHERE id=?`, msg.id);
@@ -575,11 +603,19 @@ export default function register(r) {
   });
 
   // ---------- کارنامه رسمی آزمون جامع «طرح برپا» برای مدیر (Option 9) ----------
+  const toNumOrNull = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) ? Number(val) : null);
+
   r.post('/api/manager/barpa-exams/reports', M, (ctx) => {
     const b = ctx.body;
-    const exam_id = clampStr(b.exam_id, 80) || 'barpa_comprehensive';
-    const exam_title = clampStr(b.exam_title, 120) || 'آزمون جامع طرح برپا';
     const grade = String(b.grade || 'نهم');
+    const exam_title = clampStr(b.exam_title, 120) || 'آزمون جامع طرح برپا';
+    const stage = b.stage ? String(b.stage).trim() : '';
+    let exam_id = clampStr(b.exam_id, 80);
+    if (!exam_id) {
+      const cleanTitle = exam_title.replace(/[^\w\u0600-\u06FF]+/g, '_').replace(/^_+|_+$/g, '');
+      const sPart = stage ? `_stage${stage}` : '';
+      exam_id = `barpa_${grade}${sPart}_${cleanTitle}`;
+    }
     const records = Array.isArray(b.records) ? b.records : (b.student_id ? [b] : []);
     if (!records.length) fail(400, 'حداقل یک کارنامه ارسال کنید');
 
@@ -598,25 +634,34 @@ export default function register(r) {
             overall_unanswered, total_questions, subjects_json, categories_json, answers_json
           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(exam_id, student_id) DO UPDATE SET
+            candidate_code = excluded.candidate_code,
+            student_name = excluded.student_name,
+            school_name = excluded.school_name,
+            total_attendees = excluded.total_attendees,
             overall_traz = excluded.overall_traz,
             overall_rank_all = excluded.overall_rank_all,
             overall_rank_center = excluded.overall_rank_center,
             overall_percentage = excluded.overall_percentage,
+            overall_correct = excluded.overall_correct,
+            overall_wrong = excluded.overall_wrong,
+            overall_unanswered = excluded.overall_unanswered,
+            total_questions = excluded.total_questions,
             subjects_json = excluded.subjects_json,
+            categories_json = excluded.categories_json,
             answers_json = excluded.answers_json
         `, ctx.user.center_id, exam_id, exam_title, grade, sid,
            rec.candidate_code || `STU_${sid}`,
            rec.student_name || stu.full_name,
-           rec.school_name || stu.school || 'کانون شهید کاظمی آشتیانی',
-           Number(rec.total_attendees) || 1924,
-           Number(rec.overall_traz) || 6000,
-           Number(rec.overall_rank_all) || 1,
-           Number(rec.overall_rank_center) || 1,
-           Number(rec.overall_percentage) || 75.5,
-           Number(rec.overall_correct) || 80,
-           Number(rec.overall_wrong) || 15,
-           Number(rec.overall_unanswered) || 25,
-           Number(rec.total_questions) || 120,
+           rec.school_name || stu.school || null,
+           toNumOrNull(rec.total_attendees),
+           toNumOrNull(rec.overall_traz),
+           toNumOrNull(rec.overall_rank_all),
+           toNumOrNull(rec.overall_rank_center),
+           toNumOrNull(rec.overall_percentage),
+           toNumOrNull(rec.overall_correct),
+           toNumOrNull(rec.overall_wrong),
+           toNumOrNull(rec.overall_unanswered),
+           toNumOrNull(rec.total_questions),
            typeof rec.subjects === 'string' ? rec.subjects : JSON.stringify(rec.subjects || []),
            typeof rec.categories === 'string' ? rec.categories : JSON.stringify(rec.categories || []),
            typeof rec.answers === 'string' ? rec.answers : JSON.stringify(rec.answers || [])
@@ -631,61 +676,62 @@ export default function register(r) {
   // ---------- آپلود PDF و تفکیک خودکار کارنامه آزمون جامع برپا ----------
   const handleBarpaUpload = async (ctx) => {
     const b = ctx.body || {};
-    let pdfPath = null;
+    const centerId = ctx.user.role === 'admin' ? (Number(b.center_id) || ctx.user.center_id) : ctx.user.center_id;
+    if (!centerId) fail(400, 'شناسه کانون الزامی است');
 
-    if (b.file && b.file.data) {
-      const fileName = saveUpload(b.file, 50);
-      pdfPath = path.join(UPLOAD_DIR, fileName);
-    } else if (b.pdf_path && fs.existsSync(b.pdf_path)) {
-      pdfPath = b.pdf_path;
-    } else {
-      const sample = path.join(ROOT, 'data', 'barpa_sample.pdf');
-      const userUploadSample = 'C:\\Users\\danyal\\.gemini\\antigravity\\brain\\f89c0454-f7eb-4c80-8609-006fe651a814\\.user_uploaded\\media_1793705245043_2c1c4dbd.pdf';
-      if (fs.existsSync(sample)) {
-        pdfPath = sample;
-      } else if (fs.existsSync(userUploadSample)) {
-        pdfPath = userUploadSample;
-      } else {
-        fail(400, 'فایل آزمون برپا ارسال نشده است');
-      }
+    if (!b.file || !b.file.data) {
+      fail(400, 'فایل آزمون برپا ارسال نشده است');
     }
+
+    const fileName = saveUpload(b.file, 50);
+    const pdfPath = path.join(UPLOAD_DIR, fileName);
 
     const scriptPath = path.join(ROOT, 'scripts', 'parse_barpa_pdf.py');
     const records = await parseBarpaPdfFile(scriptPath, pdfPath);
 
-    const defaultPassHash = hashPassword('12345678');
-    const examId = 'barpa_grade9_stage1';
-    const examTitle = clampStr(b.exam_title, 120) || 'مرحله اول برپا | پایه‌ی نهم';
+    const grade = clampStr(b.grade, 20) || 'نهم';
+    const stage = b.stage ? String(b.stage).trim() : '';
+    const examTitle = clampStr(b.exam_title, 120) || (stage ? `مرحله ${stage} برپا | پایه ${grade}` : `آزمون برپا | پایه ${grade}`);
+    let examId = clampStr(b.exam_id, 80);
+    if (!examId) {
+      const cleanTitle = examTitle.replace(/[^\w\u0600-\u06FF]+/g, '_').replace(/^_+|_+$/g, '');
+      const sPart = stage ? `_stage${stage}` : '';
+      examId = `barpa_${grade}${sPart}_${cleanTitle}`;
+    }
+
     const imported = [];
+    const unmatched = [];
 
     tx(() => {
-      for (const item of records) {
-        const candidateCode = toEnDigits(String(item.candidate_code || '')).trim() || `STU9_${item.page || 1}`;
-        const fullName = clampStr(item.full_name, 80);
-        if (!fullName) continue;
-        const schoolName = clampStr(item.school_name, 100) || 'شهید کاظمی آشتیانی';
-        const total = item.total_summary || {};
+      // پاکسازی رکوردهای تطبیق‌نشده قبلی برای همین آزمون و کانون جهت جلوگیری از تکرار هنگام آپلود دوباره
+      run('DELETE FROM barpa_unmatched WHERE center_id=? AND exam_id=?', centerId, examId);
 
-        let stu = get("SELECT u.id, u.full_name FROM users u WHERE u.role='student' AND u.center_id=? AND (u.national_code=? OR u.username=?)", ctx.user.center_id, candidateCode, candidateCode);
-        if (!stu) {
-          stu = get("SELECT u.id, u.full_name FROM users u WHERE u.role='student' AND u.center_id=? AND u.full_name=?", ctx.user.center_id, fullName);
+      for (const item of records) {
+        const candidateCode = toEnDigits(String(item.candidate_code || '')).trim();
+        const fullName = clampStr(item.full_name, 80);
+        const schoolName = clampStr(item.school_name, 100) || null;
+        const total = item.total_summary || {};
+        const payloadJson = JSON.stringify(item);
+
+        if (!candidateCode) {
+          const res = run(`
+            INSERT INTO barpa_unmatched (exam_id, center_id, candidate_code, full_name, school_name, page, payload_json, created_at)
+            VALUES (?,?,?,?,?,?,?,?)
+          `, examId, centerId, null, fullName || null, schoolName, item.page || null, payloadJson, Date.now());
+          unmatched.push({ id: res.lastInsertRowid, candidate_code: null, full_name: fullName, school_name: schoolName, page: item.page });
+          continue;
         }
 
+        // فقط تطبیق با کد ملی یا نام کاربری (تطبیق با نام کامل حذف شد)
+        const stu = get("SELECT u.id, u.full_name FROM users u WHERE u.role='student' AND u.center_id=? AND (u.national_code=? OR u.username=?)", centerId, candidateCode, candidateCode);
+
         if (!stu) {
-          const isNCode = isValidNationalCode(candidateCode);
-          const nationalCode = isNCode ? candidateCode : null;
-          const username = isNCode ? null : candidateCode;
-          const phone = '09' + candidateCode.slice(-9).padStart(9, '0');
-          const resUser = run(`
-            INSERT INTO users (center_id, role, username, national_code, mobile, pass_hash, full_name, gender, active)
-            VALUES (?, 'student', ?, ?, ?, ?, ?, 'm', 1)
-          `, ctx.user.center_id, username, nationalCode, phone, defaultPassHash, fullName);
-          const studentId = Number(resUser.lastInsertRowid);
-          run(`
-            INSERT INTO students (user_id, school, grade, class_id)
-            VALUES (?, ?, 9, NULL)
-          `, studentId, schoolName);
-          stu = { id: studentId, full_name: fullName };
+          const res = run(`
+            INSERT INTO barpa_unmatched (exam_id, center_id, candidate_code, full_name, school_name, page, payload_json, created_at)
+            VALUES (?,?,?,?,?,?,?,?)
+          `, examId, centerId, candidateCode, fullName || null, schoolName, item.page || null, payloadJson, Date.now());
+          unmatched.push({ id: res.lastInsertRowid, candidate_code: candidateCode, full_name: fullName, school_name: schoolName, page: item.page });
+          continue;
         }
 
         run(`
@@ -707,27 +753,28 @@ export default function register(r) {
             overall_correct = excluded.overall_correct,
             overall_wrong = excluded.overall_wrong,
             overall_unanswered = excluded.overall_unanswered,
+            total_questions = excluded.total_questions,
             subjects_json = excluded.subjects_json,
             categories_json = excluded.categories_json,
             answers_json = excluded.answers_json
         `,
-          ctx.user.center_id,
+          centerId,
           examId,
           item.exam_title || examTitle,
-          'نهم',
+          grade,
           stu.id,
           candidateCode,
-          fullName,
+          fullName || stu.full_name,
           schoolName,
-          Number(item.total_attendees) || 1924,
-          Number(total.traz) || 5000,
-          Number(total.rank_all) || 1,
-          Number(total.rank_center) || 1,
-          Number(total.percentage) || 0,
-          Number(total.correct) || 0,
-          Number(total.wrong) || 0,
-          Number(total.unanswered) || 0,
-          120,
+          toNumOrNull(item.total_attendees),
+          toNumOrNull(total.traz),
+          toNumOrNull(total.rank_all),
+          toNumOrNull(total.rank_center),
+          toNumOrNull(total.percentage),
+          toNumOrNull(total.correct),
+          toNumOrNull(total.wrong),
+          toNumOrNull(total.unanswered),
+          item.answers?.length ? item.answers.length : null,
           JSON.stringify(item.subjects || []),
           JSON.stringify(item.categories || []),
           JSON.stringify(item.answers || [])
@@ -735,10 +782,10 @@ export default function register(r) {
 
         imported.push({
           student_id: stu.id,
-          full_name: fullName,
+          full_name: fullName || stu.full_name,
           candidate_code: candidateCode,
-          traz: total.traz,
-          rank: total.rank_all
+          traz: toNumOrNull(total.traz),
+          rank: toNumOrNull(total.rank_all)
         });
       }
     });
@@ -746,12 +793,97 @@ export default function register(r) {
     return {
       ok: true,
       success: true,
-      message: `تعداد ${imported.length} کارنامه با موفقیت تفکیک و به پنل اختصاصی دانش‌آموزان نهم ارسال شد.`,
+      exam_id: examId,
+      exam_title: examTitle,
       count: imported.length,
-      students: imported
+      unmatched_count: unmatched.length,
+      students: imported,
+      unmatched
     };
   };
 
-  r.post('/api/manager/barpa-exams/upload', M, handleBarpaUpload);
-  r.post('/api/barpa-exams/upload', { roles: ['manager', 'admin'] }, handleBarpaUpload);
+  r.post('/api/manager/barpa-exams/upload', { roles: ['manager', 'admin'] }, handleBarpaUpload);
+
+  // ---------- مدیریت رکوردهای تطبیق‌نشده آزمون برپا ----------
+  r.get('/api/manager/barpa-exams/unmatched', M, (ctx) => {
+    const examId = ctx.query.exam_id;
+    if (examId) {
+      return all('SELECT id, exam_id, center_id, candidate_code, full_name, school_name, page, created_at FROM barpa_unmatched WHERE center_id=? AND exam_id=? ORDER BY id ASC', ctx.user.center_id, examId);
+    }
+    return all('SELECT id, exam_id, center_id, candidate_code, full_name, school_name, page, created_at FROM barpa_unmatched WHERE center_id=? ORDER BY id DESC', ctx.user.center_id);
+  });
+
+  r.post('/api/manager/barpa-exams/unmatched/:id/match', M, (ctx) => {
+    const id = Number(ctx.params.id);
+    const row = get('SELECT * FROM barpa_unmatched WHERE id=? AND center_id=?', id, ctx.user.center_id);
+    if (!row) fail(404, 'رکورد تطبیق‌نشده یافت نشد');
+
+    const studentId = Number(ctx.body?.student_id);
+    if (!studentId) fail(400, 'شناسه دانش‌آموز الزامی است');
+    const stu = get("SELECT u.id, u.full_name, s.school FROM users u LEFT JOIN students s ON s.user_id=u.id WHERE u.id=? AND u.center_id=? AND u.role='student'", studentId, ctx.user.center_id);
+    if (!stu) fail(404, 'دانش‌آموز در این کانون یافت نشد');
+
+    let item = {};
+    try {
+      item = JSON.parse(row.payload_json || '{}');
+    } catch {}
+
+    const total = item.total_summary || {};
+    const examTitle = item.exam_title || `آزمون برپا`;
+    const grade = item.grade || 'نهم';
+
+    tx(() => {
+      run(`
+        INSERT INTO comprehensive_exam_reports (
+          center_id, exam_id, exam_title, grade, student_id, candidate_code,
+          student_name, school_name, total_attendees, overall_traz, overall_rank_all,
+          overall_rank_center, overall_percentage, overall_correct, overall_wrong,
+          overall_unanswered, total_questions, subjects_json, categories_json, answers_json
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(exam_id, student_id) DO UPDATE SET
+          candidate_code = excluded.candidate_code,
+          student_name = excluded.student_name,
+          school_name = excluded.school_name,
+          total_attendees = excluded.total_attendees,
+          overall_traz = excluded.overall_traz,
+          overall_rank_all = excluded.overall_rank_all,
+          overall_rank_center = excluded.overall_rank_center,
+          overall_percentage = excluded.overall_percentage,
+          overall_correct = excluded.overall_correct,
+          overall_wrong = excluded.overall_wrong,
+          overall_unanswered = excluded.overall_unanswered,
+          total_questions = excluded.total_questions,
+          subjects_json = excluded.subjects_json,
+          categories_json = excluded.categories_json,
+          answers_json = excluded.answers_json
+      `,
+        row.center_id,
+        row.exam_id,
+        examTitle,
+        grade,
+        stu.id,
+        row.candidate_code || `STU_${stu.id}`,
+        row.full_name || stu.full_name,
+        row.school_name || stu.school || null,
+        toNumOrNull(item.total_attendees),
+        toNumOrNull(total.traz),
+        toNumOrNull(total.rank_all),
+        toNumOrNull(total.rank_center),
+        toNumOrNull(total.percentage),
+        toNumOrNull(total.correct),
+        toNumOrNull(total.wrong),
+        toNumOrNull(total.unanswered),
+        item.answers?.length ? item.answers.length : null,
+        JSON.stringify(item.subjects || []),
+        JSON.stringify(item.categories || []),
+        JSON.stringify(item.answers || [])
+      );
+
+      run('DELETE FROM barpa_unmatched WHERE id=?', row.id);
+    });
+
+    return { ok: true, matched: true, student_id: stu.id, student_name: stu.full_name };
+  });
+
+  r.post('/api/manager/barpa-exams/upload', { roles: ['manager', 'admin'] }, handleBarpaUpload);
 }

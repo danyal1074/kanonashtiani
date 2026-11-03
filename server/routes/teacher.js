@@ -393,7 +393,7 @@ export default function register(r) {
   r.del('/api/teacher/manual-scores/:id', T, (ctx) => {
     const score = get('SELECT * FROM manual_scores WHERE id=?', Number(ctx.params.id));
     if (!score) fail(404, 'نمره یافت نشد');
-    if (score.teacher_id !== ctx.user.id && ctx.user.role !== 'admin' && ctx.user.role !== 'manager') {
+    if (score.teacher_id !== ctx.user.id) {
       fail(403, 'شما دسترسی حذف این نمره را ندارید');
     }
     run('DELETE FROM manual_scores WHERE id=?', score.id);

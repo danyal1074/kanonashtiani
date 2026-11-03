@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { CURATED_QUESTIONS } from '../self_exam.js';
 // مسیرهای مشترک: ورود، پروفایل، اطلاعیه، پیام‌رسان، صفحه عمومی کانون و فروشگاه
-import { all, get, run, tx, ROOT } from '../db.js';
-import { COOKIE, isHttps } from '../http.js';
+import { all, get, run, tx, ROOT, DATA_DIR } from '../db.js';
+import { COOKIE, isHttps, serveFile } from '../http.js';
 import { fail, hashPasswordAsync, verifyPasswordAsync, needsRehash, signToken, ymd, jMonthOf, toEnDigits, clampStr, normalizeIranianMobile, normalizeNationalCode, randomCode, saveUpload } from '../util.js';
 import { feeStatus, announcementsFor, contactsOf, levelOf, totalPoints } from '../logic.js';
 
@@ -221,11 +221,21 @@ export default function register(r) {
     all('SELECT id, items, total, discount, tracking_code, created_at FROM orders WHERE user_id=? ORDER BY id DESC', ctx.user.id).map((o) => ({ ...o, items: JSON.parse(o.items) })));
 
   // ---------- بانک کتاب‌ها و آزمون‌های هوش (Option 2) ----------
-  r.get('/api/exam-books', { allowLocked: true }, (ctx) => {
+  const BOOK_ROLES = ['teacher', 'manager', 'admin'];
+  r.get('/api/exam-books', { roles: BOOK_ROLES }, (ctx) => {
+    if (ctx.user.role === 'admin') {
+      return all('SELECT * FROM exam_books ORDER BY is_custom ASC, id ASC');
+    }
     return all('SELECT * FROM exam_books WHERE center_id=? OR center_id IS NULL ORDER BY is_custom ASC, id ASC', ctx.user.center_id);
   });
-  r.get('/api/exam-books/:id/topics', { allowLocked: true }, (ctx) => {
+
+  r.get('/api/exam-books/:id/topics', { roles: BOOK_ROLES }, (ctx) => {
     const id = ctx.params.id;
+    const book = ctx.user.role === 'admin'
+      ? get('SELECT * FROM exam_books WHERE id=?', id)
+      : get('SELECT * FROM exam_books WHERE id=? AND (center_id=? OR center_id IS NULL)', id, ctx.user.center_id);
+    if (!book) fail(404, 'کتاب آزمون یافت نشد');
+
     if (id === 'hoosh_6') {
       const p = path.join(ROOT, 'server', 'data', 'hoosh_topics.json');
       if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -233,8 +243,6 @@ export default function register(r) {
       const p = path.join(ROOT, 'server', 'data', 'hoosh_topics_8_9.json');
       if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
-    const book = get('SELECT * FROM exam_books WHERE id=?', id);
-    if (!book) fail(404, 'کتاب آزمون یافت نشد');
     if (book.topics_json) {
       try { return JSON.parse(book.topics_json); } catch { /* */ }
     }
@@ -255,30 +263,38 @@ export default function register(r) {
     }
     return sample;
   });
-  r.get('/api/exam-books/:id/questions', { allowLocked: true }, (ctx) => {
-    const topicId = Number(ctx.query.topic_id) || 1;
-    return CURATED_QUESTIONS.slice(0, 5).map((q, idx) => ({
-      id: topicId * 100 + idx + 1,
-      topic_id: topicId,
-      book_id: ctx.params.id,
-      text: q.text,
-      options: q.options,
-      subject: q.subject,
-      explanation: q.explanation
-    }));
+
+  r.get('/api/exam-books/:id/pages/:n', { roles: BOOK_ROLES }, async (ctx) => {
+    const id = ctx.params.id;
+    const book = ctx.user.role === 'admin'
+      ? get('SELECT * FROM exam_books WHERE id=?', id)
+      : get('SELECT * FROM exam_books WHERE id=? AND (center_id=? OR center_id IS NULL)', id, ctx.user.center_id);
+    if (!book) fail(404, 'کتاب آزمون یافت نشد');
+
+    const n = Number(ctx.params.n);
+    if (!Number.isInteger(n) || n < 1 || (book.pages_count && n > book.pages_count)) {
+      fail(400, 'شماره صفحه نامعتبر است');
+    }
+
+    const pageFile = path.join(DATA_DIR, 'books', id, `page_${n}.jpg`);
+    if (!fs.existsSync(pageFile)) {
+      fail(404, 'صفحه مورد نظر یافت نشد');
+    }
+
+    ctx.handled = true;
+    return await serveFile(ctx.req, ctx.res, pageFile, { priv: true });
   });
 
   // ---------- مشاور تحصیلی کانون (Option 3) ----------
   r.get('/api/counselor', { allowLocked: true }, (ctx) => {
-    let c = get(`SELECT id, full_name, role FROM users WHERE center_id=? AND role='manager' AND active=1 LIMIT 1`, ctx.user.center_id);
-    if (!c) c = { id: 1, full_name: 'مشاور کانون رشد', role: 'manager' };
+    const c = get(`SELECT id, full_name, role FROM users WHERE center_id=? AND role='manager' AND active=1 ORDER BY id ASC LIMIT 1`, ctx.user.center_id);
+    if (!c) return { id: null };
     return {
       id: c.id,
       full_name: c.full_name,
       role: 'counselor',
       title: 'مشاور ارشد تحصیلی و استعدادپروری',
       bio: 'پاسخگوی سوالات آموزشی، تحلیل آزمون‌های برپا، هدایت تحصیلی و حل چالش‌های یادگیری شما',
-      is_online: true,
       center_id: ctx.user.center_id
     };
   });
@@ -292,22 +308,26 @@ export default function register(r) {
   // ---------- کارنامه رسمی آزمون جامع «طرح برپا» (Option 9) ----------
   r.get('/api/barpa-exams/reports', { allowLocked: true }, (ctx) => {
     let rows;
+    const cols = 'id, center_id, exam_id, exam_title, grade, student_id, candidate_code, student_name, school_name, total_attendees, overall_traz, overall_rank_all, overall_rank_center, overall_percentage, overall_correct, overall_wrong, overall_unanswered, total_questions, subjects_json, categories_json, created_at';
     if (ctx.user.role === 'student') {
-      rows = all('SELECT * FROM comprehensive_exam_reports WHERE student_id=? ORDER BY id DESC', ctx.user.id);
+      rows = all(`SELECT ${cols} FROM comprehensive_exam_reports WHERE student_id=? ORDER BY id DESC`, ctx.user.id);
     } else if (ctx.user.role === 'parent') {
-      const children = all('SELECT child_id FROM parent_children WHERE parent_id=?', ctx.user.id).map((x) => x.child_id);
+      const children = all('SELECT student_id FROM parent_children WHERE parent_id=?', ctx.user.id).map((x) => x.student_id);
       if (!children.length) return [];
-      rows = all(`SELECT * FROM comprehensive_exam_reports WHERE student_id IN (${children.map(() => '?').join(',')}) ORDER BY id DESC`, ...children);
+      rows = all(`SELECT ${cols} FROM comprehensive_exam_reports WHERE student_id IN (${children.map(() => '?').join(',')}) ORDER BY id DESC`, ...children);
+    } else if (ctx.user.role === 'admin') {
+      rows = all(`SELECT r.id, r.center_id, r.exam_id, r.exam_title, r.grade, r.student_id, r.candidate_code, u.full_name student_name, r.school_name, r.total_attendees, r.overall_traz, r.overall_rank_all, r.overall_rank_center, r.overall_percentage, r.overall_correct, r.overall_wrong, r.overall_unanswered, r.total_questions, r.subjects_json, r.categories_json, r.created_at, u.mobile FROM comprehensive_exam_reports r JOIN users u ON u.id=r.student_id ORDER BY r.overall_traz DESC`);
     } else {
-      rows = all('SELECT r.*, u.full_name student_name, u.mobile FROM comprehensive_exam_reports r JOIN users u ON u.id=r.student_id WHERE r.center_id=? OR r.center_id IS NULL ORDER BY r.overall_traz DESC', ctx.user.center_id);
+      // teacher and manager: only their center
+      rows = all(`SELECT r.id, r.center_id, r.exam_id, r.exam_title, r.grade, r.student_id, r.candidate_code, u.full_name student_name, r.school_name, r.total_attendees, r.overall_traz, r.overall_rank_all, r.overall_rank_center, r.overall_percentage, r.overall_correct, r.overall_wrong, r.overall_unanswered, r.total_questions, r.subjects_json, r.categories_json, r.created_at, u.mobile FROM comprehensive_exam_reports r JOIN users u ON u.id=r.student_id WHERE r.center_id=? ORDER BY r.overall_traz DESC`, ctx.user.center_id);
     }
     return rows.map((r) => ({
       ...r,
       subjects: JSON.parse(r.subjects_json || '[]'),
-      categories: JSON.parse(r.categories_json || '[]'),
-      answers: JSON.parse(r.answers_json || '[]')
+      categories: JSON.parse(r.categories_json || '[]')
     }));
   });
+
   r.get('/api/barpa-exams/reports/:id', { allowLocked: true }, (ctx) => {
     const row = get('SELECT * FROM comprehensive_exam_reports WHERE id=?', Number(ctx.params.id));
     if (!row) fail(404, 'کارنامه آزمون جامع یافت نشد');
@@ -315,8 +335,11 @@ export default function register(r) {
       fail(403, 'دسترسی غیرمجاز به این کارنامه');
     }
     if (ctx.user.role === 'parent') {
-      const allowed = all('SELECT child_id FROM parent_children WHERE parent_id=?', ctx.user.id).map((x) => x.child_id);
+      const allowed = all('SELECT student_id FROM parent_children WHERE parent_id=?', ctx.user.id).map((x) => x.student_id);
       if (!allowed.includes(row.student_id)) fail(403, 'دسترسی غیرمجاز به کارنامه');
+    }
+    if (ctx.user.role === 'teacher' || ctx.user.role === 'manager') {
+      if (row.center_id !== ctx.user.center_id) fail(403, 'دسترسی غیرمجاز به این کارنامه');
     }
     return {
       ...row,

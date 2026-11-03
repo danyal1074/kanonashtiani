@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS payments (
   student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   amount INTEGER NOT NULL,
   receipt_path TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','reversed')),
   reject_reason TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   reviewed_at TEXT
@@ -433,7 +433,20 @@ export const migrations = [
       CREATE INDEX IF NOT EXISTS ix_comp_reports_student ON comprehensive_exam_reports(student_id);
       CREATE INDEX IF NOT EXISTS ix_comp_reports_exam ON comprehensive_exam_reports(exam_id, overall_traz);
 
-      CREATE TABLE IF NOT EXISTS fee_invoices (
+      CREATE TABLE IF NOT EXISTS barpa_unmatched (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exam_id TEXT NOT NULL,
+  center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+  candidate_code TEXT,
+  full_name TEXT NOT NULL,
+  school_name TEXT,
+  page INTEGER,
+  payload_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_barpa_unmatched_exam ON barpa_unmatched(exam_id, center_id);
+
+CREATE TABLE IF NOT EXISTS fee_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
         student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -472,8 +485,8 @@ export const migrations = [
     database.exec(`
       INSERT OR IGNORE INTO exam_books (id, center_id, title, grade, topics_count, pages_count, description, cover_url, is_custom)
       VALUES
-        ('hoosh_6', (SELECT id FROM centers LIMIT 1), 'هوش و استعداد تحلیلی ششم (هوش کمپلکس)', 'ششم', 58, 120, 'بانک جامع سوالات هوش و استعداد تحلیلی ورودی تیزهوشان ششم به هفتم', '/img/books/hoosh_6.jpg', 0),
-        ('hoosh_8_9', (SELECT id FROM centers LIMIT 1), 'هوش کمپلکس هشتم و نهم (طرح برپا)', 'نهم', 65, 140, 'بانک سوالات هوش منطقی، کلامی و تصویری نهم به دهم', '/img/books/hoosh_8_9.jpg', 0);
+        ('hoosh_6', NULL, 'هوش و استعداد تحلیلی ششم (هوش کمپلکس)', 'ششم', 58, 563, 'بانک جامع سوالات هوش و استعداد تحلیلی ورودی تیزهوشان ششم به هفتم', '/img/books/hoosh_6.jpg', 0),
+        ('hoosh_8_9', NULL, 'هوش کمپلکس هشتم و نهم (طرح برپا)', 'نهم', 65, 558, 'بانک سوالات هوش منطقی، کلامی و تصویری نهم به دهم', '/img/books/hoosh_8_9.jpg', 0);
     `);
   },
   // نسخه ۳: ستون اجبار تغییر رمز عبور در اولین ورود
@@ -482,6 +495,95 @@ export const migrations = [
     if (!userCols.includes('must_change_password')) {
       database.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0');
     }
+  },
+
+  // نسخه ۴: عمومی کردن کتاب‌های پیش‌فرض، قید وضعیت 'reversed' در پرداخت‌ها و اتصال فاکتور
+  (database) => {
+    // ۱. عمومی کردن کتاب‌های هوش پیش‌فرض (center_id = NULL)
+    database.exec("UPDATE exam_books SET center_id = NULL WHERE id IN ('hoosh_6', 'hoosh_8_9')");
+
+    // ۲. افزودن ستون‌های paid و status به fee_invoices در صورت نبود
+    const invCols = database.prepare('PRAGMA table_info(fee_invoices)').all().map((c) => c.name);
+    if (!invCols.includes('paid')) database.exec('ALTER TABLE fee_invoices ADD COLUMN paid INTEGER DEFAULT 0');
+    if (!invCols.includes('status')) database.exec("ALTER TABLE fee_invoices ADD COLUMN status TEXT DEFAULT 'issued'");
+
+    // به‌روزرسانی مقدار paid و status فاکتورهای قبلی
+    database.exec(`
+      UPDATE fee_invoices SET
+        paid = COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = fee_invoices.id AND p.status = 'approved'), 0),
+        status = CASE
+          WHEN COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = fee_invoices.id AND p.status = 'approved'), 0) >= amount THEN 'paid'
+          WHEN COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = fee_invoices.id AND p.status = 'approved'), 0) > 0 THEN 'partial'
+          ELSE 'issued'
+        END
+    `);
+
+    // ۳. بازسازی جدول payments برای افزودن 'reversed' به قید CHECK(status)
+    database.exec(`
+      CREATE TABLE payments_v4 (
+        id INTEGER PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        amount INTEGER NOT NULL,
+        receipt_path TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','reversed')),
+        reject_reason TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        reviewed_at TEXT,
+        invoice_id INTEGER REFERENCES fee_invoices(id),
+        fee_type TEXT DEFAULT 'tuition',
+        reversed_at TEXT,
+        reversed_by INTEGER REFERENCES users(id),
+        reverse_reason TEXT
+      );
+
+      INSERT INTO payments_v4 (id, student_id, amount, receipt_path, status, reject_reason, created_at, reviewed_at, invoice_id, fee_type, reversed_at, reversed_by, reverse_reason)
+      SELECT id, student_id, amount, receipt_path, status, reject_reason, created_at, reviewed_at, invoice_id, fee_type, reversed_at, reversed_by, reverse_reason
+      FROM payments;
+
+      DROP TABLE payments;
+      ALTER TABLE payments_v4 RENAME TO payments;
+      CREATE INDEX IF NOT EXISTS ix_payments_student ON payments(student_id, status);
+    `);
+  },
+
+  // نسخه ۵: تصحیح pages_count کتاب‌ها بر اساس سرفصل‌ها و جدول کارنامه‌های تطبیق‌نشده برپا
+  (database) => {
+    let max6 = 563;
+    let max89 = 558;
+    try {
+      const p6 = path.join(ROOT, 'server', 'data', 'hoosh_topics.json');
+      if (fs.existsSync(p6)) {
+        const t6 = JSON.parse(fs.readFileSync(p6, 'utf8'));
+        const m = Math.max(...t6.map((x) => x.pdfEndPage || x.bookEndPage || 0));
+        if (m > 0) max6 = m;
+      }
+    } catch { /* */ }
+    try {
+      const p89 = path.join(ROOT, 'server', 'data', 'hoosh_topics_8_9.json');
+      if (fs.existsSync(p89)) {
+        const t89 = JSON.parse(fs.readFileSync(p89, 'utf8'));
+        const m = Math.max(...t89.map((x) => x.pdfEndPage || x.bookEndPage || 0));
+        if (m > 0) max89 = m;
+      }
+    } catch { /* */ }
+
+    database.exec(`
+      UPDATE exam_books SET pages_count = ${max6} WHERE id = 'hoosh_6';
+      UPDATE exam_books SET pages_count = ${max89} WHERE id = 'hoosh_8_9';
+
+      CREATE TABLE IF NOT EXISTS barpa_unmatched (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exam_id TEXT NOT NULL,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        candidate_code TEXT,
+        full_name TEXT NOT NULL,
+        school_name TEXT,
+        page INTEGER,
+        payload_json TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS ix_barpa_unmatched_exam ON barpa_unmatched(exam_id, center_id);
+    `);
   },
 ];
 

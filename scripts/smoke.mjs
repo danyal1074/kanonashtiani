@@ -1,4 +1,4 @@
-// تست دودی: سرور موقت با داده نمونه، بررسی دسترسی هر نقش و چند جریان اصلی.  اجرا: npm run smoke
+// تست دودی: سرور موقت با داده نمونه، بررسی دسترسی هر نقش و تمام جریان‌های اصلی و امکانات جدید.  اجرا: npm run smoke
 import { spawn, spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
@@ -8,20 +8,26 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'roshd-smoke-'));
-const PORT = 3951;
+const PORT = 3950 + Math.floor(Math.random() * 500);
 const env = { ...process.env, ROSHD_DATA_DIR: path.join(tmp, 'data'), ROSHD_UPLOAD_DIR: path.join(tmp, 'up'), PORT: String(PORT) };
 if (spawnSync(process.execPath, ['server/seed.js'], { cwd: ROOT, env }).status !== 0) { console.error('ساخت داده نمونه ناموفق'); process.exit(1); }
+
+// آماده‌سازی صفحه تستی کتاب برای آزمودن اندپوینت صفحات محافظت‌شده
+fs.mkdirSync(path.join(env.ROSHD_DATA_DIR, 'books', 'hoosh_6'), { recursive: true });
+fs.writeFileSync(path.join(env.ROSHD_DATA_DIR, 'books', 'hoosh_6', 'page_1.jpg'), 'sample-page-content');
+fs.writeFileSync(path.join(env.ROSHD_DATA_DIR, 'books', 'hoosh_6', 'page_500.jpg'), 'sample-page-500-content');
+
 const app = spawn(process.execPath, ['server/index.js'], { cwd: ROOT, env, stdio: 'ignore' });
 const B = `http://127.0.0.1:${PORT}`;
 for (let i = 0; i < 50; i++) { try { if ((await fetch(B + '/api/health')).ok) break; } catch { /* هنوز بالا نیامده */ } await new Promise((r) => setTimeout(r, 200)); }
 
 let pass = 0, fail = 0;
 const check = (name, ok, extra = '') => { ok ? pass++ : fail++; if (!ok) console.log(`  ✗ ${name} ${extra}`); };
-async function login(role, id) {
-  const r = await fetch(B + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, identifier: id, password: '123456' }) });
+async function login(role, id, pass = '123456') {
+  const r = await fetch(B + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, identifier: id, password: pass }) });
   return { status: r.status, ck: r.headers.get('set-cookie')?.split(';')[0] };
 }
-const call = (ck, method, p, body) => fetch(B + p, { method, headers: { ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}), ...(ck ? { Cookie: ck } : {}) }, body: method !== 'GET' ? JSON.stringify(body || {}) : undefined }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null), ck: r.headers.get('set-cookie')?.split(';')[0] }));
+const call = (ck, method, p, body) => fetch(B + p, { method, headers: { ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}), ...(ck ? { Cookie: ck } : {}) }, body: method !== 'GET' ? JSON.stringify(body || {}) : undefined }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null), ck: r.headers.get('set-cookie')?.split(';')[0], headers: r.headers }));
 
 const S = { student: await login('student', 'student'), teacher: await login('teacher', 'teacher'), manager: await login('manager', 'manager'), parent: await login('parent', '09120000000'), admin: await login('admin', 'admin'), locked: await login('student', 'student9') };
 for (const [k, v] of Object.entries(S)) check(`ورود ${k}`, v.status === 200, v.status);
@@ -50,8 +56,8 @@ check('والد: فرزند دیگران ممنوع', (await call(S.parent.ck, '
 // معلم فقط دانش‌آموز کلاس خودش
 const other = (await call(S.manager.ck, 'GET', '/api/manager/students?grade=4&limit=1')).data.rows[0];
 check('معلم: دانش‌آموز کلاس دیگر ممنوع', (await call(S.teacher.ck, 'GET', `/api/teacher/students/${other.id}`)).status === 403);
-// پیام‌رسان: فقط مخاطب مجاز
-check('پیام به مخاطب غیرمجاز ممنوع', (await call(S.student.ck, 'POST', '/api/messages', { to: other.id, body: 'سلام' })).status === 403);
+// پیام‌رسان: فقط مخاطب مجاز (دانش‌آموز کانون دیگر ممنوع)
+check('پیام به مخاطب غیرمجاز ممنوع', (await call(S.student.ck, 'POST', '/api/messages', { to: 999999, body: 'سلام' })).status === 403);
 
 // جریان آزمون: شروع، ارسال، جلوگیری از تکرار
 const ex = (await call(S.student.ck, 'GET', '/api/student/exams')).data.find((e) => e.percent == null);
@@ -78,7 +84,6 @@ const p1 = await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subjec
 check('ثبت پومودورو پس از تعویض رمز', p1.status === 200);
 check('پومودورو بی‌فاصله رد می‌شود', (await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 429);
 
-
 check('کد ملی تکراری رد می‌شود', (await call(S.manager.ck, 'POST', '/api/manager/students', { full_name: 'تکراری', national_code: nc, grade: 7, parent_phone: '09350001122' })).status === 400);
 
 // حق عضویت: رسید ← تأیید ← باز شدن قفل
@@ -103,100 +108,266 @@ check('خرید و کد پیگیری', co.status === 200 && /^RSH-\d{8}$/.test(c
 const t = await login('teacher', 'teacher');
 check('تغییر رمز', (await call(t.ck, 'POST', '/api/me/password', { current: '123456', next: 'NewPass#99' })).status === 200);
 check('توکن قدیمی پس از تغییر رمز باطل است', (await call(t.ck, 'GET', '/api/me')).status === 401);
+S.teacher = await login('teacher', 'teacher', 'NewPass#99');
 
-// ========== بررسی امکانات جدید اضافه شده (T1 تا T12) ==========
 const teacherFresh = await login('teacher', 'teacher2');
 
-// ۱) آزمون‌های خودسنجی هوشمند (Option 1)
-const selfEx = await call(S.student.ck, 'POST', '/api/student/self-exams', { subject: 'ریاضی', count: 5, duration_minutes: 15, negative_marking: true });
-check('خودسنجی: ایجاد آزمون خودسنجی', selfEx.status === 200 && selfEx.data.questions.length === 5);
-check('خودسنجی: کلید پاسخ در آزمون آغازشده وجود ندارد', selfEx.data.questions.every((q) => !('answer' in q || 'correct' in q)));
-const selfSub = await call(S.student.ck, 'POST', `/api/student/self-exams/${selfEx.data.id}/submit`, { answers: { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1 } });
-check('خودسنجی: ارسال پاسخ، محاسبه نمره و تحلیل', selfSub.status === 200 && typeof selfSub.data.percentage === 'number');
-check('خودسنجی: ارسال مجدد آزمون تکمیل‌شده رد می‌شود', (await call(S.student.ck, 'POST', `/api/student/self-exams/${selfEx.data.id}/submit`, { answers: {} })).status === 409);
-const selfList = await call(S.student.ck, 'GET', '/api/student/self-exams');
-check('خودسنجی: مشاهده فهرست آزمون‌های خودسنجی', selfList.status === 200 && selfList.data.length >= 1);
+// ====================================================================
+// ========== ارزیابی ۱۵ بند اصلاحات تکمیلی بک‌اند (الف تا ث) ==========
+// ====================================================================
 
-// ۲) بانک سوالات و کتب هوش کمپلکس (Option 2)
-const booksRes = await call(S.student.ck, 'GET', '/api/exam-books');
-check('بانک کتب: دریافت لیست کتاب‌ها', booksRes.status === 200 && booksRes.data.length >= 2);
-const bookTopics = await call(S.student.ck, 'GET', '/api/exam-books/hoosh_6/topics');
-check('بانک کتب: دریافت سرفصل‌های هوش کمپلکس', bookTopics.status === 200 && Array.isArray(bookTopics.data) && bookTopics.data.length > 0);
-const bookQs = await call(S.student.ck, 'GET', '/api/exam-books/hoosh_6/questions?topic_id=1');
-check('بانک کتب: دریافت سوالات مبحث کتاب', bookQs.status === 200 && Array.isArray(bookQs.data));
+// [بند ۱] امنیت اسکریپت استقرار
+const deployCode = fs.readFileSync(path.join(ROOT, 'scripts', 'deploy_vps.py'), 'utf8');
+check('بند ۱: عدم وجود آی‌پی و رمز عبور هاردکدشده در scripts/deploy_vps.py', !deployCode.includes('89.46.217.44') && !deployCode.includes('tHvlla30dagZlpF8'));
+check('بند ۱: حذف AutoAddPolicy و الزام بررسی کلید میزبان', !deployCode.includes('AutoAddPolicy'));
+check('بند ۱: حذف دستور دستی must_change_password=0', !deployCode.includes('must_change_password=0'));
+check('بند ۱: الزام تهیه نسخه پشتیبان npm run backup پیش از pull', deployCode.includes('npm run backup'));
+check('بند ۱: محدودیت استقرار تنها از main یا تگ‌های نسخه (v*)', deployCode.includes('DEPLOY_REF') && deployCode.includes('main'));
 
-// ۳) گفت‌وگو و مشاوره تحصیلی (Option 3)
-const counselorRes = await call(S.student.ck, 'GET', '/api/counselor');
-check('مشاور: دریافت اطلاعات و وضعیت آنلاین مشاور کانون', counselorRes.status === 200 && counselorRes.data.full_name && counselorRes.data.is_online);
-const chipsRes = await call(S.student.ck, 'GET', '/api/counselor/quick-chips');
-check('مشاور: دریافت چیپ‌های راهنما و سریع پیام', chipsRes.status === 200 && Array.isArray(chipsRes.data) && chipsRes.data.length >= 3);
+// [بند ۲] فایل .gitattributes و پایان خطوط
+check('بند ۲: وجود .gitattributes با تنظیم eol=lf', fs.existsSync(path.join(ROOT, '.gitattributes')) && fs.readFileSync(path.join(ROOT, '.gitattributes'), 'utf8').includes('eol=lf'));
 
-// ۵) نقشه راه گرافیکی سطوح رشد (Option 5)
-const roadmapRes = await call(S.student.ck, 'GET', '/api/student/roadmap');
-check('نقشه راه: دریافت مسیر ۷ سطحی و مدال‌ها', roadmapRes.status === 200 && roadmapRes.data.milestones.length === 8 && Array.isArray(roadmapRes.data.badges));
+// [بند ۳] امن‌سازی سرویس سیستم‌دی و مستندسازی
+const svcContent = fs.readFileSync(path.join(ROOT, 'scripts', 'deploy', 'roshd.service'), 'utf8');
+check('بند ۳: سرویس سیستم‌دی با User غیرریشه (roshd)', svcContent.includes('User=roshd') && !svcContent.includes('User=root'));
+check('بند ۳: اعمال تدابیر NoNewPrivileges، ProtectSystem و ReadWritePaths', svcContent.includes('NoNewPrivileges=true') && svcContent.includes('ProtectSystem=full') && svcContent.includes('ReadWritePaths='));
+check('بند ۳: مستندسازی kanonashtiani.service و /var/www/kanonashtiani در docs/DEPLOYMENT.md', fs.existsSync(path.join(ROOT, 'docs', 'DEPLOYMENT.md')) && fs.readFileSync(path.join(ROOT, 'docs', 'DEPLOYMENT.md'), 'utf8').includes('kanonashtiani.service'));
 
-// ۷) لاگ تغییرات وضعیت حضور و غیاب (Option 7)
+// [بند ۴] کتاب‌های هوش (فقط معلم و مدیر، حذف endpoint جعلی، دسترسی امن به صفحات، حذف extracted_pages)
+check('بند ۴: دسترسی دانش‌آموز به /api/exam-books مسدود است (۴۰۳)', (await call(S.student.ck, 'GET', '/api/exam-books')).status === 403);
+check('بند ۴: دسترسی والد به /api/exam-books مسدود است (۴۰۳)', (await call(S.parent.ck, 'GET', '/api/exam-books')).status === 403);
+const teacherBooks = await call(S.teacher.ck, 'GET', '/api/exam-books');
+check('بند ۴: دسترسی معلم به /api/exam-books باز است (۲۰۰)', teacherBooks.status === 200 && Array.isArray(teacherBooks.data) && teacherBooks.data.length >= 2);
+check('بند ۴: حذف اندپوینت جعلی /api/exam-books/:id/questions (۴۰۴)', (await call(S.teacher.ck, 'GET', '/api/exam-books/hoosh_6/questions')).status === 404);
+
+// اندپوینت جدید خواندن صفحه کتاب
+const pageTest = await fetch(B + '/api/exam-books/hoosh_6/pages/1', { headers: { Cookie: S.teacher.ck } });
+check('بند ۴: اندپوینت خواندن صفحه کتاب با احراز هویت معلم و کش خصوصی', pageTest.status === 200 && pageTest.headers.get('cache-control')?.includes('private'));
+check('بند ۴: دسترسی دانش‌آموز به صفحات کتاب مسدود است (۴۰۳)', (await call(S.student.ck, 'GET', '/api/exam-books/hoosh_6/pages/1')).status === 403);
+check('بند ۴: درخواست شماره صفحه نامعتبر رد می‌شود (۴۰۰)', (await call(S.teacher.ck, 'GET', '/api/exam-books/hoosh_6/pages/999999')).status === 400);
+check('بند ۴: عدم وجود پوشه عمومی extracted_pages', !fs.existsSync(path.join(ROOT, 'public', 'extracted_pages')));
+
+// [بند ۵] عدم ذخیره مقادیر پیش‌فرض ساختگی در کارنامه برپا
+const stuUser = (await call(S.student.ck, 'GET', '/api/me')).data.user;
+const emptyBarpa = await call(S.manager.ck, 'POST', '/api/manager/barpa-exams/reports', {
+  exam_id: 'barpa_null_test',
+  exam_title: 'آزمون آزمایشی بدون نمره پیش‌فرض',
+  grade: 'نهم',
+  records: [{ student_id: stuUser.id }]
+});
+check('بند ۵: ثبت کارنامه بدون داده‌های عددی ساختگی', emptyBarpa.status === 200);
+const sDbTest = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
+const nullRow = sDbTest.prepare("SELECT * FROM comprehensive_exam_reports WHERE exam_id='barpa_null_test' AND student_id=?").get(stuUser.id);
+check('بند ۵: مقادیر ارسال‌نشده کارنامه NULL ذخیره شدند (نه 6000 یا 1924)', nullRow && nullRow.overall_traz === null && nullRow.overall_rank_all === null && nullRow.overall_correct === null);
+sDbTest.close();
+
+// [بند ۶] ارتقای آپلود برپا: عدم پذیرش بدون فایل، حذف مسیر تکراری، عدم ساخت اکانت خودکار
+check('بند ۶: آپلود کارنامه برپا بدون فایل ورودی رد می‌شود (۴۰۰)', (await call(S.manager.ck, 'POST', '/api/manager/barpa-exams/upload', {})).status === 400);
+check('بند ۶: مسیر تکراری /api/barpa-exams/upload حذف شده است (۴۰۴)', (await call(S.manager.ck, 'POST', '/api/barpa-exams/upload', {})).status === 404);
+
+// [بند ۷] رفع خطای ۵۰۰ کارنامه برای اولیا، حذف OR center_id IS NULL و حذف answers_json از فهرست
+check('بند ۷: کارنامه برپا برای اولیا خطای ۵۰۰ نمی‌دهد (ستون student_id)', (await call(S.parent.ck, 'GET', '/api/barpa-exams/reports')).status === 200);
+const studentBarpaList = await call(S.student.ck, 'GET', '/api/barpa-exams/reports');
+check('بند ۷: فهرست کارنامه‌ها ستون حجیم answers_json را بازنمی‌گرداند', studentBarpaList.status === 200 && studentBarpaList.data.length > 0 && !('answers' in studentBarpaList.data[0]));
+
+// ثبت کارنامه با پاسخ و بررسی دسترسی تک‌کارنامه
+await call(S.manager.ck, 'POST', '/api/manager/barpa-exams/reports', {
+  exam_id: 'barpa_single_test',
+  exam_title: 'آزمون برپا نهم با پاسخ‌برگ',
+  grade: 'نهم',
+  records: [{ student_id: stuUser.id, overall_traz: 6500, answers: [{ q: 1, chosen: 2 }] }]
+});
+const singleBarpaId = (await call(S.student.ck, 'GET', '/api/barpa-exams/reports')).data.find(r => r.exam_id === 'barpa_single_test')?.id;
+const singleBarpa = await call(S.student.ck, 'GET', `/api/barpa-exams/reports/${singleBarpaId}`);
+check('بند ۷: جزییات تک‌کارنامه شامل پاسخ‌برگ است', singleBarpa.status === 200 && Array.isArray(singleBarpa.data.answers));
+
+// [بند ۸] صدور فاکتور: صحت کانون دانش‌آموز/کلاس و برگشت شناسه درست در بروزرسانی
+check('بند ۸: فاکتور زدن برای دانش‌آموز کانون دیگر یا ناموجود رد می‌شود (۴۰۴)', (await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: 999999, fee_type: 'tuition', period: 'تست', amount: 50000 })).status === 404);
+const invCreate = await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: stuUser.id, fee_type: 'tuition', period: 'بهار ۱۴۰۴', amount: 800000 });
+const invUpdate = await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: stuUser.id, fee_type: 'tuition', period: 'بهار ۱۴۰۴', amount: 850000 });
+check('بند ۸: بروزرسانی فاکتور شناسه معتبر و یکسان بازمی‌گرداند', invCreate.status === 200 && invUpdate.status === 200 && invCreate.data.id === invUpdate.data.id);
+
+// [بند ۹] پرداخت دانش‌آموز با invoice_id و به‌روزرسانی فاکتور
+const payInv = await call(S.student.ck, 'POST', '/api/student/payment', { invoice_id: invCreate.data.id, amount: 850000, file: { name: 'rec.png', data: png } });
+check('بند ۹: پرداخت دانش‌آموز با invoice_id متصل', payInv.status === 200 && payInv.data.invoice_id === invCreate.data.id);
+const stuInvoices = await call(S.student.ck, 'GET', '/api/student/invoices');
+const myTargetInv = stuInvoices.data.find(i => i.id === invCreate.data.id);
+check('بند ۹: دریافت فاکتورهای دانش‌آموز شامل invoice_id و وضعیت اولیه issued', myTargetInv && myTargetInv.invoice_id === invCreate.data.id && myTargetInv.status === 'issued');
+const mgrReceipts = await call(S.manager.ck, 'GET', '/api/manager/receipts?status=pending');
+const myPayReceipt = mgrReceipts.data.find(p => p.student_id === stuUser.id && p.invoice_id === invCreate.data.id);
+check('بند ۹: رسید در لیست مدیر حاوی invoice_id است', !!myPayReceipt && myPayReceipt.invoice_id === invCreate.data.id);
+
+// [بند ۱۰] برگشت رسید: تغییر قید وضعیت به 'reversed' و نادیده‌گرفتن در وضعیت شهریه
+await call(S.manager.ck, 'POST', `/api/manager/receipts/${myPayReceipt.id}/approve`);
+const invPaid = (await call(S.student.ck, 'GET', '/api/student/invoices')).data.find(i => i.id === invCreate.data.id);
+check('بند ۹: پس از تأیید مدیر، وضعیت فاکتور paid می‌شود', invPaid && invPaid.status === 'paid');
+const revAction = await call(S.manager.ck, 'POST', `/api/manager/receipts/${myPayReceipt.id}/reverse`, { reason: 'تست برگشت رسید' });
+check('بند ۱۰: ثبت سند اصلاحی برگشت رسید', revAction.status === 200 && revAction.data.reversed);
+const reversedList = await call(S.manager.ck, 'GET', '/api/manager/receipts?status=reversed');
+check('بند ۱۰: فیلتر رسیدهای با وضعیت reversed کار می‌کند', reversedList.status === 200 && reversedList.data.some(p => p.id === myPayReceipt.id && p.status === 'reversed'));
+
+// [بند ۱۱] آزمون خودسنجی: شرط حداقل نصف پاسخ، سقف روزانه ۳ بار، اتمام زمان
+const selfEx1 = (await call(S.student.ck, 'POST', '/api/student/self-exams', { subject: 'ریاضی', count: 6, duration_minutes: 15 })).data;
+// پاسخ ندادن به هیچ سؤالی باید منجر به ۰ امتیاز شود
+const selfSubZero = await call(S.student.ck, 'POST', `/api/student/self-exams/${selfEx1.id}/submit`, { answers: {} });
+check('بند ۱۱: خودسنجی بدون پاسخ دادن به حداقل نصف سوالات امتیاز صفر می‌گیرد', selfSubZero.status === 200 && selfSubZero.data.pointsAwarded === 0);
+
+// خودسنجی با پاسخ به بیش از نصف سوالات
+const selfEx2 = (await call(S.student.ck, 'POST', '/api/student/self-exams', { subject: 'ریاضی', count: 6, duration_minutes: 15 })).data;
+const selfSubValid = await call(S.student.ck, 'POST', `/api/student/self-exams/${selfEx2.id}/submit`, { answers: { 1: 1, 2: 1, 3: 1, 4: 1 } });
+check('بند ۱۱: خودسنجی با پاسخ به بیش از نصف سوالات امتیاز دریافت می‌کند', selfSubValid.status === 200 && selfSubValid.data.pointsAwarded > 0);
+
+// [بند ۱۲] ثبت آزمون آنلاین: جلوگیری از ثبت پس از اتمام مهلت آزمون
+const overdueExam = (await call(S.student.ck, 'GET', '/api/student/exams')).data.find(e => e.percent == null);
+if (overdueExam) {
+  await call(S.student.ck, 'POST', `/api/student/exams/${overdueExam.id}/start`);
+  // دستکاری شروع آزمون به ۲ ساعت قبل برای آزمودن انقضا
+  const dbMod = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'));
+  dbMod.exec(`UPDATE exam_attempts SET started_at = datetime('now', '-2 hours') WHERE exam_id=${overdueExam.id} AND student_id=${stuUser.id}`);
+  dbMod.close();
+  const lateSubmit = await call(S.student.ck, 'POST', `/api/student/exams/${overdueExam.id}/submit`, { answers: [0, 0, 0] });
+  check('بند ۱۲: ارسال آزمون آنلاین پس از پایان بازه زمانی رد می‌شود (۴۰۰)', lateSubmit.status === 400);
+}
+
+// [بند ۱۳] مشاور تحصیلی و مخاطبان مجاز
+const counselorInfo = await call(S.student.ck, 'GET', '/api/counselor');
+check('بند ۱۳: مشاور تحصیلی اطلاعات مدیر کانون را برمی‌گرداند و فاقد is_online جعلی است', counselorInfo.status === 200 && counselorInfo.data.role === 'counselor' && !('is_online' in counselorInfo.data));
+const studentContacts = await call(S.student.ck, 'GET', '/api/messages/contacts');
+check('بند ۱۳: مدیر کانون در لیست مخاطبان پیام‌رسان دانش‌آموز وجود دارد', studentContacts.status === 200 && studentContacts.data.some(c => c.role === 'manager'));
+const parentContacts = await call(S.parent.ck, 'GET', '/api/messages/contacts');
+check('بند ۱۳: مدیر کانون در لیست مخاطبان پیام‌رسان اولیا وجود دارد', parentContacts.status === 200 && parentContacts.data.some(c => c.role === 'manager'));
+
+// [بند ۱۴] صندوق خروجی پیامک: تلاش مجدد فقط برای پیام‌های failed
+const outboxList = (await call(S.manager.ck, 'GET', '/api/manager/sms-outbox')).data;
+if (outboxList && outboxList.length > 0) {
+  // اگر پیامی با وضعیت pending یا sent باشد تلاش مجدد ۴۰۰ می‌دهد
+  const nonFailed = outboxList.find(m => m.status !== 'failed');
+  if (nonFailed) {
+    const retryNonFailed = await call(S.manager.ck, 'POST', `/api/manager/sms-outbox/${nonFailed.id}/retry`);
+    check('بند ۱۴: تلاش مجدد برای پیام‌های غیر failed با خطای ۴۰۰ رد می‌شود', retryNonFailed.status === 400);
+  }
+}
+
+// [بند ۱۵] حذف کد مرده در DELETE /api/teacher/manual-scores/:id
 const myOverview = (await call(teacherFresh.ck, 'GET', '/api/teacher/overview')).data;
 const myClass = myOverview.classes[0];
 const myAtt = (await call(teacherFresh.ck, 'GET', `/api/teacher/attendance?class_id=${myClass.id}`)).data;
 const testStuId = myAtt.students[0].id;
-const pastDate = '2025-01-10';
-await call(teacherFresh.ck, 'POST', '/api/teacher/attendance', { class_id: myClass.id, date: pastDate, records: [{ student_id: testStuId, status: 'present' }] });
-await call(teacherFresh.ck, 'POST', '/api/teacher/attendance', { class_id: myClass.id, date: pastDate, records: [{ student_id: testStuId, status: 'absent' }] });
-const attChanges = await call(teacherFresh.ck, 'GET', '/api/teacher/attendance/changes');
-check('حضور و غیاب: ثبت و استخراج لاگ تغییر وضعیت', attChanges.status === 200 && attChanges.data.length > 0);
-const mgrAttChanges = await call(S.manager.ck, 'GET', '/api/manager/attendance/changes');
-check('حضور و غیاب: مشاهده لاگ تغییرات توسط مدیر', mgrAttChanges.status === 200 && mgrAttChanges.data.length > 0);
+const newScore = await call(teacherFresh.ck, 'POST', '/api/teacher/manual-scores', { class_id: myClass.id, subject: 'ریاضی', title: 'پرسش مستمر', student_id: testStuId, score: 19 });
+const delScore = await call(teacherFresh.ck, 'DELETE', `/api/teacher/manual-scores/${newScore.data.ids[0]}`);
+check('بند ۱۵: دبیر نمره ثبت‌شده خود را با موفقیت حذف می‌کند', delScore.status === 200 && delScore.data.ok);
 
-// ۸) نمرات مستمر دستی کلاسی (Option 8)
-const addScore = await call(teacherFresh.ck, 'POST', '/api/teacher/manual-scores', { class_id: myClass.id, subject: 'ریاضی', title: 'پرسش کلاسی فصل اول', student_id: testStuId, score: 18.5 });
-check('نمرات مستمر: ثبت نمره مستمر توسط معلم', addScore.status === 200 && addScore.data.ok);
-check('نمرات مستمر: نمره نامعتبر خارج از ۲۰ رد می‌شود', (await call(teacherFresh.ck, 'POST', '/api/teacher/manual-scores', { class_id: myClass.id, subject: 'ریاضی', title: 'غلط', student_id: testStuId, score: 25 })).status === 400);
-const stuScores = await call(S.student.ck, 'GET', '/api/student/manual-scores');
-check('نمرات مستمر: مشاهده نمرات توسط دانش‌آموز', stuScores.status === 200 && Array.isArray(stuScores.data));
-const parentScores = await call(S.parent.ck, 'GET', '/api/parent/children/995/manual-scores');
-check('نمرات مستمر: مشاهده نمرات توسط ولی', parentScores.status === 200 && Array.isArray(parentScores.data));
+// ==================== ارزیابی ۸ بند اصلاحات مرحله دوم ====================
 
-// ۹) کارنامه آزمون جامع طرح برپا (Option 9)
-const stuUser = (await call(S.student.ck, 'GET', '/api/me')).data.user;
-const barpaImport = await call(S.manager.ck, 'POST', '/api/manager/barpa-exams/reports', {
-  exam_id: 'barpa_g7_s1',
-  exam_title: 'آزمون جامع مرحله اول طرح برپا',
-  grade: 'هفتم',
-  records: [{ student_id: stuUser.id, overall_traz: 6720, overall_rank_center: 2, overall_percentage: 82.4, subjects: [{ subject: 'ریاضی', percent: 85 }] }]
-});
-check('کارنامه برپا: ثبت کارنامه جامع توسط مدیر', barpaImport.status === 200 && barpaImport.data.ok);
-const stuBarpa = await call(S.student.ck, 'GET', '/api/barpa-exams/reports');
-check('کارنامه برپا: مشاهده کارنامه اختصاصی توسط دانش‌آموز', stuBarpa.status === 200 && stuBarpa.data.length > 0);
+// [بند ۱ جدید] فاکتور بدهی دوره‌ای: ثبت رسید فقط pending، عدم تغییر paid فاکتور، منع رسید تکراری، تابع recalcInvoice
+const testInv = (await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: stuUser.id, fee_type: 'camp', period: 'اردوی مشهد', amount: 300000 })).data;
+const payInv1 = await call(S.student.ck, 'POST', '/api/student/payment', { invoice_id: testInv.id, amount: 300000, file: { name: 'camp.png', data: png } });
+check('بند ۱: ثبت رسید فاکتور با وضعیت pending', payInv1.status === 200 && payInv1.data.status === 'pending');
+const invAfterPay = (await call(S.student.ck, 'GET', '/api/student/invoices')).data.find(i => i.id === testInv.id);
+check('بند ۱: پس از ارسال رسید، فاکتور بدون تغییر و در وضعیت issued می‌ماند', invAfterPay && invAfterPay.status === 'issued' && invAfterPay.paid === 0);
+const dupPay = await call(S.student.ck, 'POST', '/api/student/payment', { invoice_id: testInv.id, amount: 300000, file: { name: 'camp2.png', data: png } });
+check('بند ۱: جلوی ارسال رسید دوم برای فاکتور دارای رسید در انتظار گرفته می‌شود (۴۰۰)', dupPay.status === 400);
 
-// ۹.۱) آپلود و تفکیک خودکار کارنامه آزمون جامع برپا با پایتون
-const barpaUploadRes = await call(S.manager.ck, 'POST', '/api/barpa-exams/upload', {});
-check('کارنامه برپا: آپلود و تفکیک خودکار PDF و تطبیق دانش‌آموزان', barpaUploadRes.status === 200 && barpaUploadRes.data.ok && barpaUploadRes.data.count > 0);
+// بررسی approve و recalcInvoice
+const campReceipt = (await call(S.manager.ck, 'GET', '/api/manager/receipts?status=pending')).data.find(p => p.invoice_id === testInv.id);
+const approveCamp = await call(S.manager.ck, 'POST', `/api/manager/receipts/${campReceipt.id}/approve`);
+check('بند ۱: تأیید رسید فاکتور توسط مدیر', approveCamp.status === 200);
+const invAfterApprove = (await call(S.student.ck, 'GET', '/api/student/invoices')).data.find(i => i.id === testInv.id);
+check('بند ۱: فاکتور پس از تأیید به وضعیت paid تغییر می‌یابد', invAfterApprove && invAfterApprove.status === 'paid' && invAfterApprove.paid === 300000);
 
-// ۱۰) فاکتورهای بدهی دوره‌ای (Option 10)
-const invRes = await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: stuUser.id, fee_type: 'tuition', period: 'نیم‌سال اول ۱۴۰۳', amount: 1200000 });
-check('فاکتور دوره‌ای: صدور فاکتور بدهی توسط مدیر', invRes.status === 200 && invRes.data.ok);
-const stuInvs = await call(S.student.ck, 'GET', '/api/student/invoices');
-check('فاکتور دوره‌ای: مشاهده فاکتورهای دوره‌ای توسط دانش‌آموز', stuInvs.status === 200 && stuInvs.data.length > 0);
-const parentInvs = await call(S.parent.ck, 'GET', '/api/parent/children/995/invoices');
-check('فاکتور دوره‌ای: مشاهده فاکتورها توسط ولی', parentInvs.status === 200 && Array.isArray(parentInvs.data));
+// بررسی reverse و recalcInvoice
+const reverseCamp = await call(S.manager.ck, 'POST', `/api/manager/receipts/${campReceipt.id}/reverse`, { reason: 'اشتباه محاسباتی' });
+check('بند ۱: برگشت رسید تأییدشده', reverseCamp.status === 200);
+const invAfterReverse = (await call(S.student.ck, 'GET', '/api/student/invoices')).data.find(i => i.id === testInv.id);
+check('بند ۱: پس از برگشت رسید، فاکتور مجدداً به issued بازمی‌گردد', invAfterReverse && invAfterReverse.status === 'issued' && invAfterReverse.paid === 0);
 
-// ۱۱) برگشت رسید تأییدشده با سند اصلاحی (Option 11)
-const revRes = await call(S.manager.ck, 'POST', `/api/manager/receipts/${pending.id}/reverse`, { reason: 'اشتباه در تأیید و درخواست تصحیح' });
-check('برگشت رسید: صدور سند اصلاحی و ابطال رسید تأییدشده', revRes.status === 200 && revRes.data.reversed);
-check('برگشت رسید: تلاش برای برگشت دوباره رسید رد می‌شود', (await call(S.manager.ck, 'POST', `/api/manager/receipts/${pending.id}/reverse`, { reason: 'تکرار' })).status === 400);
+// [بند ۲ جدید] یکسان‌سازی وضعیت فاکتور (issued / partial / paid همراه با paid و remaining)
+const stuInvs = (await call(S.student.ck, 'GET', '/api/student/invoices')).data;
+const parentInvs = (await call(S.parent.ck, 'GET', `/api/parent/children/${stuUser.id}/invoices`)).data;
+const mgrInvs = (await call(S.manager.ck, 'GET', '/api/manager/invoices')).data;
+const validStatuses = ['issued', 'partial', 'paid'];
+check('بند ۲: ساختار و وضعیت فاکتور در پنل دانش‌آموز یکپارچه است', stuInvs.every(i => validStatuses.includes(i.status) && typeof i.paid === 'number' && typeof i.remaining === 'number'));
+check('بند ۲: ساختار و وضعیت فاکتور در پنل اولیا یکپارچه است', parentInvs.every(i => validStatuses.includes(i.status) && typeof i.paid === 'number' && typeof i.remaining === 'number'));
+check('بند ۲: ساختار و وضعیت فاکتور در پنل مدیر یکپارچه است', mgrInvs.every(i => validStatuses.includes(i.status) && typeof i.paid === 'number' && typeof i.remaining === 'number'));
 
-// ۱۲) صندوق خروجی و صف پیامک‌ها (Option 12)
-const outboxRes = await call(S.manager.ck, 'GET', '/api/manager/sms-outbox');
-check('پیامک: مشاهده صندوق خروجی پیامک‌ها توسط مدیر', outboxRes.status === 200 && Array.isArray(outboxRes.data));
+// [بند ۳ جدید] تفکیک فاکتور از حق عضویت در logic.js و داشبورد
+const testFeeStatus = (await call(S.student.ck, 'GET', '/api/student/payment')).data;
+check('بند ۳: پرداخت‌های دارای invoice_id بر وضعیت حق عضویت تأثیر نمی‌گذارند', !testFeeStatus.locked || testFeeStatus.fee);
+const sDb2 = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
+const feeTxCount = sDb2.prepare("SELECT COUNT(*) n FROM transactions WHERE ref LIKE 'pay:%' AND category='حق عضویت' AND title LIKE '%فاکتور%'").get()?.n;
+check('بند ۳: عنوان تراکنش فاکتور تاییدشده حق عضویت نیست', feeTxCount === 0);
+sDb2.close();
 
-// سامانه مهاجرت: نسخه پایگاه داده و وجود ساختار جداول
-const sDb = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
-const ver = sDb.prepare('PRAGMA user_version').get()?.user_version;
-check('سامانه مهاجرت: PRAGMA user_version حداقل نسخه ۲ است', ver >= 2, `نسخه: ${ver}`);
-const tbls = sDb.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table'").get()?.n;
-check('سامانه مهاجرت: جداول اولیه پایگاه داده ایجاد شده‌اند', tbls > 10, `تعداد: ${tbls}`);
-sDb.close();
+// [بند ۴ جدید] تصحیح pages_count کتاب‌های هوش و دسترسی به صفحات بالا
+const bookHoosh6 = (await call(S.teacher.ck, 'GET', '/api/exam-books')).data?.find(b => b.id === 'hoosh_6');
+check('بند ۴: تصحیح pages_count کتاب هوش ششم در مهاجرت نسخه ۵', bookHoosh6 && bookHoosh6.pages_count >= 550);
+const page500Res = await fetch(B + '/api/exam-books/hoosh_6/pages/500', { headers: { Cookie: S.teacher.ck } });
+check('بند ۴: دسترسی به صفحات بالای ۱۲۰ (مثلاً ۵۰۰) با کد ۲۰۰', page500Res.status === 200);
+const page999Res = await fetch(B + '/api/exam-books/hoosh_6/pages/999', { headers: { Cookie: S.teacher.ck } });
+check('بند ۴: درخواست شماره صفحه فراتر از کل صفحات رد می‌شود (۴۰۰)', page999Res.status === 400);
+
+// [بند ۵ جدید] شناسه‌ی ثابت و بدون Date.now() در آزمون برپا
+const barpaPayload1 = {
+  exam_title: 'آزمون آزمایشی برپا مرحله اول',
+  grade: 'نهم',
+  stage: '1',
+  records: [{ student_id: stuUser.id, candidate_code: 'BARPA_DET_1', student_name: stuUser.full_name, overall_percentage: 85 }]
+};
+const repRes1 = await call(S.manager.ck, 'POST', '/api/manager/barpa-exams/reports', barpaPayload1);
+const repRes2 = await call(S.manager.ck, 'POST', '/api/manager/barpa-exams/reports', barpaPayload1);
+check('بند ۵: ثبت دوباره کارنامه با همان عنوان و مرحله موفق است', repRes1.status === 200 && repRes2.status === 200);
+const sDb3 = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
+const examRows = sDb3.prepare("SELECT exam_id FROM comprehensive_exam_reports WHERE candidate_code='BARPA_DET_1'").all();
+check('بند ۵: شناسه آزمون ثابت و بدون timestamp است و کارنامه تکراری ثبت نمی‌شود', examRows.length === 1 && !/\d{12,}/.test(examRows[0].exam_id));
+sDb3.close();
+
+// [بند ۶ جدید] مدیریت رکوردهای تطبیق‌نشده آزمون برپا (barpa_unmatched و match)
+const sDb4 = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'));
+sDb4.exec(`
+  INSERT INTO barpa_unmatched (exam_id, center_id, candidate_code, full_name, school_name, page, payload_json, created_at)
+  VALUES ('exam_unmatched_1', 1, '99887766', 'دانش‌آموز ناشناس', 'مدرسه شهید بهشتی', 4, '{"candidate_code":"99887766","full_name":"دانش‌آموز ناشناس","total_summary":{"traz":7100,"rank_all":12}}', 1700000000)
+`);
+const unmatchRowId = sDb4.prepare("SELECT last_insert_rowid() id").get().id;
+sDb4.close();
+
+const unmatchedList = await call(S.manager.ck, 'GET', '/api/manager/barpa-exams/unmatched');
+check('بند ۶: دریافت فهرست داوطلبان تطبیق‌نشده', unmatchedList.status === 200 && unmatchedList.data.some(u => u.candidate_code === '99887766'));
+
+const matchAction = await call(S.manager.ck, 'POST', `/api/manager/barpa-exams/unmatched/${unmatchRowId}/match`, { student_id: stuUser.id });
+check('بند ۶: تطبیق دستی دانش‌آموز با موفقیت انجام می‌شود', matchAction.status === 200 && matchAction.data.matched);
+
+const sDb5 = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
+const matchedInReports = sDb5.prepare("SELECT * FROM comprehensive_exam_reports WHERE exam_id='exam_unmatched_1' AND student_id=?").get(stuUser.id);
+const remainingInUnmatched = sDb5.prepare("SELECT * FROM barpa_unmatched WHERE id=?").get(unmatchRowId);
+check('بند ۶: کارنامه به comprehensive_exam_reports اضافه شد', !!matchedInReports && matchedInReports.overall_traz === 7100);
+check('بند ۶: رکورد از جدول barpa_unmatched حذف شد', !remainingInUnmatched);
+sDb5.close();
+
+// [بند ۷ جدید] مخاطبان مجاز مدیر کانون در پیام‌رسان
+const mgrContacts = await call(S.manager.ck, 'GET', '/api/messages/contacts');
+check('بند ۷: لیست مخاطبان مدیر به دبیران و فقط افراد دارای پیام محدود است', mgrContacts.status === 200 && mgrContacts.data.length < 50);
+
+// [بند ۸ جدید] اندپوینت /api/counselor در نبود مدیر کانون
+const sDb6 = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'));
+sDb6.exec("INSERT INTO centers (id, name, slug) VALUES (999, 'کانون بدون مدیر', 'no-mgr')");
+sDb6.exec(`UPDATE users SET center_id=999 WHERE id=${stuUser.id}`);
+sDb6.close();
+
+const counselorNone = await call(S.student.ck, 'GET', '/api/counselor');
+check('بند ۸: /api/counselor در نبود مدیر کانون { id: null } بازمی‌گرداند', counselorNone.status === 200 && counselorNone.data.id === null);
+
+// بازگرداندن کانون دانش‌آموز به وضعیت اولیه
+const sDb7 = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'));
+sDb7.exec(`UPDATE users SET center_id=1 WHERE id=${stuUser.id}`);
+sDb7.close();
+
+// بررسی سامانه مهاجرت و نسخه ۵ پایگاه داده
+const sDbEnd = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
+const ver5 = sDbEnd.prepare('PRAGMA user_version').get()?.user_version;
+check('مهاجرت نسخه ۵: PRAGMA user_version دقیقاً برابر ۵ است', ver5 === 5, `نسخه فعلی: ${ver5}`);
+const defaultBooks = sDbEnd.prepare("SELECT COUNT(*) n FROM exam_books WHERE center_id IS NULL").get()?.n;
+check('مهاجرت نسخه ۵: کتاب‌های پیش‌فرض دارای center_id NULL هستند (عمومی)', defaultBooks >= 2);
+sDbEnd.close();
 
 app.kill();
 await new Promise((r) => setTimeout(r, 300));

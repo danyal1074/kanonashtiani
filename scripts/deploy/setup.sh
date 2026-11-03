@@ -14,8 +14,10 @@ if ! command -v node &> /dev/null || [[ $(node -v | cut -d'.' -f1 | tr -d 'v') -
 fi
 echo "نسخه Node.js: $(node -v)"
 
-echo "=== ۳. آماده‌سازی مسیر پروژه در /srv/roshd ==="
+echo "=== ۳. آماده‌سازی کاربر roshd و مسیر پروژه در /srv/roshd ==="
+id -u roshd &>/dev/null || useradd -r -s /usr/sbin/nologin -d /srv/roshd -M roshd
 mkdir -p /srv/roshd /srv/roshd/data /srv/roshd/uploads
+chown -R roshd:roshd /srv/roshd /srv/roshd/data /srv/roshd/uploads
 
 echo "=== ۴. تنظیم سرویس Systemd ==="
 cp scripts/deploy/roshd.service /etc/systemd/system/roshd.service

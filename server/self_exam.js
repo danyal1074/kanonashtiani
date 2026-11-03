@@ -212,14 +212,19 @@ export function evaluateSelfExam(questions, studentAnswers = {}, negativeMarking
   });
 
   const total = questions.length || 1;
+  const answeredCount = correctCount + wrongCount;
   let score = correctCount;
   if (negativeMarking) {
     score = Math.max(0, correctCount - (wrongCount / 3));
   }
   const percentage = Math.max(0, Math.min(100, Math.round((score / total) * 100)));
 
-  let pointsAwarded = 3;
-  if (percentage >= 80) pointsAwarded += 2;
+  let pointsAwarded = 0;
+  // شرط امتیاز فقط در صورتی است که حداقل نصف سؤالات پاسخ داده شده باشند
+  if (answeredCount >= Math.ceil(total / 2)) {
+    pointsAwarded = 3;
+    if (percentage >= 80) pointsAwarded += 2;
+  }
 
   return {
     total,

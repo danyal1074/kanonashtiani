@@ -108,14 +108,18 @@ export default function register(r) {
     const at = get('SELECT started_at FROM exam_attempts WHERE exam_id=? AND student_id=?', e.id, ctx.user.id);
     if (!at) fail(400, 'آزمون شروع نشده است');
     if (get('SELECT 1 FROM exam_results WHERE exam_id=? AND student_id=?', e.id, ctx.user.id)) fail(400, 'پاسخ این آزمون قبلاً ثبت شده');
+    const startedMs = new Date(at.started_at.includes('T') ? at.started_at : at.started_at.replace(' ', 'T') + 'Z').getTime();
+    const expired = Date.now() - startedMs > (e.duration_min * 60 + 30) * 1000;
+    if (expired) {
+      fail(400, 'مهلت پاسخ‌دهی به آزمون به پایان رسیده است');
+    }
     const qs = JSON.parse(e.questions);
-    const expired = Date.now() - new Date(at.started_at).getTime() > (e.duration_min * 60 + 30) * 1000;
     const answers = qs.map((_, i) => {
       const v = ctx.body.answers?.[i];
       return Number.isInteger(v) && v >= 0 && v <= 3 ? v : null;
     });
     const res = saveExamResult(e, ctx.user.id, answers, 'online');
-    return { ...res, expired, title: e.title, questions: qs, answers };
+    return { ...res, expired: false, title: e.title, questions: qs, answers };
   });
   r.get('/api/student/results', S, (ctx) => studentResults(ctx.user.id));
   r.get('/api/student/results/:id', S, (ctx) => {
@@ -179,12 +183,32 @@ export default function register(r) {
     return { ...feeStatus(ctx.user.id), card_number: c.card_number, card_holder: c.card_holder };
   });
   r.post('/api/student/payment', { ...S, allowLocked: true }, (ctx) => {
+    if (ctx.body.invoice_id) {
+      const invoiceId = Number(ctx.body.invoice_id);
+      const inv = get('SELECT id, amount, paid, status FROM fee_invoices WHERE id=? AND student_id=?', invoiceId, ctx.user.id);
+      if (!inv) fail(404, 'فاکتور یافت نشد یا متعلق به شما نیست');
+      if (inv.status === 'paid' || (inv.paid && inv.paid >= inv.amount)) fail(400, 'این فاکتور قبلاً تسویه شده است');
+
+      const pendingPay = get("SELECT 1 FROM payments WHERE invoice_id=? AND status='pending'", inv.id);
+      if (pendingPay) fail(400, 'رسید قبلی این فاکتور در انتظار تأیید است');
+
+      if (!ctx.body.file) fail(400, 'تصویر رسید را بارگذاری کنید');
+      const file = saveUpload(ctx.body.file, 6);
+      const remaining = Math.max(0, inv.amount - (inv.paid || 0));
+      const payAmount = Number(ctx.body.amount) > 0 ? Math.min(Number(ctx.body.amount), remaining) : remaining;
+
+      run("INSERT INTO payments (student_id, amount, receipt_path, invoice_id, fee_type, status) VALUES (?,?,?,?,?,'pending')",
+        ctx.user.id, payAmount, file, inv.id, 'invoice');
+
+      return { ok: true, invoice_id: inv.id, amount: payAmount, status: 'pending' };
+    }
+
     const fs_ = feeStatus(ctx.user.id);
     if (fs_.status === 'paid') fail(400, 'حق عضویت شما قبلاً تأیید شده است');
     if (fs_.status === 'pending') fail(400, 'رسید قبلی شما در انتظار تأیید است');
     if (!ctx.body.file) fail(400, 'تصویر رسید را بارگذاری کنید');
     const file = saveUpload(ctx.body.file, 6);
-    run('INSERT INTO payments (student_id, amount, receipt_path) VALUES (?,?,?)', ctx.user.id, fs_.amount, file);
+    run('INSERT INTO payments (student_id, amount, receipt_path, fee_type) VALUES (?,?,?,?)', ctx.user.id, fs_.amount, file, 'tuition');
     return { ok: true };
   });
 
@@ -292,6 +316,20 @@ export default function register(r) {
     const answers = (typeof ctx.body.answers === 'object' && ctx.body.answers !== null) ? ctx.body.answers : {};
     const evalResult = evaluateSelfExam(questions, answers, exam.negative_marking === 1);
 
+    // ۱. بررسی اتمام مدت آزمون (+ ۳۰ ثانیه مهلت ارسال)
+    const createdMs = new Date(exam.created_at.includes('T') ? exam.created_at : exam.created_at.replace(' ', 'T') + 'Z').getTime();
+    const isExpired = Date.now() - createdMs > (exam.duration_minutes * 60 + 30) * 1000;
+
+    // ۲. بررسی سقف روزانه: حداکثر ۳ آزمون دارای امتیاز در یک روز
+    const todayPointExams = get(`
+      SELECT COUNT(*) n FROM self_exams
+      WHERE student_id=? AND points_awarded > 0 AND date(finished_at) = date('now')
+    `, ctx.user.id).n;
+
+    if (isExpired || todayPointExams >= 3) {
+      evalResult.pointsAwarded = 0;
+    }
+
     tx(() => {
       run(`
         UPDATE self_exams SET
@@ -308,7 +346,9 @@ export default function register(r) {
       `, JSON.stringify(answers), evalResult.score, evalResult.percentage, evalResult.correctCount,
          evalResult.wrongCount, evalResult.blankCount, evalResult.pointsAwarded, exam.id);
 
-      addPoints(ctx.user.id, evalResult.pointsAwarded, 'آزمون', `شرکت در خودسنجی: ${exam.title}`, `self_exam:${exam.id}`);
+      if (evalResult.pointsAwarded > 0) {
+        addPoints(ctx.user.id, evalResult.pointsAwarded, 'آزمون', `شرکت در خودسنجی: ${exam.title}`, `self_exam:${exam.id}`);
+      }
     });
 
     return {
@@ -371,14 +411,25 @@ export default function register(r) {
   // ---------- فاکتورهای بدهی دوره‌ای (Option 10) ----------
   r.get('/api/student/invoices', S, (ctx) => {
     return all(`
-      SELECT i.id, i.fee_type, i.period, i.amount, i.created_at,
-             COALESCE((SELECT SUM(amount) FROM payments p WHERE p.invoice_id=i.id AND p.status='approved'), 0) paid
+      SELECT i.id, i.id invoice_id, i.fee_type, i.period, i.amount, i.paid, i.status, i.created_at,
+             COALESCE((SELECT SUM(amount) FROM payments p WHERE p.invoice_id=i.id AND p.status='approved'), 0) paid_calc
       FROM fee_invoices i
       WHERE i.student_id=? ORDER BY i.id DESC
-    `, ctx.user.id).map((r) => ({
-      ...r,
-      remaining: Math.max(0, r.amount - r.paid),
-      status: r.paid >= r.amount ? 'settled' : (r.paid > 0 ? 'partially_paid' : 'unpaid')
-    }));
+    `, ctx.user.id).map((r) => {
+      const paid = r.paid ?? r.paid_calc ?? 0;
+      const remaining = Math.max(0, r.amount - paid);
+      const status = paid >= r.amount ? 'paid' : (paid > 0 ? 'partial' : 'issued');
+      return {
+        id: r.id,
+        invoice_id: r.id,
+        fee_type: r.fee_type,
+        period: r.period,
+        amount: r.amount,
+        paid,
+        remaining,
+        status,
+        created_at: r.created_at
+      };
+    });
   });
 }

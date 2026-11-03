@@ -49,15 +49,26 @@ export function feeStatus(sid) {
   const st = get('SELECT s.grade, u.center_id FROM students s JOIN users u ON u.id=s.user_id WHERE s.user_id=?', sid);
   if (!st) return null;
   const fee = get('SELECT amount, lock_date FROM fee_settings WHERE center_id=? AND grade=?', st.center_id, st.grade) || { amount: 0, lock_date: null };
-  const pays = all('SELECT id, amount, status, reject_reason, receipt_path, created_at, reviewed_at FROM payments WHERE student_id=? ORDER BY id DESC', sid);
+  const pays = all('SELECT id, amount, status, reject_reason, receipt_path, created_at, reviewed_at FROM payments WHERE student_id=? AND invoice_id IS NULL ORDER BY id DESC', sid);
+  const activePays = pays.filter((p) => p.status !== 'reversed');
   let status = 'unpaid';
-  if (pays.some((p) => p.status === 'approved')) status = 'paid';
-  else if (pays.some((p) => p.status === 'pending')) status = 'pending';
-  else if (pays.length && pays[0].status === 'rejected') status = 'rejected';
+  if (activePays.some((p) => p.status === 'approved')) status = 'paid';
+  else if (activePays.some((p) => p.status === 'pending')) status = 'pending';
+  else if (activePays.length && activePays[0].status === 'rejected') status = 'rejected';
   if (!fee.amount) status = status === 'unpaid' || status === 'rejected' ? 'free' : status;
   const deadlinePassed = !!fee.lock_date && ymd() > fee.lock_date;
   const locked = deadlinePassed && !['paid', 'free'].includes(status);
   return { grade: st.grade, amount: fee.amount, lock_date: fee.lock_date, status, locked, payments: pays };
+}
+
+export function recalcInvoice(invoiceId) {
+  if (!invoiceId) return null;
+  const inv = get('SELECT id, amount FROM fee_invoices WHERE id=?', invoiceId);
+  if (!inv) return null;
+  const approvedSum = get("SELECT COALESCE(SUM(amount), 0) s FROM payments WHERE invoice_id=? AND status='approved'", invoiceId)?.s || 0;
+  const status = approvedSum >= inv.amount ? 'paid' : (approvedSum > 0 ? 'partial' : 'issued');
+  run('UPDATE fee_invoices SET paid=?, status=? WHERE id=?', approvedSum, status, inv.id);
+  return { id: inv.id, paid: approvedSum, status, remaining: Math.max(0, inv.amount - approvedSum) };
 }
 
 // ---------- اطلاعیه‌ها ----------
@@ -203,11 +214,14 @@ export function contactsOf(user) {
     const s = get('SELECT class_id FROM students WHERE user_id=?', user.id);
     const teachers = all(`SELECT DISTINCT u.id, u.full_name name, 'teacher' role, GROUP_CONCAT(DISTINCT tc.subject) sub FROM teacher_classes tc JOIN users u ON u.id=tc.teacher_id WHERE tc.class_id=? GROUP BY u.id`, s?.class_id ?? -1);
     const mates = all(`SELECT u.id, u.full_name name, 'student' role, st.avatar, 'هم‌کلاسی' sub FROM students st JOIN users u ON u.id=st.user_id WHERE st.class_id=? AND u.id<>? AND u.active=1 ORDER BY u.full_name`, s?.class_id ?? -1, user.id);
-    return [...teachers.map((t) => ({ ...t, sub: `دبیر ${t.sub}` })), ...mates];
+    const managers = all(`SELECT id, full_name name, 'manager' role, 'مدیر کانون' sub FROM users WHERE center_id=? AND role='manager' AND active=1`, user.center_id);
+    return [...managers, ...teachers.map((t) => ({ ...t, sub: `دبیر ${t.sub}` })), ...mates];
   }
   if (user.role === 'parent') {
-    return all(`SELECT DISTINCT u.id, u.full_name name, 'teacher' role, 'دبیر ' || GROUP_CONCAT(DISTINCT tc.subject) sub FROM parent_children pc JOIN students s ON s.user_id=pc.student_id
+    const managers = all(`SELECT id, full_name name, 'manager' role, 'مدیر کانون' sub FROM users WHERE center_id=? AND role='manager' AND active=1`, user.center_id);
+    const teachers = all(`SELECT DISTINCT u.id, u.full_name name, 'teacher' role, 'دبیر ' || GROUP_CONCAT(DISTINCT tc.subject) sub FROM parent_children pc JOIN students s ON s.user_id=pc.student_id
       JOIN teacher_classes tc ON tc.class_id=s.class_id JOIN users u ON u.id=tc.teacher_id WHERE pc.parent_id=? GROUP BY u.id`, user.id);
+    return [...managers, ...teachers];
   }
   if (user.role === 'teacher') {
     const students = all(`SELECT DISTINCT u.id, u.full_name name, 'student' role, st.avatar, 'کلاس ' || c.name || ' - پایه ' || c.grade sub FROM teacher_classes tc JOIN students st ON st.class_id=tc.class_id
@@ -218,7 +232,21 @@ export function contactsOf(user) {
     return [...managers, ...students, ...parents];
   }
   if (user.role === 'manager') {
-    return all(`SELECT id, full_name name, 'teacher' role, 'دبیر' sub FROM users WHERE center_id=? AND role='teacher' AND active=1 ORDER BY full_name`, user.center_id);
+    const teachers = all(`SELECT id, full_name name, 'teacher' role, 'دبیر' sub FROM users WHERE center_id=? AND role='teacher' AND active=1 ORDER BY full_name`, user.center_id);
+    const messagedUsers = all(`
+      SELECT DISTINCT u.id, u.full_name name, u.role,
+             CASE WHEN u.role='student' THEN st.avatar ELSE NULL END avatar,
+             CASE WHEN u.role='student' THEN 'دانش‌آموز' ELSE 'ولی دانش‌آموز' END sub
+      FROM users u
+      LEFT JOIN students st ON st.user_id=u.id
+      WHERE u.center_id=? AND u.role IN ('student', 'parent') AND u.active=1
+        AND (
+          u.id IN (SELECT to_id FROM messages WHERE from_id=?)
+          OR u.id IN (SELECT from_id FROM messages WHERE to_id=?)
+        )
+      ORDER BY u.full_name
+    `, user.center_id, user.id, user.id);
+    return [...teachers, ...messagedUsers];
   }
   return [];
 }
@@ -262,7 +290,7 @@ export function runPenaltyJob() {
     const fees = all(`SELECT center_id, grade, lock_date FROM fee_settings WHERE lock_date IS NOT NULL AND lock_date < ? AND amount>0`, today);
     for (const f of fees) {
       const unpaid = all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND s.grade=? AND u.active=1 AND date(u.created_at) <= ?
-        AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved')`, f.center_id, f.grade, f.lock_date);
+        AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.invoice_id IS NULL AND p.status='approved')`, f.center_id, f.grade, f.lock_date);
       for (const u of unpaid) if (addPoints(u.id, -20, 'حق عضویت', 'پرداخت نشدن حق عضویت پس از پایان مهلت', `fee:${f.lock_date}`)) applied++;
     }
   });
