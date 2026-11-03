@@ -15,6 +15,7 @@
     "init": "node scripts/init.mjs",
     "import": "node scripts/import-students.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "loadtest": "node scripts/loadtest.mjs"
+    "loadtest": "node scripts/loadtest.mjs",
+    "review": "node scripts/review.mjs"
   }
 }

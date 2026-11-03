@@ -155,5 +155,6 @@ if (EXAM) console.log(`آزمون‌های ثبت‌شده: ${examDone} از ${N
 const apiRows = rows.filter((r) => !r.name.startsWith('static'));
 const worst = Math.max(...apiRows.map((r) => r.p95));
 console.log(`\nبدترین p95 در API: ${worst.toFixed(0)} میلی‌ثانیه`);
+if (arg('json', false)) console.log('JSON:' + JSON.stringify({ users: N, secs: Math.round(secs), total, errors: bad, worstApiP95: Math.round(worst), rows: rows.map((r) => ({ name: r.name, n: r.n, p95: Math.round(r.p95), bad: r.bad })) }));
 if (child) { child.kill(); await sleep(300); try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* */ } }
 process.exit(bad ? 1 : 0);
