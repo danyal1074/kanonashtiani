@@ -1,24 +1,26 @@
 // مسیرهای مشترک: ورود، پروفایل، اطلاعیه، پیام‌رسان، صفحه عمومی کانون و فروشگاه
 import { all, get, run, tx } from '../db.js';
-import { COOKIE } from '../http.js';
-import { fail, hashPassword, verifyPassword, needsRehash, signToken, ymd, jMonthOf, toEnDigits, clampStr, randomCode, saveUpload } from '../util.js';
+import { COOKIE, isHttps } from '../http.js';
+import { fail, hashPasswordAsync, verifyPasswordAsync, needsRehash, signToken, ymd, jMonthOf, toEnDigits, clampStr, randomCode, saveUpload } from '../util.js';
 import { feeStatus, announcementsFor, contactsOf, levelOf, totalPoints } from '../logic.js';
 
+// محدودیت تلاش ناموفق ورود: هر (آی‌پی، شناسه) ۸ بار در ۱۰ دقیقه؛ و سقف کلی هر آی‌پی (مدرسه‌ای با ده‌ها دانش‌آموز پشت یک آی‌پی)
 const attempts = new Map();
-function throttle(key) {
-  const now = Date.now();
-  const a = attempts.get(key);
-  if (a && a.until > now && a.count >= 8) fail(429, 'تلاش‌های ناموفق زیاد بود؛ چند دقیقه بعد دوباره امتحان کنید');
-  return {
-    failed() { const x = attempts.get(key); attempts.set(key, x && x.until > now ? { ...x, count: x.count + 1 } : { count: 1, until: now + 10 * 60e3 }); },
-    ok() { attempts.delete(key); },
-  };
+const WINDOW = 10 * 60e3;
+const LIMITS = { pair: 8, ip: 250 };
+function bump(key) { const now = Date.now(); const x = attempts.get(key); attempts.set(key, x && x.until > now ? { ...x, count: x.count + 1 } : { count: 1, until: now + WINDOW }); }
+const blocked = (key, max) => { const a = attempts.get(key); return !!a && a.until > Date.now() && a.count >= max; };
+function throttle(ip, id) {
+  const pair = `${ip}|${id}`, ipKey = `ip|${ip}`;
+  if (blocked(pair, LIMITS.pair) || blocked(ipKey, LIMITS.ip)) fail(429, 'تلاش‌های ناموفق زیاد بود؛ چند دقیقه بعد دوباره امتحان کنید');
+  return { failed() { bump(pair); bump(ipKey); }, ok() { attempts.delete(pair); } };
 }
+setInterval(() => { const now = Date.now(); for (const [k, v] of attempts) if (v.until <= now) attempts.delete(k); }, 60e3).unref();
 
-const cookieHeader = (tok, maxAge) => `${COOKIE}=${tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+const cookieHeader = (tok, maxAge, req) => `${COOKIE}=${tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${req && isHttps(req) ? '; Secure' : ''}`;
 export function setSession(ctx, user, extra = {}) {
   const tok = signToken({ uid: user.id, pv: user.pass_hash.slice(-8), ...extra });
-  ctx.res.setHeader('Set-Cookie', cookieHeader(tok, 14 * 86400));
+  ctx.res.setHeader('Set-Cookie', cookieHeader(tok, 14 * 86400, ctx.req));
 }
 
 export function centerOf(id) {
@@ -37,31 +39,33 @@ export function isBirthday(birth) {
 }
 
 export default function register(r) {
-  r.post('/api/auth/login', { auth: false }, (ctx) => {
+  r.post('/api/auth/login', { auth: false }, async (ctx) => {
     const role = ctx.body.role;
     const id = toEnDigits(clampStr(ctx.body.identifier, 64));
     const pw = String(ctx.body.password || '');
     if (!['student', 'teacher', 'manager', 'parent', 'admin'].includes(role)) fail(400, 'نقش کاربری نامعتبر است');
     if (!id || !pw) fail(400, 'شناسه و رمز عبور را وارد کنید');
-    const t = throttle(`${ctx.ip}|${id}`);
+    const t = throttle(ctx.ip, id);
     let user;
     if (role === 'parent') user = get(`SELECT * FROM users WHERE role='parent' AND mobile=?`, id);
     else user = get(`SELECT * FROM users WHERE role=? AND (national_code=? OR username=?)`, role, id, id);
-    if (!user || !user.active || !verifyPassword(pw, user.pass_hash)) {
+    if (!user || !user.active || !(await verifyPasswordAsync(pw, user.pass_hash))) {
       t.failed();
       fail(401, role === 'parent' ? 'شماره موبایل یا رمز عبور اشتباه است' : 'نام کاربری/کد ملی یا رمز عبور اشتباه است');
     }
     t.ok();
     if (needsRehash(user.pass_hash)) {
-      user.pass_hash = hashPassword(pw);
-      run('UPDATE users SET pass_hash=? WHERE id=?', user.pass_hash, user.id);
+      // به‌روزرسانی شرطی: اگر هم‌زمان نشست دیگری همین حساب را ارتقا داد، هش او حفظ می‌شود (وگرنه توکن آن نشست باطل می‌شد)
+      const h = await hashPasswordAsync(pw);
+      const r = run('UPDATE users SET pass_hash=? WHERE id=? AND pass_hash=?', h, user.id, user.pass_hash);
+      user.pass_hash = r.changes ? h : get('SELECT pass_hash FROM users WHERE id=?', user.id).pass_hash;
     }
     setSession(ctx, user);
     return { ok: true, role: user.role };
   });
 
   r.post('/api/auth/logout', { auth: false, allowLocked: true }, (ctx) => {
-    ctx.res.setHeader('Set-Cookie', cookieHeader('', 0));
+    ctx.res.setHeader('Set-Cookie', cookieHeader('', 0, ctx.req));
     return { ok: true };
   });
 
@@ -87,12 +91,12 @@ export default function register(r) {
     return out;
   });
 
-  r.post('/api/me/password', { allowLocked: true }, (ctx) => {
+  r.post('/api/me/password', { allowLocked: true }, async (ctx) => {
     const { current, next } = ctx.body;
     const row = get('SELECT pass_hash FROM users WHERE id=?', ctx.user.id);
-    if (!verifyPassword(current || '', row.pass_hash)) fail(400, 'رمز فعلی اشتباه است');
+    if (!(await verifyPasswordAsync(current || '', row.pass_hash))) fail(400, 'رمز فعلی اشتباه است');
     if (!next || String(next).length < 6) fail(400, 'رمز جدید باید حداقل ۶ کاراکتر باشد');
-    const h = hashPassword(next);
+    const h = await hashPasswordAsync(next);
     run('UPDATE users SET pass_hash=? WHERE id=?', h, ctx.user.id);
     setSession(ctx, { id: ctx.user.id, pass_hash: h });
     return { ok: true };

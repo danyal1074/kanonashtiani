@@ -2,6 +2,8 @@
 import { all, get, run, tx } from '../db.js';
 import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
 import { feeStatus, announcementAudience, saveExamResult } from '../logic.js';
+import { importStudents } from '../importer.js';
+import { sendSms, smsProvider } from '../sms.js';
 import { parseQuestions, examWithResults, performanceList, studentDetail } from './teacher.js';
 
 const M = { roles: ['manager'] };
@@ -79,14 +81,23 @@ export default function register(r) {
       balance: get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE -amount END),0) b FROM transactions WHERE center_id=?`, cid).b,
     };
   });
-  r.post('/api/manager/attendance/:id/sms', M, (ctx) => {
-    const ids = ctx.params.id === 'all'
-      ? all(`SELECT a.id FROM attendance a JOIN classes c ON c.id=a.class_id WHERE c.center_id=? AND a.date=? AND a.status='absent' AND a.sms_sent=0`, ctx.user.center_id, ymd()).map((x) => x.id)
-      : [Number(ctx.params.id)];
-    // ارسال پیامک شبیه‌سازی می‌شود؛ در محیط واقعی اینجا به سرویس پیامک وصل می‌شود
-    let n = 0;
-    for (const id of ids) n += run(`UPDATE attendance SET sms_sent=1 WHERE id=? AND class_id IN (SELECT id FROM classes WHERE center_id=?)`, id, ctx.user.center_id).changes;
-    return { ok: true, sent: n };
+  r.post('/api/manager/attendance/:id/sms', M, async (ctx) => {
+    const cid = ctx.user.center_id;
+    const rows = all(`SELECT a.id, a.date, u.full_name, s.parent_phone, c.name class_name, c.grade FROM attendance a JOIN classes c ON c.id=a.class_id
+      JOIN users u ON u.id=a.student_id JOIN students s ON s.user_id=u.id
+      WHERE c.center_id=? AND a.status='absent' AND a.sms_sent=0 AND ${ctx.params.id === 'all' ? 'a.date=?' : 'a.id=?'}`, cid, ctx.params.id === 'all' ? ymd() : Number(ctx.params.id));
+    const center = get('SELECT name FROM centers WHERE id=?', cid);
+    const result = { ok: true, sent: 0, failed: 0, simulated: smsProvider() === 'simulated', errors: [] };
+    // ارسال با هم‌زمانی ۵ تایی؛ فقط پیامک‌های موفق علامت «ارسال‌شده» می‌گیرند و ناموفق‌ها قابل تلاش دوباره می‌مانند
+    for (let i = 0; i < rows.length; i += 5) {
+      await Promise.all(rows.slice(i, i + 5).map(async (a) => {
+        const [jy, jm, jd] = jMonthOf(a.date);
+        const text = `${center.name}: ${a.full_name} امروز (${jy}/${jm}/${jd}) در کلاس ${a.class_name} غایب بود.`;
+        const r = await sendSms(a.parent_phone, text);
+        if (r.ok) { run('UPDATE attendance SET sms_sent=1 WHERE id=?', a.id); result.sent++; } else { result.failed++; if (result.errors.length < 3) result.errors.push(r.error); }
+      }));
+    }
+    return result;
   });
 
   // ---------- داده‌های پایه ----------
@@ -138,11 +149,17 @@ export default function register(r) {
     const id = tx(() => {
       const res = run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender) VALUES (?,?,?,?,?,?)`, ctx.user.center_id, 'student', d.national_code, hashPassword(d.national_code), d.full_name, d.gender);
       const uid = Number(res.lastInsertRowid);
-      run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar) VALUES (?,?,?,?,?,?,?,?)', uid, d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, d.gender === 'f' ? '🦄' : '🦊');
+      run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar) VALUES (?,?,?,?,?,?,?,?)', uid, d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, 'sprout');
       parentCreated = linkParent(ctx, uid, d.parent_phone, d.full_name);
       return uid;
     });
     return { ok: true, id, credentials: { student: `نام کاربری و رمز اولیه دانش‌آموز: کد ملی (${d.national_code})`, parent: parentCreated ? `ورود والدین با موبایل ${d.parent_phone} و رمز اولیه: ۶ رقم آخر موبایل` : 'والد از قبل ثبت شده بود و فرزند به حسابش اضافه شد' } };
+  });
+  // ثبت‌نام گروهی از CSV؛ با dry_run فقط اعتبارسنجی و گزارش خطای هر سطر بدون ثبت
+  r.post('/api/manager/students/import', M, async (ctx) => {
+    const csv = String(ctx.body.csv || '');
+    if (!csv.trim()) fail(400, 'فایل CSV خالی است');
+    try { return await importStudents(ctx.user.center_id, csv, { dryRun: !!ctx.body.dry_run }); } catch (e) { fail(400, e.message); }
   });
   r.put('/api/manager/students/:id', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);

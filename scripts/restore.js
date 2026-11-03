@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DB_PATH, closeDb } from '../server/db.js';
-import { makeBackup } from '../server/routes/admin.js';
+import { makeBackup } from '../server/backup.js';
 
 const src = process.argv[2];
 if (!src || !fs.existsSync(src)) { console.error('مسیر فایل پشتیبان را وارد کنید: npm run restore -- data/backups/roshd-....db'); process.exit(1); }

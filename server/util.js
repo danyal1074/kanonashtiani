@@ -25,6 +25,30 @@ export function verifyPassword(pw, stored) {
 }
 export const needsRehash = (stored) => Number(String(stored).split('$')[1]) < STRONG_N;
 
+// نسخه ناهمزمان برای مسیرهای پرتردد (ورود): محاسبه در نخ‌های جداگانه انجام می‌شود تا حلقه رویداد قفل نشود.
+// تعداد محاسبه‌های هم‌زمان محدود است تا صف هش، خواندن فایل‌ها و سایر کارها را گرسنه نکند.
+const scryptAsync = (pw, salt, N) => new Promise((res, rej) => crypto.scrypt(pw, salt, 32, { N, r: 8, p: 1, maxmem: 128 * N * 8 * 2 }, (e, k) => (e ? rej(e) : res(k))));
+const SCRYPT_SLOTS = Math.max(2, Math.min(6, Number(process.env.UV_THREADPOOL_SIZE || 4) - 1));
+let scryptActive = 0;
+const scryptQueue = [];
+async function scryptLimited(pw, salt, N) {
+  if (scryptActive >= SCRYPT_SLOTS) await new Promise((r) => scryptQueue.push(r));
+  scryptActive++;
+  try { return await scryptAsync(pw, salt, N); } finally { scryptActive--; scryptQueue.shift()?.(); }
+}
+export async function hashPasswordAsync(pw, N = STRONG_N) {
+  const salt = crypto.randomBytes(16).toString('base64url');
+  const hash = (await scryptLimited(String(pw), salt, N)).toString('base64url');
+  return `scrypt$${N}$${salt}$${hash}`;
+}
+export async function verifyPasswordAsync(pw, stored) {
+  const [alg, n, salt, hash] = String(stored).split('$');
+  if (alg !== 'scrypt' || !salt || !hash) return false;
+  const calc = await scryptLimited(String(pw), salt, Number(n));
+  const want = Buffer.from(hash, 'base64url');
+  return want.length === calc.length && crypto.timingSafeEqual(want, calc);
+}
+
 // ---------- توکن جلسه (امضای HMAC) ----------
 const SECRET_FILE = path.join(DATA_DIR, 'secret.key');
 if (!fs.existsSync(SECRET_FILE)) fs.writeFileSync(SECRET_FILE, crypto.randomBytes(48).toString('hex'));

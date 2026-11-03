@@ -326,7 +326,7 @@ export function printOverlay(html, title = 'چاپ') {
 }
 
 // ---------- سربرگ صفحه ----------
-const HEAD_ICONS = { newAsg: 'plus', newExam: 'plus', addMat: 'upload', addSt: 'plus', addT: 'plus', addC: 'plus', newAnn: 'megaphone', addExp: 'upload', addInc: 'download',
+const HEAD_ICONS = { newAsg: 'plus', newExam: 'plus', addMat: 'upload', addSt: 'plus', importSt: 'upload', addT: 'plus', addC: 'plus', newAnn: 'megaphone', addExp: 'upload', addInc: 'download',
   newComp: 'plus', addP: 'plus', newC: 'plus', mk: 'database', scan: 'camera', printSheet: 'printer', sheet: 'printer', cards: 'receipt', delExam: 'trash', givePts: 'star' };
 export function setHead(title, sub = '', actions = '') {
   const t = document.querySelector('.topbar');

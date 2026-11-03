@@ -1,0 +1,27 @@
+# /etc/systemd/system/roshd.service  ←  sudo systemctl enable --now roshd
+[Unit]
+Description=Roshd Elite Platform
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/roshd
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=3
+User=roshd
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=ROSHD_HOST=127.0.0.1
+Environment=ROSHD_TRUST_PROXY=1
+Environment=ROSHD_COOKIE_SECURE=1
+# پیامک غیبت (اختیاری):
+# Environment=ROSHD_SMS_PROVIDER=kavenegar
+# Environment=ROSHD_SMS_API_KEY=...
+# Environment=ROSHD_SMS_SENDER=...
+LimitNOFILE=65536
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/srv/roshd/data /srv/roshd/uploads
+
+[Install]
+WantedBy=multi-user.target

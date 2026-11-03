@@ -6,6 +6,11 @@ import { DB_PATH, UPLOAD_DIR, ROOT, all, get, run, tx, closeDb, openDb } from '.
 import * as dbm from './db.js';
 import { hashPassword, ymd, addDays, weekStart, faWeekday, g2j } from './util.js';
 
+// محافظ: روی پایگاه داده‌ای که کاربر دارد، بدون تأیید صریح اجرا نمی‌شود (جلوگیری از پاک شدن اطلاعات واقعی)
+if (get('SELECT COUNT(*) n FROM users').n && !process.argv.includes('--force') && process.env.ROSHD_ALLOW_SEED !== '1') {
+  console.error('پایگاه داده اطلاعات دارد و seed همه را پاک می‌کند. اگر مطمئنید: npm run seed -- --force');
+  process.exit(1);
+}
 closeDb();
 for (const ext of ['', '-wal', '-shm']) if (fs.existsSync(DB_PATH + ext)) fs.rmSync(DB_PATH + ext);
 for (const f of fs.readdirSync(UPLOAD_DIR)) if (f.startsWith('seed-')) fs.rmSync(path.join(UPLOAD_DIR, f));

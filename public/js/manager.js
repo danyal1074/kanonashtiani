@@ -68,8 +68,8 @@ async function home(el, _p, me) {
       ${a.status === 'absent' ? '<span class="badge red">غایب</span>' : '<span class="badge yellow">با اطلاع</span>'}<span class="tiny muted num" dir="ltr" style="min-width:96px;text-align:left">${fa(a.parent_phone)}</span>
       <span style="min-width:120px;text-align:left">${a.status !== 'absent' ? '<span class="tiny muted">نیاز به پیامک ندارد</span>' : a.sms_sent ? `<span class="badge green">${icon('check', { size: 12 })} پیامک ارسال شد</span>` : `<button class="btn sm soft" data-sms="${a.id}">${icon('phone', { size: 14 })} ارسال پیامک</button>`}</span></div>`).join('') || empty('check-circle', '<b>امروز غایبی ثبت نشده</b>حضور و غیاب کلاس‌ها توسط معلم‌ها ثبت می‌شود.')}</div>
     <div class="tiny muted" style="margin-top:var(--s-3);display:flex;gap:6px;align-items:center">${icon('info', { size: 14 })} ارسال پیامک در این نسخه شبیه‌سازی می‌شود.</div></section>`;
-  on(el, 'click', '[data-sms]', (e, b) => busy(b, async () => { await post(`/api/manager/attendance/${b.dataset.sms}/sms`); toast('پیامک ارسال شد', 'ok'); home(el, _p, me); }));
-  $('#smsAll', el)?.addEventListener('click', (e) => busy(e.currentTarget, async () => { const r = await post('/api/manager/attendance/all/sms'); toast(`${fa(r.sent)} پیامک ارسال شد`, 'ok'); home(el, _p, me); }));
+  on(el, 'click', '[data-sms]', (e, b) => busy(b, async () => { const r = await post(`/api/manager/attendance/${b.dataset.sms}/sms`); toast(r.failed ? `ارسال نشد: ${r.errors[0] || 'خطای درگاه پیامک'}` : r.simulated ? 'ارسال شبیه‌سازی شد (درگاه پیامک تنظیم نیست)' : 'پیامک ارسال شد', r.failed ? 'err' : 'ok'); home(el, _p, me); }));
+  $('#smsAll', el)?.addEventListener('click', (e) => busy(e.currentTarget, async () => { const r = await post('/api/manager/attendance/all/sms'); toast(r.failed ? `${fa(r.sent)} ارسال شد، ${fa(r.failed)} ناموفق: ${r.errors[0] || ''}` : `${fa(r.sent)} پیامک ${r.simulated ? 'شبیه‌سازی' : 'ارسال'} شد`, r.failed ? 'err' : 'ok'); home(el, _p, me); }));
 }
 
 // ================= دانش‌آموزان =================
@@ -95,7 +95,7 @@ async function students(el) {
   const md = await meta();
   const q = { q: '', grade: '', class_id: '', school: '', offset: 0 };
   let rows = [], total = 0;
-  setHead('مدیریت دانش‌آموزان', 'ثبت‌نام، ویرایش، جستجو و فیلتر', '<button class="btn sm" id="addSt"> ثبت‌نام دانش‌آموز</button>');
+  setHead('مدیریت دانش‌آموزان', 'ثبت‌نام، ویرایش، جستجو و فیلتر', '<button class="btn ghost sm" id="importSt">ثبت‌نام گروهی (CSV)</button> <button class="btn sm" id="addSt"> ثبت‌نام دانش‌آموز</button>');
   el.innerHTML = `<div class="card" style="margin-bottom:16px"><div class="row wrap"><input class="input grow" id="q" placeholder=" جستجوی زنده نام یا کد ملی…" style="min-width:220px">
     <select class="input" id="fg" style="width:auto"><option value="">همه پایه‌ها</option>${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select>
     <select class="input" id="fc" style="width:auto"><option value="">همه کلاس‌ها</option></select>
@@ -131,6 +131,26 @@ async function students(el) {
     else { const r = await post('/api/manager/students', body); await modal({ title: ' ثبت‌نام انجام شد', body: `<div class="stack small"><div>${icon('backpack', { size: 16 })} ${esc(r.credentials.student)}</div><div>${icon('users', { size: 16 })} ${esc(r.credentials.parent)}</div></div>`, actions: [{ label: 'باشه', value: true }] }); }
     metaCache = null; load();
   };
+  $('#importSt').onclick = () => modal({
+    title: 'ثبت‌نام گروهی از فایل CSV', wide: true,
+    body: `<div class="stack"><p class="small muted" style="margin:0;line-height:2">فایل اکسل را با «Save As ← CSV UTF-8» ذخیره کنید. ستون‌های لازم: نام و نام خانوادگی، کد ملی، پایه، موبایل والدین. ستون‌های اختیاری: جنسیت، مدرسه، کلاس، تاریخ تولد (شمسی)، نشانی.
+      <a href="/samples/students-template.csv" download>دانلود فایل نمونه</a></p>
+      <div class="field"><label for="csvFile">فایل CSV</label><input class="input" type="file" id="csvFile" accept=".csv,text/csv,.txt"></div><div id="csvOut" aria-live="polite"></div></div>`,
+    actions: [{ label: 'بستن', cls: 'ghost', value: false },
+      { label: 'بررسی بدون ثبت', cls: 'soft', onClick: (m) => runImport(m, true) },
+      { label: 'ثبت دانش‌آموزان', onClick: (m) => runImport(m, false) }],
+  });
+  async function runImport(m, dry) {
+    const f = $('#csvFile', m).files[0];
+    if (!f) throw new Error('ابتدا فایل CSV را انتخاب کنید');
+    const r = await post('/api/manager/students/import', { csv: await f.text(), dry_run: dry });
+    const bad = r.errors.filter((e) => !e.message.includes('قبلاً ثبت'));
+    $('#csvOut', m).innerHTML = `<div class="row wrap" style="gap:var(--s-2)"><span class="badge">${fa(r.total)} سطر</span><span class="badge green">${dry ? 'قابل ثبت' : 'ثبت‌شده'}: ${fa(dry ? r.valid : r.created)}</span>${r.skipped_existing ? `<span class="badge gray">تکراری: ${fa(r.skipped_existing)}</span>` : ''}${bad.length ? `<span class="badge red">خطا: ${fa(bad.length)}</span>` : ''}${!dry && r.parents_created ? `<span class="badge blue">والد جدید: ${fa(r.parents_created)}</span>` : ''}</div>
+      ${r.errors.length ? `<div class="table-wrap" style="max-height:240px;margin-top:var(--s-3)"><table class="table"><thead><tr><th>سطر</th><th>نام</th><th>مشکل</th></tr></thead><tbody>${r.errors.slice(0, 100).map((e) => `<tr><td>${fa(e.line)}</td><td>${esc(e.name || '')}</td><td class="small">${esc(e.message)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${dry ? (bad.length ? '' : '<p class="small pos" style="margin-top:var(--s-3)">همه‌چیز درست است؛ «ثبت دانش‌آموزان» را بزنید.</p>') : '<p class="small" style="margin-top:var(--s-3)">رمز اولیه دانش‌آموز کد ملی و رمز اولیه والد ۶ رقم آخر موبایل است.</p>'}`;
+    if (!dry) { metaCache = null; toast(`${fa(r.created)} دانش‌آموز ثبت شد`, 'ok'); load(); }
+    return false;
+  }
   $('#addSt').onclick = () => modal({ title: ' ثبت‌نام دانش‌آموز', wide: true, body: studentForm(md), onOpen: (m) => bindStudentForm(m, md), actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: ' ثبت‌نام', onClick: (m) => save(m) }] });
   on(el, 'click', '[data-edit]', (e, b) => {
     const s = rows.find((x) => x.id === Number(b.dataset.edit));

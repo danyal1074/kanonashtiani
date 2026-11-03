@@ -1,5 +1,5 @@
 // پشتیبان‌گیری از پایگاه داده (قابل اجرا در زمان‌بند سرور): npm run backup
-import { makeBackup } from '../server/routes/admin.js';
+import { makeBackup } from '../server/backup.js';
 import { closeDb } from '../server/db.js';
 
 const b = makeBackup();

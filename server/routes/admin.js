@@ -4,17 +4,12 @@ import path from 'node:path';
 import { all, get, run, tx, db, DB_PATH, DATA_DIR, closeDb, openDb } from '../db.js';
 import { fail, hashPassword, clampStr, toEnDigits } from '../util.js';
 import { setSession } from './common.js';
+import { makeBackup, pruneBackups, BACKUP_DIR } from '../backup.js';
+import { snapshot } from '../metrics.js';
+import { staticCacheStats } from '../http.js';
 
 const A = { roles: ['admin'] };
-const BACKUP_DIR = path.join(DATA_DIR, 'backups');
-
-export function makeBackup() {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  const name = `roshd-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`;
-  const file = path.join(BACKUP_DIR, name);
-  db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
-  return { name, file };
-}
+export { makeBackup };
 
 export default function register(r) {
   r.get('/api/admin/overview', A, () => ({
@@ -77,7 +72,8 @@ export default function register(r) {
     return { ok: true, role: u.role };
   });
 
-  r.post('/api/admin/backup', A, () => { const b = makeBackup(); return { ok: true, name: b.name }; });
+  r.post('/api/admin/backup', A, () => { const b = makeBackup('manual'); pruneBackups(); return { ok: true, name: b.name }; });
+  r.get('/api/admin/metrics', A, () => ({ ...snapshot(), static_cache: staticCacheStats() }));
   r.get('/api/admin/backup/:name', A, (ctx) => {
     const name = path.basename(ctx.params.name);
     const file = path.join(BACKUP_DIR, name);
@@ -96,7 +92,7 @@ export default function register(r) {
       buf = Buffer.from(String(ctx.body.file.data).split(',').pop(), 'base64');
     } else fail(400, 'فایل پشتیبان را انتخاب کنید');
     if (buf.subarray(0, 15).toString() !== 'SQLite format 3') fail(400, 'فایل انتخابی پایگاه داده معتبر نیست');
-    makeBackup(); // پشتیبان ایمنی قبل از بازیابی
+    makeBackup('safety'); // پشتیبان ایمنی قبل از بازیابی
     closeDb();
     for (const ext of ['-wal', '-shm']) if (fs.existsSync(DB_PATH + ext)) fs.rmSync(DB_PATH + ext);
     fs.writeFileSync(DB_PATH, buf);

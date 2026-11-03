@@ -4,11 +4,17 @@
   "description": "پلتفرم رشد نخبه - سامانه جامع آموزشی، پرورشی و مدیریتی کانون‌های نخبه‌پروری",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node server/index.js",
     "seed": "node server/seed.js",
     "backup": "node scripts/backup.js",
-    "restore": "node scripts/restore.js"
+    "restore": "node scripts/restore.js",
+    "init": "node scripts/init.mjs",
+    "import": "node scripts/import-students.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "loadtest": "node scripts/loadtest.mjs"
   }
 }

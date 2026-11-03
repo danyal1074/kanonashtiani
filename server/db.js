@@ -306,18 +306,44 @@ CREATE TABLE IF NOT EXISTS game_scores (
 );
 `;
 
+// ایندکس‌های تکمیلی برای کوئری‌های پرتکرار (دانش‌آموز، والد، معلم)
+const INDEXES = `
+CREATE INDEX IF NOT EXISTS ix_att_student ON attendance(student_id, date);
+CREATE INDEX IF NOT EXISTS ix_sub_student ON submissions(student_id);
+CREATE INDEX IF NOT EXISTS ix_er_student ON exam_results(student_id);
+CREATE INDEX IF NOT EXISTS ix_ann_center ON announcements(center_id, id);
+CREATE INDEX IF NOT EXISTS ix_annv_user ON announcement_views(user_id);
+CREATE INDEX IF NOT EXISTS ix_asg_class ON assignments(class_id, deadline);
+CREATE INDEX IF NOT EXISTS ix_asg_teacher ON assignments(teacher_id);
+CREATE INDEX IF NOT EXISTS ix_sched_class ON schedule(class_id, weekday);
+CREATE INDEX IF NOT EXISTS ix_sched_teacher ON schedule(teacher_id);
+CREATE INDEX IF NOT EXISTS ix_tc_class ON teacher_classes(class_id);
+CREATE INDEX IF NOT EXISTS ix_orders_user ON orders(user_id);
+CREATE INDEX IF NOT EXISTS ix_notes_student ON counsel_notes(student_id);
+CREATE INDEX IF NOT EXISTS ix_game_student ON game_scores(student_id, game);
+CREATE INDEX IF NOT EXISTS ix_pc_student ON parent_children(student_id);
+CREATE INDEX IF NOT EXISTS ix_exams_center ON exams(center_id, kind, grade);
+CREATE INDEX IF NOT EXISTS ix_exams_creator ON exams(created_by);
+CREATE INDEX IF NOT EXISTS ix_mat_center ON materials(center_id, grade);
+CREATE INDEX IF NOT EXISTS ix_points_ledger ON points(student_id, id);
+CREATE INDEX IF NOT EXISTS ix_plans_class ON study_plans(class_id, week_start);
+`;
+
 export let db;
 
 export function openDb() {
   db = new DatabaseSync(DB_PATH);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL;');
+  db.exec(`PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL;
+    PRAGMA cache_size = -65536; PRAGMA temp_store = MEMORY; PRAGMA mmap_size = 268435456; PRAGMA journal_size_limit = 67108864; PRAGMA wal_autocheckpoint = 1000;`);
   db.exec(SCHEMA);
+  db.exec(INDEXES);
+  db.exec('PRAGMA optimize');
   stmtCache.clear();
   return db;
 }
 
 export function closeDb() {
-  if (db) { db.close(); db = null; }
+  if (db) { try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { /* */ } db.close(); db = null; }
   stmtCache.clear();
 }
 
