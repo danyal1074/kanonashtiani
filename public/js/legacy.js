@@ -3,7 +3,7 @@
 import { api, post, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, empty, loading, jdate, jdatetime, icon, progress, gradeName, fileToData } from './core.js';
 import { sproutArt } from './icons.js';
 
-const dt = (s) => (s ? jdatetime(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z') : '—');
+const dt = (s) => (s ? jdatetime(/^\d+(\.\d+)?$/.test(String(s)) ? new Date(Number(s)).toISOString() : String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z') : '—');
 const tabs = (items, cur) => `<div class="seg" style="margin-bottom:16px" role="tablist">${items.map(([k, l]) => `<button role="tab" aria-selected="${k === cur}" data-tab="${k}" class="${k === cur ? 'on' : ''}">${l}</button>`).join('')}</div>`;
 const nv = (v) => (v == null || v === '' ? '—' : num(v));
 const pv = (v) => (v == null || v === '' ? '—' : pct(v));
@@ -376,9 +376,27 @@ export async function smsOutbox(el) {
   el.innerHTML = `<section class="card">${rows.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>گیرنده</th><th>دانش‌آموز</th><th>متن</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead><tbody>${rows.map((m) => `<tr><td dir="ltr">${esc(m.recipient_phone)}</td><td>${esc(m.student_name || '—')}</td><td class="small">${esc(m.content)}${m.error_message ? `<div class="tiny red-t">${esc(m.error_message)}</div>` : ''}</td><td><span class="badge ${(SMS[m.status] || ['', ''])[1]}">${(SMS[m.status] || [m.status])[0]}</span></td><td class="tiny muted">${dt(m.sent_at || m.created_at)}</td><td>${m.status === 'failed' ? `<button class="btn sm soft" data-retry="${m.id}">ارسال مجدد</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'پیامکی ثبت نشده')}</section>`;
   on(el, 'click', '[data-retry]', (e, b) => busy(b, async () => { const r = await post(`/api/manager/sms-outbox/${b.dataset.retry}/retry`); toast(r.ok ? 'پیامک ارسال شد' : `ناموفق: ${r.error}`, r.ok ? 'ok' : ''); smsOutbox(el); }));
 }
+// انتخاب دانش‌آموز با جست‌وجوی سرور؛ نتیجه { id, name } یا null
+const pickStudent = (title, hint = '') => modal({
+  title,
+  body: `${hint ? `<p class="small" style="margin-top:0">${hint}</p>` : ''}<div class="field"><label for="psQ">نام یا کد ملی دانش‌آموز</label><input class="input" id="psQ" autocomplete="off" placeholder="حداقل ۲ حرف"></div><div id="psList" class="list" style="margin-top:10px;max-height:46vh;overflow:auto" aria-live="polite"></div>`,
+  actions: [{ label: 'انصراف', cls: 'ghost', value: null }],
+  onOpen: (m, close) => {
+    const q = m.querySelector('#psQ'), box = m.querySelector('#psList');
+    let t;
+    q.oninput = () => { clearTimeout(t); t = setTimeout(async () => {
+      const v = q.value.trim();
+      if (v.length < 2) { box.innerHTML = ''; return; }
+      const r = await api(`/api/manager/students?${new URLSearchParams({ q: v, limit: 20 })}`);
+      box.innerHTML = r.rows.length ? r.rows.map((x) => `<button type="button" class="list-item" data-ps="${x.id}" style="width:100%;text-align:start;border:0;background:none;cursor:pointer;font:inherit"><div class="grow"><b>${esc(x.full_name)}</b><div class="tiny muted">${esc(gradeName(x.grade))} ${esc(x.class_name || '')} · <span dir="ltr">${esc(x.national_code || '—')}</span></div></div></button>`).join('') : '<div class="muted small">دانش‌آموزی پیدا نشد</div>';
+    }, 250); };
+    on(box, 'click', '[data-ps]', (e, b) => close({ id: Number(b.dataset.ps), name: b.querySelector('b').textContent }));
+  },
+}).then((v) => (v && v.id ? v : null));
+
 export async function mgrBarpa(el) {
   setHead('کارنامه‌های آزمون جامع برپا', 'صدور دستی یا تفکیک خودکار کارنامه با آپلود PDF نتایج');
-  const [rows, studs] = await Promise.all([api('/api/barpa-exams/reports'), api('/api/manager/students?limit=500')]);
+  const [rows, unmatched] = await Promise.all([api('/api/barpa-exams/reports'), api('/api/manager/barpa-exams/unmatched').catch(() => [])]);
   const f = (id, l, extra = '') => `<div class="field"><label for="${id}">${l}</label><input class="input" id="${id}" name="${id}" type="number" step="any" inputmode="decimal" required ${extra}></div>`;
 
   el.innerHTML = `
@@ -413,16 +431,20 @@ export async function mgrBarpa(el) {
       <div id="barpaUploadStatus" class="small bold" style="margin-top:10px;display:none;color:#1e40af"></div>
     </section>
 
+    ${unmatched.length ? `<section class="card" id="bpUnmatched" style="margin-bottom:16px;border:1.5px solid var(--sun-400,#f5b041)">
+      <div class="card-title">${icon('alert', { size: 18 })} کارنامه‌های تطبیق‌نشده (${num(unmatched.length)})</div>
+      <p class="small muted" style="margin-top:0">این کارنامه‌ها با کد ملی یا نام کاربری هیچ دانش‌آموزی تطبیق نخوردند و در پنل کسی ثبت نشده‌اند. دانش‌آموز درست را انتخاب کنید.</p>
+      <div class="table-wrap"><table class="table"><thead><tr><th>آزمون</th><th>صفحه</th><th>نام در کارنامه</th><th>کد داوطلبی</th><th></th></tr></thead><tbody>${unmatched.map((u) => `<tr><td class="tiny">${esc(u.exam_id)}</td><td>${fa(u.page ?? '—')}</td><td><b>${esc(u.full_name || '—')}</b></td><td dir="ltr">${esc(u.candidate_code || '—')}</td><td><button class="btn sm" data-match="${u.id}" data-name="${esc(u.full_name || '')}">تطبیق با دانش‌آموز</button></td></tr>`).join('')}</tbody></table></div>
+    </section>` : ''}
+
     <div class="grid c3">
       <form id="bpForm" class="card" aria-label="ثبت دستی کارنامه">
         <div class="card-title">ثبت دستی تک‌کارنامه</div>
         <div class="stack">
           <div class="field">
-            <label for="bpSt">دانش‌آموز</label>
-            <select class="input" id="bpSt" required>
-              <option value="">انتخاب کنید</option>
-              ${(studs.rows || studs).map((s) => `<option value="${s.id}">${esc(s.full_name)}</option>`).join('')}
-            </select>
+            <label for="bpStBtn">دانش‌آموز</label>
+            <input type="hidden" id="bpSt">
+            <button type="button" class="btn soft" id="bpStBtn" style="justify-content:flex-start">${icon('search', { size: 16 })} <span id="bpStName">انتخاب دانش‌آموز</span></button>
           </div>
           <div class="field">
             <label for="bpTi">عنوان آزمون</label>
@@ -482,12 +504,7 @@ export async function mgrBarpa(el) {
         });
         toast(`${fa(res.count || 0)} کارنامه ثبت شد${res.unmatched_count ? ` · ${fa(res.unmatched_count)} مورد تطبیق داده نشد` : ''}`, res.unmatched_count ? 'error' : 'ok');
         await mgrBarpa(el);
-        if (res.unmatched?.length) modal({
-          title: `${fa(res.unmatched.length)} کارنامه بدون دانش‌آموز`, wide: true,
-          body: `<p class="small" style="margin-top:0">این داوطلب‌ها با کد ملی یا نام کاربری هیچ دانش‌آموزی در کانون تطبیق داده نشدند و ثبت نشدند. کد ملی دانش‌آموز را در پرونده‌اش اصلاح کنید و فایل را دوباره بارگذاری کنید.</p>
-            <div class="table-wrap"><table class="table"><thead><tr><th>صفحه</th><th>نام در کارنامه</th><th>کد داوطلبی</th><th>مدرسه</th></tr></thead><tbody>${res.unmatched.map((u) => `<tr><td>${fa(u.page ?? '—')}</td><td>${esc(u.full_name || '—')}</td><td dir="ltr">${esc(u.candidate_code || '—')}</td><td>${esc(u.school_name || '—')}</td></tr>`).join('')}</tbody></table></div>`,
-          actions: [{ label: 'متوجه شدم', value: true }],
-        });
+        $('#bpUnmatched', el)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
         statusDiv.textContent = `خطا در پردازش: ${err.message}`;
         toast(`خطا در پردازش فایل: ${err.message}`, 'error');
@@ -496,10 +513,25 @@ export async function mgrBarpa(el) {
     reader.readAsDataURL(selectedFile);
   });
 
+  on(el, 'click', '[data-match]', async (e, b) => {
+    const st = await pickStudent('تطبیق کارنامه با دانش‌آموز', `نام در کارنامه: <b>${esc(b.dataset.name || '—')}</b>`);
+    if (!st) return;
+    await post(`/api/manager/barpa-exams/unmatched/${b.dataset.match}/match`, { student_id: st.id });
+    toast(`کارنامه برای ${st.name} ثبت شد`, 'ok');
+    mgrBarpa(el);
+  });
+  $('#bpStBtn', el).onclick = async () => {
+    const st = await pickStudent('انتخاب دانش‌آموز');
+    if (!st) return;
+    $('#bpSt', el).value = st.id;
+    $('#bpStName', el).textContent = st.name;
+  };
+
   // Manual Form Submit Handler
   $('#bpForm', el).onsubmit = (e) => {
     e.preventDefault();
     const g = e.target;
+    if (!$('#bpSt', g).value) { toast('دانش‌آموز را انتخاب کنید'); return; }
     busy(e.submitter, async () => {
       const rec = { student_id: Number($('#bpSt', g).value) };
       for (const k of ['overall_traz', 'overall_rank_all', 'overall_rank_center', 'total_attendees', 'overall_percentage', 'overall_correct', 'overall_wrong', 'overall_unanswered', 'total_questions']) {
@@ -516,7 +548,7 @@ export async function mgrBarpa(el) {
 if (!window._examBasket) window._examBasket = [];
 
 export async function hooshStudio(el) {
-  setHead('استودیوی طرح آزمون هوش و استعداد تحلیلی', 'طراحی دفترچه آزمون چاپی A4، صدور پاسخ‌برگ ۴ گزینه‌ای و انتشار آزمون آنلاین');
+  setHead('استودیوی طرح آزمون هوش و استعداد تحلیلی', 'طراحی دفترچه آزمون چاپی A4 و صدور پاسخ‌برگ ۴ گزینه‌ای');
 
   const books = await api('/api/exam-books');
   let activeBookId = books[0]?.id || 'hoosh_6';
