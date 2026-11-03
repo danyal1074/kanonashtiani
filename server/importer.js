@@ -120,7 +120,7 @@ export async function importStudents(centerId, csvText, { dryRun = false } = {})
       const key = `${d.grade}|${d.class_name}`;
       let cid = classIds.get(key);
       if (!cid) { cid = Number(run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', centerId, d.grade, d.class_name).lastInsertRowid); classIds.set(key, cid); summary.classes_created++; }
-      const uid = Number(run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender) VALUES (?,?,?,?,?,?)`, centerId, 'student', d.national_code, studentHash.get(d.national_code), d.full_name, d.gender).lastInsertRowid);
+      const uid = Number(run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`, centerId, 'student', d.national_code, studentHash.get(d.national_code), d.full_name, d.gender).lastInsertRowid);
       run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar) VALUES (?,?,?,?,?,?,?,?)', uid, d.school, d.grade, cid, d.birth_date, d.parent_phone, d.address, 'sprout');
       let p = get(`SELECT id FROM users WHERE role='parent' AND mobile=?`, d.parent_phone);
       if (!p) { p = { id: Number(run(`INSERT INTO users (center_id, role, mobile, pass_hash, full_name) VALUES (?,?,?,?,?)`, centerId, 'parent', d.parent_phone, parentHash.get(d.parent_phone), `ولیِ ${d.full_name}`).lastInsertRowid) }; summary.parents_created++; }

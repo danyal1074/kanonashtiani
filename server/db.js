@@ -476,6 +476,13 @@ export const migrations = [
         ('hoosh_8_9', (SELECT id FROM centers LIMIT 1), 'هوش کمپلکس هشتم و نهم (طرح برپا)', 'نهم', 65, 140, 'بانک سوالات هوش منطقی، کلامی و تصویری نهم به دهم', '/img/books/hoosh_8_9.jpg', 0);
     `);
   },
+  // نسخه ۳: ستون اجبار تغییر رمز عبور در اولین ورود
+  (database) => {
+    const userCols = database.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    if (!userCols.includes('must_change_password')) {
+      database.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0');
+    }
+  },
 ];
 
 export function migrate(database = db) {

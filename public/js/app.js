@@ -106,6 +106,7 @@ async function render() {
   const panel = PANELS[me.user.role];
   let found = matchPanel(panel.routes, path);
   if (!found) { location.hash = '#/home'; return; }
+  if (me.user?.role === 'student' && me.must_change_password) { ensurePasswordChanged(me); }
   if (me.fee?.locked && !found.r.open) { location.hash = '#/payment'; return; }
   markActive(path);
   // عنصر تازه برای هر نما تا شنونده‌های نمای قبلی باقی نمانند
@@ -134,6 +135,89 @@ function fullscreen(html, onReady) {
     onReady(fs, () => { fs.remove(); resolve(); });
   });
 }
+async function ensurePasswordChanged(me) {
+  if (me.user.role !== 'student' || !me.must_change_password) return;
+  if (document.querySelector('.force-pw-fullscreen')) return;
+  await new Promise((resolve) => {
+    const fs = document.createElement('div');
+    fs.className = 'fullscreen force-pw-fullscreen';
+    fs.innerHTML = `
+      <div class="fs-card" role="dialog" aria-modal="true" style="max-width:440px;text-align:right">
+        <div class="big-emoji sun" style="text-align:center">${icon('key', { size: 40 })}</div>
+        <h2 style="text-align:center;margin:12px 0 6px">تغییر رمز عبور در اولین ورود</h2>
+        <p class="muted small" style="text-align:center;margin-bottom:20px;line-height:1.8">
+          سلام <b>${esc(me.user.full_name)}</b> عزیز!<br>
+          برای حفظ امنیت حسابت، لطفاً در اولین ورود یک رمز عبور جدید برای خودت انتخاب کن.
+        </p>
+        <form id="forcePwForm" class="stack" style="gap:14px" novalidate>
+          <div class="field">
+            <label for="fCurrent">رمز عبور فعلی (کد ملی)</label>
+            <input class="input ltr" id="fCurrent" name="current" type="password" required autocomplete="current-password" placeholder="کد ملی ۱۰ رقمی">
+          </div>
+          <div class="field">
+            <label for="fNext">رمز عبور جدید (حداقل ۶ کاراکتر)</label>
+            <input class="input ltr" id="fNext" name="next" type="password" minlength="6" required autocomplete="new-password" placeholder="حداقل ۶ کاراکتر">
+          </div>
+          <div class="field">
+            <label for="fConfirm">تکرار رمز عبور جدید</label>
+            <input class="input ltr" id="fConfirm" name="confirm" type="password" minlength="6" required autocomplete="new-password" placeholder="تکرار رمز جدید">
+          </div>
+          <div class="field-error" id="forcePwErr" style="display:none;color:var(--red-600);background:var(--red-soft);padding:8px 12px;border-radius:8px;font-size:13px"></div>
+          <button class="btn lg block accent" type="submit" id="forcePwBtn" style="margin-top:6px">
+            ${icon('check', { size: 18 })} ذخیره رمز جدید و ورود به پنل
+          </button>
+        </form>
+        <div style="margin-top:16px;text-align:center">
+          <button type="button" class="btn sm ghost" id="forcePwLogout">${icon('logout', { size: 14 })} خروج از حساب</button>
+        </div>
+      </div>
+    `;
+    document.body.append(fs);
+    const form = fs.querySelector('#forcePwForm');
+    const errEl = fs.querySelector('#forcePwErr');
+    const btn = fs.querySelector('#forcePwBtn');
+    const logoutBtn = fs.querySelector('#forcePwLogout');
+
+    logoutBtn.onclick = async () => {
+      await post('/api/auth/logout');
+      state.me = null;
+      location.hash = '#/login';
+      fs.remove();
+      boot();
+    };
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      errEl.style.display = 'none';
+      const cur = form.current.value.trim();
+      const nxt = form.next.value;
+      const conf = form.confirm.value;
+      if (!cur) { errEl.textContent = 'رمز عبور فعلی را وارد کنید'; errEl.style.display = 'block'; return; }
+      if (nxt.length < 6) { errEl.textContent = 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد'; errEl.style.display = 'block'; return; }
+      if (nxt === cur) { errEl.textContent = 'رمز جدید نباید با رمز اولیه یکسان باشد'; errEl.style.display = 'block'; return; }
+      if (nxt !== conf) { errEl.textContent = 'رمز جدید و تکرار آن مطابقت ندارند'; errEl.style.display = 'block'; return; }
+
+      const oldText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = 'در حال ذخیره…';
+      try {
+        await post('/api/me/password', { current: cur, next: nxt });
+        me.must_change_password = false;
+        if (state.me) state.me.must_change_password = false;
+        toast('رمز عبور با موفقیت تغییر کرد. خوش آمدی!', 'ok');
+        fs.remove();
+        resolve();
+      } catch (err) {
+        errEl.textContent = err.message || 'خطا در تغییر رمز عبور';
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = oldText;
+      }
+    };
+  });
+}
+
 async function showBirthday(me) {
   if (!me.student?.birthday) return;
   const key = `roshd-bday-${me.user.id}-${me.today}`;

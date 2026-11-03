@@ -86,7 +86,7 @@ export default function register(r) {
 
   r.get('/api/me', { allowLocked: true }, (ctx) => {
     const u = ctx.user;
-    const out = { user: u, impersonator: ctx.impersonator, center: u.center_id ? centerOf(u.center_id) : null, today: ymd() };
+    const out = { user: u, impersonator: ctx.impersonator, center: u.center_id ? centerOf(u.center_id) : null, today: ymd(), must_change_password: !!u.must_change_password };
     if (u.role === 'student') {
       const s = studentInfo(u.id);
       const total = totalPoints(u.id);
@@ -105,7 +105,7 @@ export default function register(r) {
     if (!(await verifyPasswordAsync(current || '', row.pass_hash))) fail(400, 'رمز فعلی اشتباه است');
     if (!next || String(next).length < 6) fail(400, 'رمز جدید باید حداقل ۶ کاراکتر باشد');
     const h = await hashPasswordAsync(next);
-    run('UPDATE users SET pass_hash=? WHERE id=?', h, ctx.user.id);
+    run('UPDATE users SET pass_hash=?, must_change_password=0 WHERE id=?', h, ctx.user.id); u.must_change_password = 0;
     setSession(ctx, { id: ctx.user.id, pass_hash: h });
     return { ok: true };
   });

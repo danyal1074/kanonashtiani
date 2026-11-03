@@ -170,7 +170,7 @@ export default function register(r) {
     const d = studentPayload(ctx, ctx.body);
     let parentCreated;
     const id = tx(() => {
-      const res = run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender) VALUES (?,?,?,?,?,?)`, ctx.user.center_id, 'student', d.national_code, hashPassword(d.national_code), d.full_name, d.gender);
+      const res = run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`, ctx.user.center_id, 'student', d.national_code, hashPassword(d.national_code), d.full_name, d.gender);
       const uid = Number(res.lastInsertRowid);
       run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar) VALUES (?,?,?,?,?,?,?,?)', uid, d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, 'sprout');
       parentCreated = linkParent(ctx, uid, d.parent_phone, d.full_name);
@@ -205,7 +205,7 @@ export default function register(r) {
   });
   r.post('/api/manager/students/:id/reset-password', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);
-    run('UPDATE users SET pass_hash=? WHERE id=?', hashPassword(s.national_code), s.id);
+    run('UPDATE users SET pass_hash=?, must_change_password=1 WHERE id=?', hashPassword(s.national_code), s.id);
     return { ok: true };
   });
 
