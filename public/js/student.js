@@ -18,7 +18,6 @@ export const nav = (me) => [
   { path: '/games', icon: 'gamepad', label: 'بازی و داستان' },
   { path: '/self-exams', icon: 'target', label: 'آزمون خودسنجی' },
   { path: '/roadmap', icon: 'award', label: 'نقشه راه رشد' },
-  { path: '/books', icon: 'book', label: 'کتاب‌های هوش' },
   { path: '/records', icon: 'receipt', label: 'نمرات و فاکتورها' },
   { path: '/counselor', icon: 'message', label: 'مشاور تحصیلی' },
   { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
@@ -485,9 +484,6 @@ export const routes = [
   { path: '/self-exam/:id', view: L.selfExam },
   { path: '/roadmap', view: L.roadmap },
   { path: '/counselor', view: L.counselor },
-  { path: '/books', view: L.books },
-  { path: '/books/:id', view: L.books },
-  { path: '/books/:id/:topic', view: L.books },
   { path: '/records', view: L.records },
   { path: '/barpa/:id', view: L.barpaView },
 ];

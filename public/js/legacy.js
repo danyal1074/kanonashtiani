@@ -1,18 +1,24 @@
-// صفحه‌های قابلیت‌های تکمیلی کانون: خودسنجی، نقشه راه، مشاور، کتاب‌های هوش، نمرات مستمر، فاکتورها، کارنامه برپا،
+// صفحه‌های قابلیت‌های تکمیلی کانون: خودسنجی، نقشه راه، مشاور، استودیوی طرح آزمون چاپی، نمرات مستمر، فاکتورها، کارنامه برپا،
 // لاگ حضور و غیاب و صندوق پیامک. فقط رابط کاربری؛ منطق و دسترسی‌ها سمت سرور است.
-import { api, post, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, empty, loading, jdate, jdatetime, icon, progress, gradeName } from './core.js';
+import { api, post, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, empty, loading, jdate, jdatetime, icon, progress, gradeName, fileToData } from './core.js';
 import { sproutArt } from './icons.js';
 
 const dt = (s) => (s ? jdatetime(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z') : '—');
 const tabs = (items, cur) => `<div class="seg" style="margin-bottom:16px" role="tablist">${items.map(([k, l]) => `<button role="tab" aria-selected="${k === cur}" data-tab="${k}" class="${k === cur ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+const nv = (v) => (v == null || v === '' ? '—' : num(v));
+const pv = (v) => (v == null || v === '' ? '—' : pct(v));
 const score20 = (v) => fa(Number(v).toLocaleString('en', { maximumFractionDigits: 2 })).replace('.', '٫');
 const INV = { settled: ['تسویه‌شده', 'green'], partially_paid: ['پرداخت ناقص', 'orange'], unpaid: ['پرداخت‌نشده', 'red'] };
+INV.paid = INV.settled; INV.partial = INV.partially_paid; INV.issued = INV.unpaid;
+const invBadge = (st) => { const [l, c] = INV[st] || [st || '—', '']; return `<span class="badge ${c}">${esc(l)}</span>`; };
+// تصویر صفحه کتاب هوش؛ سرور فقط به معلم و مدیر همان کانون می‌دهد
+const bookPageUrl = (bookId, page) => `/api/exam-books/${encodeURIComponent(bookId)}/pages/${Number(page)}`;
 const FEE_TYPES = { tuition: 'شهریه', membership: 'حق عضویت', camp: 'اردو', book: 'کتاب' };
 
 // ---------- جدول‌های مشترک (دانش‌آموز، ولی، مدیر) ----------
 export const scoresTable = (rows, { teacher = true, student = false } = {}) => rows.length ? `<div class="table-wrap"><table class="table"><thead><tr>${student ? '<th>دانش‌آموز</th>' : ''}<th>درس</th><th>عنوان</th><th>نمره از ۲۰</th>${teacher ? '<th>معلم</th>' : ''}<th>تاریخ</th></tr></thead><tbody>${rows.map((m) => `<tr>${student ? `<td>${esc(m.student_name)}</td>` : ''}<td>${esc(m.subject)}</td><td>${esc(m.title)}</td><td><b class="${m.score < 10 ? 'red-t' : ''}">${score20(m.score)}</b></td>${teacher ? `<td>${esc(m.teacher_name || '')}</td>` : ''}<td class="tiny muted">${dt(m.created_at)}</td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'نمره‌ای ثبت نشده');
-export const invoicesTable = (rows, { student = false } = {}) => rows.length ? `<div class="table-wrap"><table class="table"><thead><tr>${student ? '<th>دانش‌آموز</th>' : ''}<th>نوع</th><th>دوره</th><th>مبلغ</th><th>پرداخت‌شده</th><th>مانده</th><th>وضعیت</th></tr></thead><tbody>${rows.map((i) => `<tr>${student ? `<td>${esc(i.full_name)}</td>` : ''}<td>${esc(FEE_TYPES[i.fee_type] || i.fee_type)}</td><td>${esc(i.period)}</td><td>${money(i.amount)}</td><td>${money(i.paid)}</td><td><b>${money(i.remaining)}</b></td><td><span class="badge ${INV[i.status][1]}">${INV[i.status][0]}</span></td></tr>`).join('')}</tbody></table></div>` : empty('receipt', 'فاکتوری صادر نشده');
-export const barpaList = (rows, { student = false } = {}) => rows.length ? `<div class="list">${rows.map((r) => `<a class="list-item" href="#/barpa/${r.id}"><span class="ib sun">${icon('trophy', { size: 18 })}</span><div class="grow"><b>${esc(r.exam_title)}</b><div class="tiny muted">${student ? `${esc(r.student_name || '')} · ` : ''}تراز ${num(r.overall_traz)} · رتبه کانون ${num(r.overall_rank_center)} · رتبه کشوری ${num(r.overall_rank_all)}</div></div><span class="badge green">${pct(r.overall_percentage)}</span></a>`).join('')}</div>` : empty('trophy', 'کارنامه‌ای صادر نشده');
+export const invoicesTable = (rows, { student = false, pay = false } = {}) => rows.length ? `<div class="table-wrap"><table class="table"><thead><tr>${student ? '<th>دانش‌آموز</th>' : ''}<th>نوع</th><th>دوره</th><th>مبلغ</th><th>پرداخت‌شده</th><th>مانده</th><th>وضعیت</th>${pay ? '<th></th>' : ''}</tr></thead><tbody>${rows.map((i) => `<tr>${student ? `<td>${esc(i.full_name)}</td>` : ''}<td>${esc(FEE_TYPES[i.fee_type] || i.fee_type)}</td><td>${esc(i.period)}</td><td>${money(i.amount)}</td><td>${money(i.paid)}</td><td><b>${money(i.remaining)}</b></td><td>${invBadge(i.status)}</td>${pay ? `<td>${i.remaining > 0 ? `<button class="btn sm" data-payinv="${i.id}" data-rem="${i.remaining}">پرداخت</button>` : ''}</td>` : ''}</tr>`).join('')}</tbody></table></div>` : empty('receipt', 'فاکتوری صادر نشده');
+export const barpaList = (rows, { student = false } = {}) => rows.length ? `<div class="list">${rows.map((r) => `<a class="list-item" href="#/barpa/${r.id}"><span class="ib sun">${icon('trophy', { size: 18 })}</span><div class="grow"><b>${esc(r.exam_title)}</b><div class="tiny muted">${student ? `${esc(r.student_name || '')} · ` : ''}تراز ${nv(r.overall_traz)} · رتبه کانون ${nv(r.overall_rank_center)} · رتبه کشوری ${nv(r.overall_rank_all)}</div></div><span class="badge green">${pv(r.overall_percentage)}</span></a>`).join('')}</div>` : empty('trophy', 'کارنامه‌ای صادر نشده');
 
 // ---------- کارنامه تفصیلی آزمون جامع (مشترک همه نقش‌ها) ----------
 const COLS = { name: 'درس', title: 'درس', subject: 'درس', percentage: 'درصد', percent: 'درصد', traz: 'تراز', rank: 'رتبه', correct: 'درست', wrong: 'غلط', unanswered: 'نزده', blank: 'نزده', total: 'تعداد' };
@@ -45,9 +51,9 @@ export async function barpaDetail(el, p) {
         </div>
         <div class="seg" id="ansFilters" style="display:flex;gap:4px">
           <button class="btn sm active" data-filter="all" type="button">همه (${num(answers.length)})</button>
-          <button class="btn sm soft" data-filter="correct" type="button" style="color:#059669">درست‌ها (${num(r.overall_correct)})</button>
-          <button class="btn sm soft" data-filter="wrong" type="button" style="color:#dc2626">نادرست‌ها (${num(r.overall_wrong)})</button>
-          <button class="btn sm soft" data-filter="unanswered" type="button" style="color:#64748b">نزده‌ها (${num(r.overall_unanswered)})</button>
+          <button class="btn sm soft" data-filter="correct" type="button" style="color:#059669">درست‌ها (${nv(r.overall_correct)})</button>
+          <button class="btn sm soft" data-filter="wrong" type="button" style="color:#dc2626">نادرست‌ها (${nv(r.overall_wrong)})</button>
+          <button class="btn sm soft" data-filter="unanswered" type="button" style="color:#64748b">نزده‌ها (${nv(r.overall_unanswered)})</button>
         </div>
       </div>
       <div class="bubble-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));gap:8px" id="ansGrid">
@@ -80,13 +86,13 @@ export async function barpaDetail(el, p) {
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
             <span class="badge yellow" style="font-weight:900">کارنامه رسمی آزمون جامع</span>
             <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">${esc(r.grade || 'پایه نهم')}</span>
-            <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">${num(r.total_attendees || 1924)} داوطلب</span>
+            <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff">${nv(r.total_attendees)} داوطلب</span>
           </div>
           <div style="font-size:22px;font-weight:900">${esc(r.exam_title)}</div>
           <div class="row" style="gap:16px;margin-top:10px;font-size:13px;color:rgba(255,255,255,0.85);flex-wrap:wrap">
             <span>دانش‌آموز: <b style="color:#fff">${esc(r.student_name)}</b></span>
             <span>کد داوطلبی: <b style="color:#fff">${esc(r.candidate_code || '—')}</b></span>
-            <span>مدرسه: <b style="color:#fff">${esc(r.school_name || 'کانون دانشمند شهید کاظمی آشتیانی')}</b></span>
+            <span>مدرسه: <b style="color:#fff">${esc(r.school_name || '—')}</b></span>
           </div>
         </div>
         <button class="btn" id="printReportInnerBtn" type="button" style="background:#f59e0b;color:#0f172a;font-weight:900;align-self:flex-start">
@@ -97,18 +103,18 @@ export async function barpaDetail(el, p) {
 
     <!-- 4 Key KPI Cards -->
     <div class="grid c4" style="margin-bottom:16px">
-      ${stat('تراز کل داوطلب', num(r.overall_traz), 'شاخص هم‌ترازی نمرات', '#2563eb')}
-      ${stat('رتبه در کانون', num(r.overall_rank_center), 'بین دانش‌آموزان مرکز', '#059669')}
-      ${stat('رتبه کل کشوری', num(r.overall_rank_all), `از بین ${num(r.total_attendees || 1924)} داوطلب`, '#d97706')}
-      ${stat('درصد کل آزمون', pct(r.overall_percentage), `${num(r.overall_correct)} درست از ${num(r.total_questions || 120)}`, '#7c3aed')}
+      ${stat('تراز کل داوطلب', nv(r.overall_traz), 'شاخص هم‌ترازی نمرات', '#2563eb')}
+      ${stat('رتبه در کانون', nv(r.overall_rank_center), 'بین دانش‌آموزان مرکز', '#059669')}
+      ${stat('رتبه کل کشوری', nv(r.overall_rank_all), r.total_attendees ? `از بین ${num(r.total_attendees)} داوطلب` : '', '#d97706')}
+      ${stat('درصد کل آزمون', pv(r.overall_percentage), `${nv(r.overall_correct)} درست از ${nv(r.total_questions)}`, '#7c3aed')}
     </div>
 
     <!-- 4 Breakdown Metric Cards -->
     <div class="grid c4" style="margin-bottom:16px">
-      ${stat('تعداد درست', num(r.overall_correct), 'امتیاز مثبت', '#059669')}
-      ${stat('تعداد نادرست', num(r.overall_wrong), 'نمره منفی', '#dc2626')}
-      ${stat('تعداد بدون پاسخ', num(r.overall_unanswered), 'بدون اثر', '#64748b')}
-      ${stat('کل سؤال‌ها', num(r.total_questions || 120), 'دفترچه استاندارد ۱۲۰ تایی', '#3b82f6')}
+      ${stat('تعداد درست', nv(r.overall_correct), 'امتیاز مثبت', '#059669')}
+      ${stat('تعداد نادرست', nv(r.overall_wrong), 'نمره منفی', '#dc2626')}
+      ${stat('تعداد بدون پاسخ', nv(r.overall_unanswered), 'بدون اثر', '#64748b')}
+      ${stat('کل سؤال‌ها', nv(r.total_questions), '', '#3b82f6')}
     </div>
 
     <!-- Subject Breakdown Table -->
@@ -267,7 +273,8 @@ export async function roadmap(el) {
 export async function counselor(el, _p, me) {
   setHead('مشاور تحصیلی', 'سؤال درسی و برنامه‌ریزی را از مشاور کانون بپرس');
   const [c, chips] = await Promise.all([api('/api/counselor'), api('/api/counselor/quick-chips')]);
-  el.innerHTML = `<div class="card" style="margin-bottom:12px"><div class="row" style="gap:12px"><span class="ib green">${icon('user', { size: 22 })}</span><div class="grow"><b>${esc(c.full_name)}</b> <span class="badge ${c.is_online ? 'green' : ''}">${c.is_online ? 'آنلاین' : 'آفلاین'}</span><div class="small muted">${esc(c.title)}</div><div class="tiny muted">${esc(c.bio)}</div></div></div></div>
+  if (!c?.id) { el.innerHTML = empty('user', 'هنوز مشاوری برای کانون تعیین نشده است'); return; }
+  el.innerHTML = `<div class="card" style="margin-bottom:12px"><div class="row" style="gap:12px"><span class="ib green">${icon('user', { size: 22 })}</span><div class="grow"><b>${esc(c.full_name)}</b><div class="small muted">${esc(c.title)}</div><div class="tiny muted">${esc(c.bio)}</div></div></div></div>
   <div class="chips" style="margin-bottom:12px">${chips.map((x) => `<button class="chip" data-chip="${esc(x.prompt)}">${esc(x.label)}</button>`).join('')}</div>
   <div class="card"><div id="cMsgs" class="stack" style="max-height:46vh;overflow:auto" aria-live="polite"></div>
   <form id="cForm" class="row" style="gap:8px;margin-top:12px"><label class="sr-only" for="cTxt">متن پیام</label><textarea class="input grow" id="cTxt" rows="2" maxlength="2000" placeholder="پیامت را بنویس…"></textarea><button class="btn" type="submit">ارسال</button></form></div>`;
@@ -284,35 +291,26 @@ export async function counselor(el, _p, me) {
   draw();
 }
 
-// ================= دانش‌آموز: کتاب‌های هوش =================
-export async function books(el, p) {
-  if (p.id && p.topic) return topicQuestions(el, p);
-  if (p.id) return topics(el, p);
-  setHead('کتاب‌های هوش', 'سرفصل‌ها و تمرین‌های هر کتاب');
-  const b = await api('/api/exam-books');
-  el.innerHTML = b.length ? `<div class="grid c3">${b.map((x) => `<a class="card" href="#/books/${esc(x.id)}"><div class="row" style="gap:12px"><span class="ib sun">${icon('book', { size: 22 })}</span><div class="grow"><b>${esc(x.title || x.name || x.id)}</b><div class="tiny muted">${x.topics_count ? `${fa(x.topics_count)} مبحث` : ''}${x.grade ? ` · پایه ${esc(x.grade)}` : ''}</div></div></div></a>`).join('')}</div>` : empty('book', 'کتابی ثبت نشده');
-}
-async function topics(el, p) {
-  setHead('سرفصل‌ها', '', '<a class="btn ghost sm" href="#/books">← کتاب‌ها</a>');
-  const t = await api(`/api/exam-books/${encodeURIComponent(p.id)}/topics`);
-  const list = Array.isArray(t) ? t : (t.topics || []);
-  const groups = {};
-  for (const x of list) (groups[x.chapterTitle || x.sectionTitle || 'مباحث'] ||= []).push(x);
-  el.innerHTML = Object.entries(groups).map(([g, items]) => `<section class="card" style="margin-bottom:12px"><div class="card-title">${esc(g)}</div><div class="list">${items.map((x) => `<a class="list-item" href="#/books/${esc(p.id)}/${x.id}"><div class="grow">${esc(x.title)}</div><span class="tiny muted">ص ${fa(x.bookStartPage ?? '')}${x.bookEndPage ? `–${fa(x.bookEndPage)}` : ''}</span></a>`).join('')}</div></section>`).join('') || empty('book', 'سرفصلی نیست');
-}
-async function topicQuestions(el, p) {
-  setHead('تمرین مبحث', '', `<a class="btn ghost sm" href="#/books/${esc(p.id)}">← سرفصل‌ها</a>`);
-  const q = await api(`/api/exam-books/${encodeURIComponent(p.id)}/questions?topic_id=${encodeURIComponent(p.topic)}`);
-  el.innerHTML = q.length ? `<div class="stack">${q.map((x, i) => `<section class="card"><b>${fa(i + 1)}. ${esc(x.text)}</b><ol class="small" style="margin:8px 0;padding-inline-start:22px">${x.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ol>${x.explanation ? `<details><summary class="small">توضیح</summary><div class="small muted">${esc(x.explanation)}</div></details>` : ''}</section>`).join('')}</div>` : empty('inbox', 'سؤالی برای این مبحث نیست');
-}
-
 // ================= دانش‌آموز: نمرات، فاکتورها، کارنامه برپا =================
 export async function records(el) {
   setHead('نمرات و فاکتورها', 'نمره‌های مستمر کلاس، فاکتورهای دوره‌ای و کارنامه‌های آزمون جامع');
-  const [s, i, b] = await Promise.all([api('/api/student/manual-scores'), api('/api/student/invoices'), api('/api/barpa-exams/reports')]);
+  const [s, i, b, fee] = await Promise.all([api('/api/student/manual-scores'), api('/api/student/invoices'), api('/api/barpa-exams/reports'), api('/api/student/payment').catch(() => null)]);
   el.innerHTML = `<section class="card" style="margin-bottom:16px"><div class="card-title">نمرات مستمر کلاسی</div>${scoresTable(s)}</section>
-  <section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i)}</section>
+  <section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i, { pay: true })}</section>
   <section class="card"><div class="card-title">کارنامه آزمون جامع برپا</div>${barpaList(b)}</section>`;
+  on(el, 'click', '[data-payinv]', (e, btn) => modal({
+    title: 'پرداخت فاکتور',
+    body: `<p class="small" style="margin-top:0">مبلغ مانده: <b>${money(Number(btn.dataset.rem))}</b>${fee?.card_number ? `<br>شماره کارت: <b dir="ltr">${esc(fee.card_number)}</b> به نام ${esc(fee.card_holder || '')}` : ''}</p>
+      <p class="tiny muted">پس از واریز، تصویر رسید را بارگذاری کنید. فاکتور پس از تأیید مدیر کانون تسویه می‌شود.</p>
+      <div class="field"><label for="invRc">تصویر رسید</label><input class="input" type="file" id="invRc" accept="image/png,image/jpeg,image/webp" required></div>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ارسال رسید', onClick: async (m) => {
+      const f = m.querySelector('#invRc').files[0];
+      if (!f) { toast('تصویر رسید را انتخاب کنید'); return false; }
+      await post('/api/student/payment', { invoice_id: Number(btn.dataset.payinv), file: await fileToData(f) });
+      toast('رسید ارسال شد و در صف بررسی مدیر است', 'ok');
+      records(el);
+    } }],
+  }));
 }
 export const barpaView = (el, p) => barpaDetail(el, p);
 
@@ -406,6 +404,12 @@ export async function mgrBarpa(el) {
           </button>
         </div>
       </div>
+      <div class="row wrap" style="gap:10px;margin-top:12px">
+        <div class="field" style="flex:2 1 220px"><label for="bpUpTitle">عنوان آزمون</label><input class="input" id="bpUpTitle" maxlength="120" placeholder="مثلاً مرحله اول برپا"></div>
+        <div class="field" style="flex:1 1 120px"><label for="bpUpGrade">پایه</label><select class="input" id="bpUpGrade">${['چهارم', 'پنجم', 'ششم', 'هفتم', 'هشتم', 'نهم'].map((g) => `<option${g === 'نهم' ? ' selected' : ''}>${g}</option>`).join('')}</select></div>
+        <div class="field" style="flex:1 1 100px"><label for="bpUpStage">مرحله</label><input class="input" id="bpUpStage" type="number" min="1" max="20" inputmode="numeric"></div>
+      </div>
+      <div class="tiny muted" style="margin-top:6px">کارنامه‌ها فقط با کد ملی یا نام کاربری دانش‌آموز تطبیق داده می‌شوند و حساب جدیدی ساخته نمی‌شود.</div>
       <div id="barpaUploadStatus" class="small bold" style="margin-top:10px;display:none;color:#1e40af"></div>
     </section>
 
@@ -470,11 +474,20 @@ export async function mgrBarpa(el) {
     reader.onload = async () => {
       try {
         const dataUrl = reader.result;
-        const res = await post('/api/barpa-exams/upload', {
-          file: { data: dataUrl, name: selectedFile.name }
+        const res = await post('/api/manager/barpa-exams/upload', {
+          file: { data: dataUrl, name: selectedFile.name },
+          exam_title: $('#bpUpTitle', el).value.trim() || undefined,
+          grade: $('#bpUpGrade', el).value,
+          stage: $('#bpUpStage', el).value || undefined,
         });
-        toast(res.message || `تعداد ${res.count || 0} کارنامه با موفقیت تفکیک شد`, 'ok');
-        mgrBarpa(el);
+        toast(`${fa(res.count || 0)} کارنامه ثبت شد${res.unmatched_count ? ` · ${fa(res.unmatched_count)} مورد تطبیق داده نشد` : ''}`, res.unmatched_count ? 'error' : 'ok');
+        await mgrBarpa(el);
+        if (res.unmatched?.length) modal({
+          title: `${fa(res.unmatched.length)} کارنامه بدون دانش‌آموز`, wide: true,
+          body: `<p class="small" style="margin-top:0">این داوطلب‌ها با کد ملی یا نام کاربری هیچ دانش‌آموزی در کانون تطبیق داده نشدند و ثبت نشدند. کد ملی دانش‌آموز را در پرونده‌اش اصلاح کنید و فایل را دوباره بارگذاری کنید.</p>
+            <div class="table-wrap"><table class="table"><thead><tr><th>صفحه</th><th>نام در کارنامه</th><th>کد داوطلبی</th><th>مدرسه</th></tr></thead><tbody>${res.unmatched.map((u) => `<tr><td>${fa(u.page ?? '—')}</td><td>${esc(u.full_name || '—')}</td><td dir="ltr">${esc(u.candidate_code || '—')}</td><td>${esc(u.school_name || '—')}</td></tr>`).join('')}</tbody></table></div>`,
+          actions: [{ label: 'متوجه شدم', value: true }],
+        });
       } catch (err) {
         statusDiv.textContent = `خطا در پردازش: ${err.message}`;
         toast(`خطا در پردازش فایل: ${err.message}`, 'error');
@@ -653,9 +666,7 @@ export async function hooshStudio(el) {
               <div class="grid c2" style="gap:16px" id="pagesPreviewGrid">
                 ${Array.from({ length: (activeTopic.pdfEndPage - activeTopic.pdfStartPage + 1) || 1 }).map((_, idx) => {
                   const pageNum = (activeTopic.pdfStartPage || 1) + idx;
-                  const imgUrl = activeBookId === 'hoosh_8_9'
-                    ? `/extracted_pages/hoosh_8_9/page_${pageNum}.jpg`
-                    : `/extracted_pages/page_${pageNum}.jpg`;
+                  const imgUrl = bookPageUrl(activeBookId, pageNum);
                   const inBasket = basket.some((b) => b.bookId === activeBookId && b.pageNum === pageNum);
 
                   return `
@@ -726,9 +737,6 @@ export async function hooshStudio(el) {
                 <div style="display:flex;gap:8px">
                   <button class="btn" id="basketPrintBtn" type="button" style="background:#2563eb;color:#fff;font-weight:900">
                     ${icon('printer', { size: 16 })} پیش‌نمایش و چاپ آزمون (A4)
-                  </button>
-                  <button class="btn soft" id="basketPublishOnlineBtn" type="button" style="background:#059669;color:#fff;font-weight:900">
-                    ${icon('play', { size: 16 })} انتشار به عنوان آزمون آنلاین
                   </button>
                 </div>
               </div>
@@ -804,9 +812,7 @@ export async function hooshStudio(el) {
         if (idx !== -1) {
           window._examBasket.splice(idx, 1);
         } else {
-          const imgUrl = activeBookId === 'hoosh_8_9'
-            ? `/extracted_pages/hoosh_8_9/page_${pageNum}.jpg`
-            : `/extracted_pages/page_${pageNum}.jpg`;
+          const imgUrl = bookPageUrl(activeBookId, pageNum);
           window._examBasket.push({
             bookId: activeBookId,
             bookTitle: activeBook?.title || 'هوش کمپلکس',
@@ -828,9 +834,7 @@ export async function hooshStudio(el) {
         const end = activeTopic.pdfEndPage || start;
         for (let p = start; p <= end; p++) {
           if (!window._examBasket.some((b) => b.bookId === activeBookId && b.pageNum === p)) {
-            const imgUrl = activeBookId === 'hoosh_8_9'
-              ? `/extracted_pages/hoosh_8_9/page_${p}.jpg`
-              : `/extracted_pages/page_${p}.jpg`;
+            const imgUrl = bookPageUrl(activeBookId, p);
             window._examBasket.push({
               bookId: activeBookId,
               bookTitle: activeBook?.title || 'هوش کمپلکس',
@@ -893,7 +897,6 @@ export async function hooshStudio(el) {
     $('#basketPrintBtn', el)?.addEventListener('click', () => openPrintModal('exam'));
     $('#openPrintAnswerSheetBtn', el)?.addEventListener('click', () => openPrintModal('answers'));
     $('#openAiPromptBtn', el)?.addEventListener('click', openAiPromptModal);
-    $('#basketPublishOnlineBtn', el)?.addEventListener('click', publishOnlineExam);
   }
 
   function openPrintModal(mode) {
@@ -1053,75 +1056,6 @@ export async function hooshStudio(el) {
           }
         },
         { label: 'بستن', onClick: () => {} }
-      ]
-    });
-  }
-
-  async function publishOnlineExam() {
-    const basket = window._examBasket;
-    if (!basket.length) return toast('ابتدا برگه‌هایی را به سبد آزمون اضافه کنید', 'error');
-
-    const ov = await api('/api/teacher/overview').catch(() => null);
-    const classes = ov?.classes || [];
-    const classOptions = classes.map((c) => `<option value="${c.id}">${esc(c.name)} (${gradeName(c.grade)})</option>`).join('');
-
-    modal({
-      title: 'انتشار به عنوان آزمون آنلاین',
-      body: `
-        <form id="pubExamForm" class="stack" style="gap:12px">
-          <div class="field">
-            <label>کلاس هدف</label>
-            <select class="input" name="class_id" required>
-              <option value="">همه کلاس‌های من</option>
-              ${classOptions}
-            </select>
-          </div>
-          <div class="field">
-            <label>عنوان آزمون آنلاین</label>
-            <input class="input" name="title" value="${esc(examConfig.title)}" required>
-          </div>
-          <div class="field">
-            <label>مدت زمان آزمون (دقیقه)</label>
-            <input class="input" type="number" name="duration" value="${examConfig.duration}" required>
-          </div>
-          <div class="tiny muted">
-            آزمون آنلاین با محتوای ${num(basket.length)} برگه تخصصی از کتب هوش برای دانش‌آموزان کلاس فعال خواهد شد.
-          </div>
-        </form>
-      `,
-      actions: [
-        {
-          label: 'انتشار آزمون',
-          primary: true,
-          onClick: async () => {
-            const form = $('#pubExamForm');
-            const class_id = form?.class_id?.value ? Number(form.class_id.value) : null;
-            const title = form?.title?.value || examConfig.title;
-            const duration = Number(form?.duration?.value) || examConfig.duration;
-
-            try {
-              const res = await post('/api/teacher/exams', {
-                title,
-                grade: examConfig.grade === 'نهم' ? 9 : 6,
-                class_id,
-                subject: 'هوش و استعداد تحلیلی',
-                kind: 'online',
-                duration_minutes: duration,
-                negative_score: examConfig.hasNegativeScore ? 1 : 0,
-                questions: basket.map((item, i) => ({
-                  q: `برگه آزمون شماره ${i + 1} از کتاب ${item.bookTitle} (مبحث: ${item.topicTitle})`,
-                  options: ['گزینه ۱', 'گزینه ۲', 'گزینه ۳', 'گزینه ۴'],
-                  answer: 0
-                }))
-              });
-              toast('آزمون آنلاین با موفقیت ساخته و منتشر شد', 'ok');
-              location.hash = `#/exams/${res.id || ''}`;
-            } catch (err) {
-              toast(`خطا در انتشار آزمون: ${err.message}`, 'error');
-            }
-          }
-        },
-        { label: 'انصراف', onClick: () => {} }
       ]
     });
   }
