@@ -1,9 +1,11 @@
 // استخراج و تفکیک خودکار کارنامه آزمون برپا با PyMuPDF
 import { execFile } from 'node:child_process';
 
+const pyBin = process.platform === 'win32' ? 'python' : 'python3';
+
 export function parseBarpaPdfFile(scriptPath, pdfPath) {
   return new Promise((resolve, reject) => {
-    execFile('python', [scriptPath, pdfPath, '--json-stdout'], { maxBuffer: 25 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(pyBin, [scriptPath, pdfPath, '--json-stdout'], { maxBuffer: 25 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(stderr || err.message));
       const sIdx = stdout.indexOf('___JSON_START___');
       const eIdx = stdout.indexOf('___JSON_END___');
