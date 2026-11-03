@@ -1,11 +1,12 @@
+import { artwork } from './artwork.js';
 // بازی درسی «ذهن سریع» و داستان تعاملی «راز رصدخانه»
 import { post, esc, fa, $, on, setHead, confetti, beep, state, toast, icon, sgn } from './core.js';
 
 export function gamesHub(el) {
   setHead('بازی و داستان', 'یادگیری با بازی؛ هر روز با بازی امتیاز فعالیت بگیر');
   el.innerHTML = `<div class="grid c2">
-    <div class="feature-tile ft-game" style="min-height:220px" onclick="location.hash='#/games/math'"><span class="fi">${icon('zap', { size: 56 })}</span><h3 style="font-size:22px">مسابقه «ذهن سریع»</h3><p>۶۰ ثانیه وقت داری تا بیشترین محاسبه ذهنی را درست جواب بدهی. پاسخ‌های پشت‌سرهم ضریب امتیاز دارد! (روزانه با ۵۰ امتیاز: ۳+ امتیاز فعالیت)</p></div>
-    <div class="feature-tile ft-story" style="min-height:220px" onclick="location.hash='#/games/story'"><span class="fi">${icon('compass', { size: 56 })}</span><h3 style="font-size:22px">داستان تعاملی «راز رصدخانه»</h3><p>با انتخاب‌هایت داستان را پیش ببر و با حل معماهای علمی، رصدخانه را نجات بده. (پایان داستان: ۵+ امتیاز)</p></div>
+    <div class="feature-tile ft-game" style="min-height:220px" onclick="location.hash='#/games/math'"><span class="fi">${artwork('math-challenge', 'game-art')}</span><h3 style="font-size:22px">مسابقه «ذهن سریع»</h3><p>۶۰ ثانیه وقت داری تا بیشترین محاسبه ذهنی را درست جواب بدهی. پاسخ‌های پشت‌سرهم ضریب امتیاز دارد! (روزانه با ۵۰ امتیاز: ۳+ امتیاز فعالیت)</p></div>
+    <div class="feature-tile ft-story" style="min-height:220px" onclick="location.hash='#/games/story'"><span class="fi">${artwork('observatory-story', 'game-art')}</span><h3 style="font-size:22px">داستان تعاملی «راز رصدخانه»</h3><p>با انتخاب‌هایت داستان را پیش ببر و با حل معماهای علمی، رصدخانه را نجات بده. (پایان داستان: ۵+ امتیاز)</p></div>
   </div>`;
 }
 

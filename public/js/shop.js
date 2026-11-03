@@ -1,3 +1,4 @@
+import { artwork } from './artwork.js';
 // صفحه اصلی کانون، صفحه محصول، سبد خرید تعاملی، کد تخفیف و پرداخت
 import { api, post, esc, fa, money, $, $$, on, toast, busy, modal, setHead, logoHtml, empty, loading, confetti, state, jdate, icon } from './core.js';
 
@@ -117,7 +118,7 @@ async function landing(root, { slug }) {
   try { localStorage.setItem('roshd-center', c.slug); } catch { /* */ }
   const render = () => {
     root.innerHTML = `${pubHeader(c)}<main class="pub-main">
-      <section class="hero" style="margin-bottom:24px"><div class="row wrap" style="gap:22px"><div class="brand-logo" style="width:110px;height:110px;border-radius:32px;font-size:54px;background:#ffffff26">${logoHtml(c.logo)}</div>
+      <section class="hero" style="margin-bottom:24px"><div class="row wrap" style="gap:22px">${artwork('public-center', 'public-center-art')}<div class="brand-logo" style="width:110px;height:110px;border-radius:32px;font-size:54px;background:#ffffff26">${logoHtml(c.logo)}</div>
         <div class="grow" style="min-width:240px"><span class="glass" style="padding:4px 12px;font-weight:800">${icon('sprout', { size: 16 })} به پلتفرم رشد نخبه خوش آمدید</span><h2 style="font-size:28px;margin:12px 0 6px">${esc(c.name)}</h2><p style="margin:0;opacity:.92">${esc(c.tagline || '')}</p></div>
         <div class="row" style="gap:10px"><div class="glass center"><div class="big-num">${fa(d.stats.students)}</div><div class="small">دانش‌آموز</div></div><div class="glass center"><div class="big-num">${fa(d.stats.teachers)}</div><div class="small">معلم</div></div></div></div></section>
       <div class="grid c3" style="margin-bottom:24px"><div class="card span2"><div class="card-title"><span class="ib">${icon('building', { size: 18 })}</span>درباره کانون</div><p style="margin:0;white-space:pre-line">${esc(c.about || '')}</p></div>

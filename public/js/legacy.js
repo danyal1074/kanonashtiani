@@ -387,7 +387,7 @@ export async function mgrBarpa(el) {
       <div class="row between" style="flex-wrap:wrap;gap:12px;align-items:center">
         <div>
           <div style="font-weight:900;font-size:16px;color:#1e40af;display:flex;align-items:center;gap:8px">
-            <span class="ib blue">${icon('upload-cloud', { size: 20 })}</span>
+            <span class="ib blue">${icon('upload', { size: 20 })}</span>
             <span>آپلود و تفکیک خودکار کارنامه آزمون جامع برپا (PDF)</span>
           </div>
           <div class="small" style="margin-top:4px;color:#3b82f6;max-width:700px;line-height:1.6">
@@ -397,7 +397,7 @@ export async function mgrBarpa(el) {
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <input type="file" id="barpaPdfInput" accept=".pdf" style="display:none">
           <button class="btn soft" id="barpaPickBtn" type="button" style="background:#fff">
-            ${icon('folder', { size: 16 })} انتخاب فایل PDF نتایج
+            ${icon('file-text', { size: 16 })} انتخاب فایل PDF نتایج
           </button>
           <button class="btn" id="barpaStartUploadBtn" type="button" disabled style="background:#2563eb;color:#fff;font-weight:900">
             ${icon('upload', { size: 16 })} شروع تفکیک و ثبت در پنل‌ها

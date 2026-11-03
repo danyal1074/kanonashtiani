@@ -1,3 +1,4 @@
+import { decoratePageArt } from './artwork.js';
 import { decorateDashboard } from './reference-ui.js';
 // راه‌انداز برنامه: پوسته، منو، مسیر‌یابی نقش‌ها، اطلاعیه تمام‌صفحه، تبریک تولد و قفل پنل
 import { state, api, post, esc, fa, $, $$, on, toast, confetti, logoHtml, ROLE_NAMES, avatar, nameAvatar, jdate, loading, empty, gradeName, icon } from './core.js';
@@ -117,7 +118,10 @@ async function render() {
   window.scrollTo({ top: 0 });
   try {
     await found.r.view(view, found.params, me);
-    if (token === rendering && path === '/home') decorateDashboard(view, me, panel.nav(me));
+    if (token === rendering) {
+      if (path === '/home') decorateDashboard(view, me, panel.nav(me));
+      decoratePageArt(view, me, path);
+    }
   } catch (e) {
     if (token !== rendering) return;
     view.innerHTML = empty('alert', `<b>این بخش باز نشد</b>${esc(e.message)}<div style="margin-top:12px"><button class="btn ghost sm" onclick="location.reload()">تلاش دوباره</button></div>`);

@@ -1,15 +1,16 @@
+import { artwork } from './artwork.js';
 // صفحه ورود با انتخاب نقش
 import { api, post, esc, $, $$, toast, logoHtml, en, icon } from './core.js';
 
 const ROLES = [
-  { key: 'student', icon: 'backpack', name: 'دانش‌آموز', label: 'کد ملی یا نام کاربری', ph: '0012345679' },
-  { key: 'teacher', icon: 'board', name: 'معلم', label: 'کد ملی یا نام کاربری', ph: 'teacher' },
+  { key: 'student', icon: 'graduation', name: 'دانش‌آموز', label: 'کد ملی یا نام کاربری', ph: '0012345679' },
+  { key: 'teacher', icon: 'book', name: 'معلم', label: 'کد ملی یا نام کاربری', ph: 'teacher' },
   { key: 'manager', icon: 'building', name: 'مدیر کانون', label: 'کد ملی یا نام کاربری', ph: 'manager' },
   { key: 'parent', icon: 'users', name: 'والدین', label: 'شماره موبایل', ph: '09121234567' },
 ];
 const ADMIN = { key: 'admin', icon: 'shield', name: 'مدیر سامانه', label: 'نام کاربری پشتیبانی', ph: 'admin' };
 const DEMO = { student: 'student', teacher: 'teacher', manager: 'manager', parent: '09120000000', admin: 'admin' };
-const FEATURES = [['timer', 'پومودورو و رقابت مطالعه'], ['file-check', 'آزمون آنلاین با کارنامه فوری'], ['sparkles', 'مسیر یادگیری شخصی'], ['users', 'گزارش لحظه‌ای برای والدین']];
+const FEATURES = [['book', 'مطالعه هدفمند'], ['clipboard', 'آزمون و کارنامه'], ['message', 'همراهی پشتیبان']];
 
 export async function loginView(root, onDone) {
   document.title = 'ورود | پلتفرم رشد نخبه';
@@ -21,42 +22,35 @@ export async function loginView(root, onDone) {
   let role = ROLES[0];
   if (!root.isConnected) return; // نمای دیگری جایگزین شده است
 
-  root.innerHTML = `<div class="login-wrap">
-    <section class="login-art" aria-label="معرفی کانون">
-      <div class="login-top">
-        <div class="login-logo" id="cLogo">${logoHtml(center.logo)}</div>
-        <div><span class="pill">${icon('sprout', { size: 14 })} پلتفرم رشد نخبه</span>
-          <div class="bold" id="cName" style="font-size:var(--fs-md);margin-top:10px">${esc(center.name)}</div>
-          <div class="small" style="color:var(--teal-100)" id="cTag">${esc(center.tagline || '')}</div></div>
-      </div>
-      <div>
-        <h1>هر روز یک قدم<br><em>رشد</em> کن.</h1>
-        <p class="lead">برنامه مطالعه، آزمون، امتیاز و مسیر یادگیری شخصی؛ همه در یک جا برای دانش‌آموز، معلم، مدیر و والدین.</p>
-      </div>
-      <div class="feature-list">${FEATURES.map(([i, t]) => `<div><span class="ib">${icon(i, { size: 18 })}</span>${t}</div>`).join('')}</div>
-      <div class="foot"><a class="btn ghost sm" id="shopLink" href="#/c/${esc(center.slug || '')}" style="background:transparent;color:var(--white);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)">${icon('bag', { size: 16 })} صفحه کانون و فروشگاه</a></div>
-    </section>
-    <main class="login-form">
-      <div class="login-box">
-        ${centers.length > 1 ? `<div class="field" style="margin-bottom:var(--s-5)"><label for="centerSel">کانون</label><select class="input" id="centerSel">${centers.map((c) => `<option value="${esc(c.slug)}" ${c.slug === center.slug ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>` : ''}
-        <h2>ورود به حساب</h2>
-        <p class="muted" style="margin:4px 0 0">نقش خودت را انتخاب کن.</p>
-        <div class="role-grid" role="radiogroup" aria-label="نقش کاربری">${ROLES.map((r, i) => `<button type="button" class="role ${i ? '' : 'on'}" data-role="${r.key}" role="radio" aria-checked="${!i}" tabindex="${i ? -1 : 0}"><span class="ri">${icon(r.icon, { size: 20 })}</span><span class="rn">${r.name}</span></button>`).join('')}</div>
-        <form id="loginForm" class="stack" style="gap:var(--s-4)" autocomplete="on" novalidate>
-          <div class="field"><label id="idLabel" for="ident">${role.label}</label><input class="input ltr" id="ident" name="identifier" placeholder="${role.ph}" autocomplete="username" required inputmode="text" aria-describedby="loginErr"></div>
-          <div class="field"><label for="pw">رمز عبور</label><div class="pw-wrap"><input class="input ltr" id="pw" name="password" type="password" autocomplete="current-password" required aria-describedby="loginErr">
-            <button type="button" class="icon-btn" id="togglePw" aria-label="نمایش رمز" aria-pressed="false">${icon('eye')}</button></div></div>
+  // راست‌به‌چپ: فرم در ستون اول (راست) و تصویرسازی در ستون دوم (چپ)؛ در موبایل فرم بالاتر است
+  root.innerHTML = `<div class="lg-wrap">
+    <main class="lg-form">
+      <div class="lg-box">
+        <header class="lg-brand"><span class="lg-logo" id="cLogo">${logoHtml(center.logo)}</span><span class="lg-divider" aria-hidden="true"></span><b class="lg-center" id="cName">${esc(center.name)}</b></header>
+        <h1 class="lg-title">ورود به سامانه</h1>
+        <p class="lg-sub">مسیر رشدت از اینجا شروع می‌شود</p>
+        <div class="lg-roles" role="radiogroup" aria-label="نقش کاربری">${ROLES.map((r, i) => `<button type="button" class="role lg-role ${i ? '' : 'on'}" data-role="${r.key}" role="radio" aria-checked="${!i}" tabindex="${i ? -1 : 0}"><span class="lg-check">${icon('check-circle', { size: 20 })}</span>${icon(r.icon, { size: 40 })}<span class="lg-rn">${r.name}</span></button>`).join('')}</div>
+        <form id="loginForm" class="lg-fields" autocomplete="on" novalidate>
+          <div class="field lg-field"><label id="idLabel" for="ident">${role.label}</label><input class="input lg-input ltr" id="ident" name="identifier" placeholder="${role.ph}" autocomplete="username" required inputmode="text" aria-describedby="loginErr"></div>
+          <div class="field lg-field"><label for="pw">رمز عبور</label><div class="lg-pw"><input class="input lg-input ltr" id="pw" name="password" type="password" autocomplete="current-password" required aria-describedby="loginErr">
+            <button type="button" class="lg-eye" id="togglePw" aria-label="نمایش رمز" aria-pressed="false">${icon('eye', { size: 22 })}</button></div></div>
           <div class="field-error" id="loginErr" role="alert" aria-live="assertive"></div>
-          <button class="btn lg block" type="submit" id="loginBtn">ورود ${icon('arrow-left', { size: 18 })}</button>
+          <button class="lg-submit" type="submit" id="loginBtn">ورود به حساب</button>
         </form>
-        <div class="demo-box"><div class="row between" style="margin-bottom:var(--s-2)"><b class="small">حساب‌های نمایشی</b><span class="muted">رمز همه: <code>123456</code></span></div>
+        <nav class="lg-links" aria-label="پیوندهای ورود"><a id="shopLink" href="#/c/${esc(center.slug || '')}">صفحه کانون و فروشگاه</a><a href="#" id="adminLink">ورود پشتیبانی سامانه</a></nav>
+        ${centers.length > 1 ? `<div class="lg-center-pick"><label for="centerSel">کانون</label><select class="input" id="centerSel">${centers.map((c) => `<option value="${esc(c.slug)}" ${c.slug === center.slug ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>` : ''}
+        <details class="lg-demo"><summary>حساب‌های نمایشی <span class="muted">(رمز همه: <code>123456</code>)</span></summary>
           <div class="chips">
-            <button class="chip" data-demo="student">${icon('backpack', { size: 14 })} آرین</button><button class="chip" data-demo="student9">${icon('lock', { size: 14 })} کیان (قفل)</button>
-            <button class="chip" data-demo="teacher">${icon('board', { size: 14 })} معلم</button><button class="chip" data-demo="manager">${icon('building', { size: 14 })} مدیر</button>
-            <button class="chip" data-demo="parent">${icon('users', { size: 14 })} والد</button><button class="chip" data-demo="admin">${icon('shield', { size: 14 })} مدیر سامانه</button></div></div>
-        <p class="center small" style="margin-top:var(--s-4)"><a href="#" id="adminLink">${icon('shield', { size: 14 })} ورود پشتیبانی سامانه</a></p>
+            <button class="chip" data-demo="student">${icon('graduation', { size: 14 })} آرین</button><button class="chip" data-demo="student9">${icon('lock', { size: 14 })} کیان (قفل)</button>
+            <button class="chip" data-demo="teacher">${icon('book', { size: 14 })} معلم</button><button class="chip" data-demo="manager">${icon('building', { size: 14 })} مدیر</button>
+            <button class="chip" data-demo="parent">${icon('users', { size: 14 })} والد</button><button class="chip" data-demo="admin">${icon('shield', { size: 14 })} مدیر سامانه</button></div></details>
       </div>
-    </main></div>`;
+    </main>
+    <section class="lg-art" aria-label="معرفی کانون">
+      <h2 class="lg-slogan">هر روز، یک قدم <em>رشد</em></h2>
+      ${artwork('login-welcome', 'lg-hero')}
+      <ul class="lg-features">${FEATURES.map(([i, t]) => `<li>${icon(i, { size: 26 })}<span>${t}</span></li>`).join('')}</ul>
+    </section></div>`;
 
   const errEl = $('#loginErr', root);
   const setErr = (msg) => {
@@ -84,7 +78,7 @@ export async function loginView(root, onDone) {
   $('#togglePw', root).onclick = (e) => {
     const p = $('#pw', root), show = p.type === 'password';
     p.type = show ? 'text' : 'password';
-    e.currentTarget.innerHTML = icon(show ? 'eye-off' : 'eye');
+    e.currentTarget.innerHTML = icon(show ? 'eye-off' : 'eye', { size: 22 });
     e.currentTarget.setAttribute('aria-pressed', String(show));
     e.currentTarget.setAttribute('aria-label', show ? 'پنهان کردن رمز' : 'نمایش رمز');
   };
@@ -100,7 +94,6 @@ export async function loginView(root, onDone) {
     try { localStorage.setItem('roshd-center', center.slug); } catch { /* */ }
     $('#cLogo', root).innerHTML = logoHtml(center.logo);
     $('#cName', root).textContent = center.name;
-    $('#cTag', root).textContent = center.tagline || '';
     $('#shopLink', root).href = `#/c/${center.slug}`;
   });
   ['#ident', '#pw'].forEach((s) => $(s, root).addEventListener('input', () => setErr('')));

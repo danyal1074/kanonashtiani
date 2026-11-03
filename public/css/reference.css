@@ -38,7 +38,7 @@ body { background:radial-gradient(ellipse at 0 20%,#b3ebe1 0,transparent 42%),ra
 .reference-copy h2 { font-size:24px; margin:6px 0; color:#17284a; }
 .reference-copy p { margin:0 0 10px; font-size:14px; }
 .reference-grade { display:inline-flex; gap:6px; align-items:center; font-size:12px; color:#267c69; }
-.reference-person { width:190px; height:180px; position:absolute; left:6px; bottom:0; background-image:url('/img/panel-reference.jpg'); background-size:1280px 720px; background-repeat:no-repeat; mask-image:linear-gradient(to right,transparent,#000 8%,#000 90%,transparent); }
+.reference-person { width:190px; height:180px; position:absolute; left:6px; bottom:0; }
 .person-student { background-position:-6px -1px; }
 .person-teacher { background-position:-6px -232px; }
 .person-manager { background-position:-6px -459px; }
@@ -71,7 +71,7 @@ body { background:radial-gradient(ellipse at 0 20%,#b3ebe1 0,transparent 42%),ra
 @media(max-width:980px) { .bottom-nav a.on { flex:0 0 60px; } .bottom-nav a.on .bi { background:transparent; } }
 .person-teacher { height:164px; background-position:-6px -238px; }
 /* Original AI-generated transparent asset atlases, shared across all role panels. */
-.icon-3d { display:inline-block; flex:none; vertical-align:middle; background-image:url('/img/education-icons-3d.png'); background-size:400% 400%; background-repeat:no-repeat; }
+.icon-3d { display:inline-block; flex:none; vertical-align:middle; background-repeat:no-repeat; }
 .reference-tool-icon { filter:none; }
 .reference-tool-icon .ic { width:58px!important; height:58px!important; transition:transform .25s ease; }
 .reference-tool:hover .icon-3d { transform:translateY(-3px) rotate(-5deg) scale(1.07); }
@@ -81,10 +81,7 @@ body { background:radial-gradient(ellipse at 0 20%,#b3ebe1 0,transparent 42%),ra
 .reference-cup .icon-3d { width:98px!important; height:98px!important; }
 .reference-cup i { display:none; }
 .reference-welcome { min-height:240px; }
-.reference-person { width:192px; height:240px; left:10px; background-image:url('/img/education-characters-3d.png'); background-size:300% 100%; mask-image:none; transform-origin:bottom center; animation:character-arrive .65s ease-out both; }
-.person-student { background-position:0 0; }
-.person-teacher { background-position:50% 0; }
-.person-manager { background-position:100% 0; }
+.reference-person { width:192px; height:240px; left:10px; transform-origin:bottom center; animation:character-arrive .65s ease-out both; }
 .reference-copy { padding-left:195px; }
 .dashboard-photo-button { display:flex; width:fit-content; margin-top:10px; }
 .photo-avatar { overflow:hidden; padding:0!important; border:2px solid #fff; background:#d8f4ee; }

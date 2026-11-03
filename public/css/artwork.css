@@ -1,0 +1,19 @@
+/* Dedicated original artwork; every large image has one logical placement. */
+.section-art { display:block; max-width:100%; height:auto; object-fit:contain; }
+.reference-person .section-art { width:100%;height:100%;object-fit:contain;object-position:center bottom; }
+.reference-person:not(.has-student-photo) { background-image:none; }
+.visual-section-banner { display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 28px;margin-bottom:20px;border-radius:24px;background:#edf9f5;border:1px solid #cde9df;overflow:hidden; }
+.visual-section-banner .section-art { width:240px;max-height:180px; }
+.visual-section-banner h2 { font-size:20px; }
+.visual-section-banner.art-only { justify-content:center;padding:8px; }
+.feature-tile .game-art { width:100%;height:180px;object-fit:contain;margin-bottom:14px; }
+.public-center-art { width:240px;height:180px;object-fit:contain; }
+.icon-3d { background-repeat:no-repeat; }
+@media(max-width:640px) {
+ .visual-section-banner { padding:12px 16px;gap:12px; }
+ .visual-section-banner .section-art { width:140px;max-height:120px; }
+ .visual-section-banner h2 { font-size:16px; }
+ .feature-tile .game-art { height:150px; }
+ .public-center-art { width:180px;height:130px; }
+}
+@media print { .visual-section-banner,.section-art { display:none; } }
