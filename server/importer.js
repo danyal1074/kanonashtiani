@@ -1,20 +1,27 @@
 // ثبت‌نام گروهی دانش‌آموزان از CSV (خروجی اکسل). هر سطر مانند فرم ثبت‌نام اعتبارسنجی می‌شود؛
 // سطرهای نامعتبر یا تکراری ردیف‌به‌ردیف گزارش می‌شوند و بقیه ثبت می‌شوند.
 import { all, get, run, tx } from './db.js';
-import { hashPasswordAsync, isValidNationalCode, toEnDigits, clampStr, j2g } from './util.js';
+import { hashPasswordAsync, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, clampStr } from './util.js';
 
 export const MAX_ROWS = 3000;
-const GRADES = { 'چهارم': 4, 'پنجم': 5, 'ششم': 6, 'هفتم': 7, 'هشتم': 8, 'نهم': 9 };
+const GRADES = {
+  'چهار': 4, 'چهارم': 4,
+  'پنج': 5, 'پنجم': 5,
+  'شش': 6, 'ششم': 6,
+  'هفت': 7, 'هفتم': 7,
+  'هشت': 8, 'هشتم': 8,
+  'نه': 9, 'نهم': 9
+};
 
 const HEADERS = {
-  full_name: ['نام و نام خانوادگی', 'نام و نام‌خانوادگی', 'نام', 'نام کامل', 'full_name', 'name'],
-  national_code: ['کد ملی', 'کدملی', 'national_code', 'nid'],
+  full_name: ['نام و نام خانوادگی', 'نام و نام‌خانوادگی', 'نام و نام خانوادگی دانش‌آموز', 'نام و نام خانوادگی دانش آموز', 'نام ونام خانوادگی', 'نام', 'نام کامل', 'نام دانش‌آموز', 'نام دانش آموز', 'نام خانوادگی و نام', 'full_name', 'name'],
+  national_code: ['کد ملی', 'کدملی', 'شماره ملی', 'شماره ملی دانش‌آموز', 'کدملی دانش‌آموز', 'کد ملی دانش آموز', 'national_code', 'nid'],
   gender: ['جنسیت', 'gender'],
-  school: ['مدرسه', 'school'],
-  grade: ['پایه', 'grade'],
-  class: ['کلاس', 'class', 'class_name'],
+  school: ['مدرسه', 'نام مدرسه', 'school'],
+  grade: ['پایه', 'پایه تحصیلی', 'مقطع', 'کلاس/پایه', 'grade'],
+  class: ['کلاس', 'نام کلاس', 'کلاس بندی', 'class', 'class_name'],
   birth: ['تاریخ تولد', 'تولد', 'birth_date', 'birth'],
-  parent_phone: ['موبایل والدین', 'تلفن والدین', 'شماره والدین', 'موبایل ولی', 'parent_phone', 'mobile'],
+  parent_phone: ['موبایل والدین', 'تلفن والدین', 'شماره والدین', 'موبایل ولی', 'موبایل', 'شماره همراه', 'تلفن همراه', 'شماره موبایل', 'موبایل پدر', 'موبایل مادر', 'تلفن تماس', 'شماره تماس والدین', 'parent_phone', 'mobile'],
   address: ['نشانی', 'آدرس', 'address'],
 };
 const norm = (s) => String(s ?? '').replace(/[‌‏‎]/g, ' ').replace(/ي/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -49,33 +56,30 @@ function mapColumns(headerRow) {
   return idx;
 }
 
-function parseBirth(v) {
-  v = toEnDigits(String(v || '')).trim();
-  if (!v) return null;
-  const m = /^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/.exec(v);
-  if (!m) throw new Error('تاریخ تولد باید مانند ۱۳۹۳/۰۵/۱۲ باشد');
-  let [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) throw new Error('تاریخ تولد نامعتبر است');
-  if (y < 1700) [y, mo, d] = j2g(y, mo, d);
-  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-}
-
 // اعتبارسنجی یک سطر؛ خروجی: داده تمیز یا پرتاب خطا با پیام فارسی
 function cleanRow(raw) {
   const full_name = clampStr(raw.full_name, 80);
   if (!full_name) throw new Error('نام و نام خانوادگی خالی است');
-  let nc = toEnDigits(String(raw.national_code ?? '')).replace(/\D/g, '');
-  if (nc.length >= 8 && nc.length < 10) nc = nc.padStart(10, '0'); // اکسل صفرهای ابتدای کد ملی را حذف می‌کند
+
+  const nc = normalizeNationalCode(raw.national_code);
   if (!isValidNationalCode(nc)) throw new Error(`کد ملی «${raw.national_code}» معتبر نیست`);
-  let phone = toEnDigits(String(raw.parent_phone ?? '')).replace(/\D/g, '');
-  if (phone.length === 10 && phone.startsWith('9')) phone = '0' + phone;
-  if (!/^09\d{9}$/.test(phone)) throw new Error(`موبایل والدین «${raw.parent_phone}» معتبر نیست`);
-  const gradeRaw = toEnDigits(String(raw.grade ?? '')).replace(/پایه/g, '').trim();
+
+  const phone = normalizeIranianMobile(raw.parent_phone);
+  if (!phone) throw new Error(`موبایل والدین «${raw.parent_phone}» معتبر نیست (باید شماره همراه ۱۱ رقمی باشد)`);
+
+  const gradeRaw = norm(raw.grade).replace(/پایه|کلاس|تحصیلی/g, '').trim();
   const grade = GRADES[gradeRaw] || Number(gradeRaw);
   if (![4, 5, 6, 7, 8, 9].includes(grade)) throw new Error(`پایه «${raw.grade}» باید بین چهارم تا نهم باشد`);
+
   const g = norm(raw.gender);
-  const gender = ['دختر', 'f', 'female', 'زن', 'مونث'].includes(g) ? 'f' : 'm';
-  return { full_name, national_code: nc, parent_phone: phone, grade, gender, class_name: clampStr(raw.class, 30) || 'الف', school: clampStr(raw.school, 100), birth_date: parseBirth(raw.birth), address: clampStr(raw.address, 300) };
+  const gender = ['دختر', 'f', 'female', 'زن', 'مونث', 'مؤنث'].includes(g) ? 'f' : 'm';
+
+  let birth_date = null;
+  if (raw.birth && String(raw.birth).trim()) {
+    birth_date = parseBirthDate(raw.birth);
+  }
+
+  return { full_name, national_code: nc, parent_phone: phone, grade, gender, class_name: clampStr(raw.class, 30) || 'الف', school: clampStr(raw.school, 100), birth_date, address: clampStr(raw.address, 300) };
 }
 
 // rows: آرایه سطرها (اولین سطر عنوان ستون‌ها). dryRun: فقط بررسی، بدون ثبت.

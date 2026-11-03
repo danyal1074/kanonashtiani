@@ -8,3 +8,5 @@
 .demo-build/
 demo-hosting/
 demo-static/
+/public/extracted_pages/
+/scratch/

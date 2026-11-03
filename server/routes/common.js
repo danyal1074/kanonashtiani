@@ -4,13 +4,13 @@ import { CURATED_QUESTIONS } from '../self_exam.js';
 // مسیرهای مشترک: ورود، پروفایل، اطلاعیه، پیام‌رسان، صفحه عمومی کانون و فروشگاه
 import { all, get, run, tx, ROOT } from '../db.js';
 import { COOKIE, isHttps } from '../http.js';
-import { fail, hashPasswordAsync, verifyPasswordAsync, needsRehash, signToken, ymd, jMonthOf, toEnDigits, clampStr, randomCode, saveUpload } from '../util.js';
+import { fail, hashPasswordAsync, verifyPasswordAsync, needsRehash, signToken, ymd, jMonthOf, toEnDigits, clampStr, normalizeIranianMobile, normalizeNationalCode, randomCode, saveUpload } from '../util.js';
 import { feeStatus, announcementsFor, contactsOf, levelOf, totalPoints } from '../logic.js';
 
 // محدودیت تلاش ناموفق ورود: هر (آی‌پی، شناسه) ۸ بار در ۱۰ دقیقه؛ و سقف کلی هر آی‌پی (مدرسه‌ای با ده‌ها دانش‌آموز پشت یک آی‌پی)
 const attempts = new Map();
 const WINDOW = 10 * 60e3;
-const LIMITS = { pair: 8, ip: 250 };
+const LIMITS = { pair: 8, ip: Number(process.env.ROSHD_LOGIN_IP_LIMIT || 1000) };
 function bump(key) { const now = Date.now(); const x = attempts.get(key); attempts.set(key, x && x.until > now ? { ...x, count: x.count + 1 } : { count: 1, until: now + WINDOW }); }
 const blocked = (key, max) => { const a = attempts.get(key); return !!a && a.until > Date.now() && a.count >= max; };
 function throttle(ip, id) {
@@ -50,8 +50,13 @@ export default function register(r) {
     if (!id || !pw) fail(400, 'شناسه و رمز عبور را وارد کنید');
     const t = throttle(ctx.ip, id);
     let user;
-    if (role === 'parent') user = get(`SELECT * FROM users WHERE role='parent' AND mobile=?`, id);
-    else user = get(`SELECT * FROM users WHERE role=? AND (national_code=? OR username=?)`, role, id, id);
+    if (role === 'parent') {
+      const cleanPhone = normalizeIranianMobile(id);
+      user = get(`SELECT * FROM users WHERE role='parent' AND (mobile=? OR mobile=?)`, id, cleanPhone || id);
+    } else {
+      const cleanNc = normalizeNationalCode(id);
+      user = get(`SELECT * FROM users WHERE role=? AND (national_code=? OR national_code=? OR username=?)`, role, id, cleanNc || id, id);
+    }
     if (!user || !user.active || !(await verifyPasswordAsync(pw, user.pass_hash))) {
       t.failed();
       fail(401, role === 'parent' ? 'شماره موبایل یا رمز عبور اشتباه است' : 'نام کاربری/کد ملی یا رمز عبور اشتباه است');
@@ -85,7 +90,7 @@ export default function register(r) {
     if (u.role === 'student') {
       const s = studentInfo(u.id);
       const total = totalPoints(u.id);
-      out.student = { grade: s.grade, class_id: s.class_id, class_name: s.class_name, school: s.school, avatar: s.avatar, birthday: isBirthday(s.birth_date), points: total, level: levelOf(total) };
+      out.student = s ? { grade: s.grade, class_id: s.class_id, class_name: s.class_name, school: s.school, avatar: s.avatar, birthday: isBirthday(s.birth_date), points: total, level: levelOf(total) } : { grade: 7, class_id: null, class_name: null, school: '', avatar: 'sprout', birthday: false, points: total, level: levelOf(total) };
       out.fee = feeStatus(u.id);
     }
     if (u.role === 'parent') out.children = all(`SELECT u.id, u.full_name, s.grade, s.avatar, c.name class_name FROM parent_children pc JOIN users u ON u.id=pc.student_id JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE pc.parent_id=? ORDER BY s.grade`, u.id);

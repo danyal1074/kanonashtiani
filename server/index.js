@@ -107,7 +107,7 @@ async function handle(req, res) {
       }
       const ctx = {
         req, res, user, impersonator, params, query: Object.fromEntries(url.searchParams),
-        body: method !== 'GET' ? await readBody(req, pathname === '/api/admin/restore' ? 300 * 1024 * 1024 : undefined) : {},
+        body: method !== 'GET' ? await readBody(req, pathname === '/api/admin/restore' ? 300 * 1024 * 1024 : (pathname.includes('/barpa-exams/upload') ? 50 * 1024 * 1024 : undefined)) : {},
         ip, handled: false,
       };
       const out = await route.handler(ctx);

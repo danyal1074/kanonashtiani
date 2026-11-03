@@ -16,6 +16,7 @@ export const nav = (me) => [
   { path: '/invoices', icon: 'receipt', label: 'فاکتورهای دوره‌ای' },
   { path: '/sms-outbox', icon: 'message', label: 'صندوق پیامک' },
   { path: '/barpa', icon: 'trophy', label: 'کارنامه‌های برپا' },
+  { path: '/hoosh-studio', icon: 'sparkles', label: 'استودیوی هوش کمپلکس' },
   { path: '/manual-scores', icon: 'clipboard', label: 'نمرات مستمر کلاسی' },
   { path: '/att-log', icon: 'user-check', label: 'لاگ تغییر حضور' },
   { path: '/comprehensive', icon: 'trophy', label: 'آزمون جامع کانون' },
@@ -101,7 +102,7 @@ async function students(el) {
   const md = await meta();
   const q = { q: '', grade: '', class_id: '', school: '', offset: 0 };
   let rows = [], total = 0;
-  setHead('مدیریت دانش‌آموزان', 'ثبت‌نام، ویرایش، جستجو و فیلتر', '<button class="btn ghost sm" id="importSt">ثبت‌نام گروهی (CSV)</button> <button class="btn sm" id="addSt"> ثبت‌نام دانش‌آموز</button>');
+  setHead('مدیریت دانش‌آموزان', 'ثبت‌نام، ویرایش، جستجو و فیلتر', `<button class="btn ghost sm" id="printCreds">${icon('receipt', { size: 16 })} چاپ کارت‌های ورود</button> <button class="btn ghost sm" id="importSt">ثبت‌نام گروهی (CSV)</button> <button class="btn sm" id="addSt"> ثبت‌نام دانش‌آموز</button>`);
   el.innerHTML = `<div class="card" style="margin-bottom:16px"><div class="row wrap"><input class="input grow" id="q" placeholder=" جستجوی زنده نام یا کد ملی…" style="min-width:220px">
     <select class="input" id="fg" style="width:auto"><option value="">همه پایه‌ها</option>${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select>
     <select class="input" id="fc" style="width:auto"><option value="">همه کلاس‌ها</option></select>
@@ -157,6 +158,23 @@ async function students(el) {
     if (!dry) { metaCache = null; toast(`${fa(r.created)} دانش‌آموز ثبت شد`, 'ok'); load(); }
     return false;
   }
+  $('#printCreds').onclick = async () => {
+    const list = await api(`/api/manager/students/credentials?${new URLSearchParams({ grade: q.grade, class_id: q.class_id })}`);
+    if (!list.length) { toast('دانش‌آموزی برای چاپ یافت نشد'); return; }
+    const cards = list.map((st) => `
+      <div class="entry-card" style="page-break-inside:avoid;border:1px dashed #94a3b8;border-radius:12px;padding:12px 14px;background:#f8fafc;margin-bottom:12px;display:inline-block;width:calc(50% - 10px);box-sizing:border-box;vertical-align:top">
+        <div style="font-weight:bold;font-size:14px;color:#0f766e;border-bottom:1px solid #cbd5e1;padding-bottom:6px;margin-bottom:8px">
+          ${esc(st.full_name)} <span style="font-size:11px;font-weight:normal;color:#64748b">(${gradeName(st.grade)} • ${esc(st.class_name || 'بدون کلاس')})</span>
+        </div>
+        <div style="font-size:12px;line-height:1.8">
+          <div><b>ورود دانش‌آموز:</b> <code style="background:#e0f2fe;padding:2px 6px;border-radius:4px;color:#0369a1">${fa(st.student_user)}</code> | رمز اولیه: <code style="background:#e0f2fe;padding:2px 6px;border-radius:4px;color:#0369a1">${fa(st.student_pass)}</code></div>
+          <div><b>ورود والدین:</b> <code style="background:#fef3c7;padding:2px 6px;border-radius:4px;color:#92400e">${fa(st.parent_user)}</code> | رمز اولیه: <code style="background:#fef3c7;padding:2px 6px;border-radius:4px;color:#92400e">${fa(st.parent_pass)}</code></div>
+        </div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:6px;text-align:left">پلتفرم رشد نخبه • لطفاً پس از اولین ورود رمز عبور خود را تغییر دهید.</div>
+      </div>
+    `).join('');
+    printOverlay(`<div style="display:flex;flex-wrap:wrap;gap:16px;direction:rtl">${cards}</div>`, `کارت ورود ${fa(list.length)} دانش‌آموز`);
+  };
   $('#addSt').onclick = () => modal({ title: ' ثبت‌نام دانش‌آموز', wide: true, body: studentForm(md), onOpen: (m) => bindStudentForm(m, md), actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: ' ثبت‌نام', onClick: (m) => save(m) }] });
   on(el, 'click', '[data-edit]', (e, b) => {
     const s = rows.find((x) => x.id === Number(b.dataset.edit));
@@ -454,6 +472,7 @@ export const routes = [
   { path: '/sms-outbox', view: L.smsOutbox },
   { path: '/barpa', view: L.mgrBarpa },
   { path: '/barpa/:id', view: L.barpaView },
+  { path: '/hoosh-studio', view: L.hooshStudio },
   { path: '/manual-scores', view: L.mgrScores },
   { path: '/att-log', view: L.attLog },
   { path: '/comprehensive', view: comprehensive },

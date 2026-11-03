@@ -230,11 +230,27 @@ async function takeExam(el, { id }) {
 
 // ================= نتایج و کارنامه =================
 async function results(el) {
-  setHead('نتایج آزمون‌ها', 'آزمون‌های آنلاین، کاغذی و جامع کانون با درصد و رتبه');
-  const list = await api('/api/student/results');
+  setHead('نتایج آزمون‌ها', 'آزمون‌های آنلاین، کاغذی و کارنامه جامع برپا');
+  const [list, barpaList] = await Promise.all([
+    api('/api/student/results'),
+    api('/api/barpa-exams/reports').catch(() => [])
+  ]);
   const kindName = { online: ['آنلاین', 'blue'], paper: ['حضوری', 'orange'], comprehensive: ['جامع کانون', ''] };
   const chrono = [...list].reverse();
-  el.innerHTML = `${chrono.length > 1 ? `<div class="card" style="margin-bottom:18px"><div class="card-title"><span class="ib">${icon('trend', { size: 18 })}</span>روند درصد آزمون‌ها</div>${lineChart(chrono.map((r) => jdate(r.created_at, { year: false })), [{ name: 'درصد', color: '#0B5F66', values: chrono.map((r) => r.percent) }], { max: 100, height: 200 })}</div>` : ''}
+  el.innerHTML = `
+    ${barpaList.length ? `
+      <div class="card" style="margin-bottom:18px;background:linear-gradient(135deg, #f0f7ff 0%, #e6efff 100%);border:1px solid #bfdbfe">
+        <div class="row between" style="align-items:center;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="ib blue">${icon('trophy', { size: 20 })}</span>
+            <b style="color:#1e40af;font-size:15px">کارنامه‌های آزمون جامع برپا (همراه با پاسخ‌برگ ۱۲۰ تایی)</b>
+          </div>
+          <span class="badge blue">${fa(barpaList.length)} کارنامه</span>
+        </div>
+        ${L.barpaList(barpaList)}
+      </div>
+    ` : ''}
+    ${chrono.length > 1 ? `<div class="card" style="margin-bottom:18px"><div class="card-title"><span class="ib">${icon('trend', { size: 18 })}</span>روند درصد آزمون‌ها</div>${lineChart(chrono.map((r) => jdate(r.created_at, { year: false })), [{ name: 'درصد', color: '#0B5F66', values: chrono.map((r) => r.percent) }], { max: 100, height: 200 })}</div>` : ''}
     <div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>آزمون</th><th>نوع</th><th>تاریخ</th><th>درست/غلط/نزده</th><th>درصد</th><th>رتبه</th><th></th></tr></thead><tbody>
     ${list.map((r) => `<tr class="click" data-href="#/results/${r.id}"><td class="bold">${subjIcon(r.subject)} ${esc(r.title)}</td><td><span class="badge ${kindName[r.kind][1]}">${kindName[r.kind][0]}</span></td><td>${jdate(r.created_at)}</td>
       <td class="num"><span class="pos">${fa(r.correct)}</span> / <span class="neg">${fa(r.wrong)}</span> / ${fa(r.blank)}</td><td><b>${pct(r.percent)}</b></td><td>${icon('award', { size: 16 })} ${fa(r.rank)} از ${fa(r.of)}</td><td><a class="btn ghost sm" href="#/results/${r.id}">کارنامه</a></td></tr>`).join('') || `<tr><td colspan="7">${empty('inbox', 'هنوز نتیجه‌ای نداری')}</td></tr>`}

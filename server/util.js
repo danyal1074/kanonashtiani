@@ -151,3 +151,35 @@ export function isValidNationalCode(code) {
 }
 export const toEnDigits = (s) => String(s ?? '').replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
 export const clampStr = (s, n = 500) => String(s ?? '').trim().slice(0, n);
+
+// استانداردسازی شماره همراه ایرانی (پشتیبانی از +98، 0098، بدون صفر، فاصله‌ها و ارقام فارسی)
+export function normalizeIranianMobile(phone) {
+  let p = toEnDigits(String(phone || '')).replace(/\D/g, '');
+  if (p.startsWith('0098')) p = p.slice(4);
+  else if (p.startsWith('98')) p = p.slice(2);
+  if (p.length === 10 && p.startsWith('9')) p = '0' + p;
+  return /^09\d{9}$/.test(p) ? p : null;
+}
+
+// استانداردسازی کد ملی (حذف فاصله و خط‌تیره، بازگردانی صفرهای ابتدایی حذف‌شده توسط اکسل)
+export function normalizeNationalCode(code) {
+  let nc = toEnDigits(String(code || '')).replace(/\D/g, '');
+  if (nc.length >= 7 && nc.length < 10) nc = nc.padStart(10, '0');
+  return nc;
+}
+
+// پارس و اعتبارسنجی تاریخ تولد (پشتیبانی از فرمت‌های YYYY/MM/DD و DD/MM/YYYY، با یا بدون صفر، شمسی یا میلادی)
+export function parseBirthDate(v) {
+  v = toEnDigits(String(v || '')).replace(/\s+/g, '');
+  if (!v) return null;
+  let m = /^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/.exec(v);
+  if (!m) {
+    m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/.exec(v);
+    if (m) m = [, m[3], m[2], m[1]];
+  }
+  if (!m) throw new Error('تاریخ تولد باید مانند ۱۳۹۳/۰۵/۱۲ یا ۱۳۹۳-۰۵-۱۲ باشد');
+  let [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) throw new Error('تاریخ تولد نامعتبر است');
+  if (y < 1700) [y, mo, d] = j2g(y, mo, d);
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}

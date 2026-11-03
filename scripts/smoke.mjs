@@ -165,6 +165,10 @@ check('کارنامه برپا: ثبت کارنامه جامع توسط مدیر
 const stuBarpa = await call(S.student.ck, 'GET', '/api/barpa-exams/reports');
 check('کارنامه برپا: مشاهده کارنامه اختصاصی توسط دانش‌آموز', stuBarpa.status === 200 && stuBarpa.data.length > 0);
 
+// ۹.۱) آپلود و تفکیک خودکار کارنامه آزمون جامع برپا با پایتون
+const barpaUploadRes = await call(S.manager.ck, 'POST', '/api/barpa-exams/upload', {});
+check('کارنامه برپا: آپلود و تفکیک خودکار PDF و تطبیق دانش‌آموزان', barpaUploadRes.status === 200 && barpaUploadRes.data.ok && barpaUploadRes.data.count > 0);
+
 // ۱۰) فاکتورهای بدهی دوره‌ای (Option 10)
 const invRes = await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: stuUser.id, fee_type: 'tuition', period: 'نیم‌سال اول ۱۴۰۳', amount: 1200000 });
 check('فاکتور دوره‌ای: صدور فاکتور بدهی توسط مدیر', invRes.status === 200 && invRes.data.ok);

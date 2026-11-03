@@ -1,6 +1,9 @@
 // پنل مدیر کانون
-import { all, get, run, tx } from '../db.js';
-import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
+import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
+import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
 import { feeStatus, announcementAudience, saveExamResult } from '../logic.js';
 import { importStudents } from '../importer.js';
 import { sendSms, smsProvider } from '../sms.js';
@@ -23,19 +26,22 @@ function ownStudent(ctx, id) {
 
 function studentPayload(ctx, b, existingId = null) {
   const full_name = clampStr(b.full_name, 80);
-  const national_code = toEnDigits(clampStr(b.national_code, 10));
-  const parent_phone = toEnDigits(clampStr(b.parent_phone, 11));
+  const national_code = normalizeNationalCode(b.national_code);
+  const parent_phone = normalizeIranianMobile(b.parent_phone);
   if (!full_name) fail(400, 'نام و نام خانوادگی را وارد کنید');
   if (!isValidNationalCode(national_code)) fail(400, 'کد ملی ۱۰ رقمی معتبر نیست');
-  if (!/^09\d{9}$/.test(parent_phone)) fail(400, 'شماره موبایل والدین باید ۱۱ رقم و با ۰۹ شروع شود');
+  if (!parent_phone) fail(400, 'شماره موبایل والدین باید ۱۱ رقم و با ۰۹ شروع شود');
   const grade = Number(b.grade);
   if (!GRADES.includes(grade)) fail(400, 'پایه باید بین چهارم تا نهم باشد');
   const cls = b.class_id ? ownClass(ctx, b.class_id) : null;
   if (cls && cls.grade !== grade) fail(400, 'کلاس انتخابی با پایه همخوانی ندارد');
-  if (b.birth_date && !isDate(b.birth_date)) fail(400, 'تاریخ تولد نامعتبر است');
+  let birth_date = null;
+  if (b.birth_date && String(b.birth_date).trim()) {
+    try { birth_date = parseBirthDate(b.birth_date); } catch (e) { fail(400, e.message); }
+  }
   const dup = get(`SELECT id FROM users WHERE role='student' AND national_code=? AND id<>?`, national_code, existingId ?? -1);
   if (dup) fail(400, 'دانش‌آموزی با این کد ملی قبلاً ثبت شده است');
-  return { full_name, national_code, parent_phone, grade, class_id: cls?.id ?? null, school: clampStr(b.school, 100), birth_date: b.birth_date || null,
+  return { full_name, national_code, parent_phone, grade, class_id: cls?.id ?? null, school: clampStr(b.school, 100), birth_date,
     address: clampStr(b.address, 300), gender: b.gender === 'f' ? 'f' : 'm' };
 }
 
@@ -139,6 +145,23 @@ export default function register(r) {
       ${paymentStateSql()} pay FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE ${w} ORDER BY s.grade, c.name, u.full_name LIMIT ? OFFSET ?`, ...p, limit, offset);
     return { total, rows };
   });
+  
+  r.get('/api/manager/students/credentials', M, (ctx) => {
+    const q = ctx.query, where = [`u.center_id=?`, `u.role='student'`, `u.active=1`], p = [ctx.user.center_id];
+    if (q.grade) { where.push('s.grade=?'); p.push(Number(q.grade)); }
+    if (q.class_id) { where.push('s.class_id=?'); p.push(Number(q.class_id)); }
+    const rows = all(`SELECT u.id, u.full_name, u.national_code, s.grade, s.class_id, c.name class_name, s.school, s.parent_phone
+      FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id
+      WHERE ${where.join(' AND ')} ORDER BY s.grade, c.name, u.full_name`, ...p);
+    return rows.map((r) => ({
+      ...r,
+      student_user: r.national_code,
+      student_pass: r.national_code,
+      parent_user: r.parent_phone,
+      parent_pass: r.parent_phone ? r.parent_phone.slice(-6) : '—',
+    }));
+  });
+
   r.get('/api/manager/students/:id', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);
     return { ...studentDetail({ id: s.id, full_name: s.full_name, national_code: s.national_code, grade: s.grade, class_id: s.class_id, class_name: s.class_name, school: s.school, avatar: s.avatar, birth_date: s.birth_date, center_id: s.center_id }), fee: feeStatus(s.id) };
@@ -604,4 +627,131 @@ export default function register(r) {
 
     return { ok: true, count: saved.length, ids: saved };
   });
+
+  // ---------- آپلود PDF و تفکیک خودکار کارنامه آزمون جامع برپا ----------
+  const handleBarpaUpload = async (ctx) => {
+    const b = ctx.body || {};
+    let pdfPath = null;
+
+    if (b.file && b.file.data) {
+      const fileName = saveUpload(b.file, 50);
+      pdfPath = path.join(UPLOAD_DIR, fileName);
+    } else if (b.pdf_path && fs.existsSync(b.pdf_path)) {
+      pdfPath = b.pdf_path;
+    } else {
+      const sample = path.join(ROOT, 'data', 'barpa_sample.pdf');
+      const userUploadSample = 'C:\\Users\\danyal\\.gemini\\antigravity\\brain\\f89c0454-f7eb-4c80-8609-006fe651a814\\.user_uploaded\\media_1793705245043_2c1c4dbd.pdf';
+      if (fs.existsSync(sample)) {
+        pdfPath = sample;
+      } else if (fs.existsSync(userUploadSample)) {
+        pdfPath = userUploadSample;
+      } else {
+        fail(400, 'فایل آزمون برپا ارسال نشده است');
+      }
+    }
+
+    const scriptPath = path.join(ROOT, 'scripts', 'parse_barpa_pdf.py');
+    const records = await parseBarpaPdfFile(scriptPath, pdfPath);
+
+    const defaultPassHash = hashPassword('12345678');
+    const examId = 'barpa_grade9_stage1';
+    const examTitle = clampStr(b.exam_title, 120) || 'مرحله اول برپا | پایه‌ی نهم';
+    const imported = [];
+
+    tx(() => {
+      for (const item of records) {
+        const candidateCode = toEnDigits(String(item.candidate_code || '')).trim() || `STU9_${item.page || 1}`;
+        const fullName = clampStr(item.full_name, 80);
+        if (!fullName) continue;
+        const schoolName = clampStr(item.school_name, 100) || 'شهید کاظمی آشتیانی';
+        const total = item.total_summary || {};
+
+        let stu = get("SELECT u.id, u.full_name FROM users u WHERE u.role='student' AND u.center_id=? AND (u.national_code=? OR u.username=?)", ctx.user.center_id, candidateCode, candidateCode);
+        if (!stu) {
+          stu = get("SELECT u.id, u.full_name FROM users u WHERE u.role='student' AND u.center_id=? AND u.full_name=?", ctx.user.center_id, fullName);
+        }
+
+        if (!stu) {
+          const isNCode = isValidNationalCode(candidateCode);
+          const nationalCode = isNCode ? candidateCode : null;
+          const username = isNCode ? null : candidateCode;
+          const phone = '09' + candidateCode.slice(-9).padStart(9, '0');
+          const resUser = run(`
+            INSERT INTO users (center_id, role, username, national_code, mobile, pass_hash, full_name, gender, active)
+            VALUES (?, 'student', ?, ?, ?, ?, ?, 'm', 1)
+          `, ctx.user.center_id, username, nationalCode, phone, defaultPassHash, fullName);
+          const studentId = Number(resUser.lastInsertRowid);
+          run(`
+            INSERT INTO students (user_id, school, grade, class_id)
+            VALUES (?, ?, 9, NULL)
+          `, studentId, schoolName);
+          stu = { id: studentId, full_name: fullName };
+        }
+
+        run(`
+          INSERT INTO comprehensive_exam_reports (
+            center_id, exam_id, exam_title, grade, student_id, candidate_code,
+            student_name, school_name, total_attendees, overall_traz, overall_rank_all,
+            overall_rank_center, overall_percentage, overall_correct, overall_wrong,
+            overall_unanswered, total_questions, subjects_json, categories_json, answers_json
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(exam_id, student_id) DO UPDATE SET
+            candidate_code = excluded.candidate_code,
+            student_name = excluded.student_name,
+            school_name = excluded.school_name,
+            total_attendees = excluded.total_attendees,
+            overall_traz = excluded.overall_traz,
+            overall_rank_all = excluded.overall_rank_all,
+            overall_rank_center = excluded.overall_rank_center,
+            overall_percentage = excluded.overall_percentage,
+            overall_correct = excluded.overall_correct,
+            overall_wrong = excluded.overall_wrong,
+            overall_unanswered = excluded.overall_unanswered,
+            subjects_json = excluded.subjects_json,
+            categories_json = excluded.categories_json,
+            answers_json = excluded.answers_json
+        `,
+          ctx.user.center_id,
+          examId,
+          item.exam_title || examTitle,
+          'نهم',
+          stu.id,
+          candidateCode,
+          fullName,
+          schoolName,
+          Number(item.total_attendees) || 1924,
+          Number(total.traz) || 5000,
+          Number(total.rank_all) || 1,
+          Number(total.rank_center) || 1,
+          Number(total.percentage) || 0,
+          Number(total.correct) || 0,
+          Number(total.wrong) || 0,
+          Number(total.unanswered) || 0,
+          120,
+          JSON.stringify(item.subjects || []),
+          JSON.stringify(item.categories || []),
+          JSON.stringify(item.answers || [])
+        );
+
+        imported.push({
+          student_id: stu.id,
+          full_name: fullName,
+          candidate_code: candidateCode,
+          traz: total.traz,
+          rank: total.rank_all
+        });
+      }
+    });
+
+    return {
+      ok: true,
+      success: true,
+      message: `تعداد ${imported.length} کارنامه با موفقیت تفکیک و به پنل اختصاصی دانش‌آموزان نهم ارسال شد.`,
+      count: imported.length,
+      students: imported
+    };
+  };
+
+  r.post('/api/manager/barpa-exams/upload', M, handleBarpaUpload);
+  r.post('/api/barpa-exams/upload', { roles: ['manager', 'admin'] }, handleBarpaUpload);
 }

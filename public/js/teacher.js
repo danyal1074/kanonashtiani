@@ -10,6 +10,7 @@ export const nav = (me) => [
   { path: '/attendance', icon: 'user-check', label: 'حضور و غیاب' },
   { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
   { path: '/exams', icon: 'file-check', label: 'آزمون و اسکن پاسخ‌برگ' },
+  { path: '/hoosh-studio', icon: 'sparkles', label: 'استودیوی هوش کمپلکس' },
   { path: '/students', icon: 'users', label: 'عملکرد دانش‌آموزان' },
   { path: '/plans', icon: 'timer', label: 'برنامه پومودوروی هفتگی' },
   { path: '/materials', icon: 'video', label: 'ویدیو و جزوه' },
@@ -165,7 +166,7 @@ async function asgReport(el) {
 // ================= آزمون‌ها =================
 async function exams(el) {
   const classes = await myClasses();
-  setHead('آزمون‌ها', 'آزمون آنلاین با تصحیح خودکار یا آزمون کاغذی با اسکن پاسخ‌برگ', '<button class="btn sm" id="newExam"> آزمون جدید</button>');
+  setHead('آزمون‌ها', 'آزمون آنلاین با تصحیح خودکار یا آزمون کاغذی با اسکن پاسخ‌برگ', `<div class="row" style="gap:6px"><a class="btn sm soft" href="#/hoosh-studio"><span class="ib sun" style="display:inline-flex">${icon('sparkles', { size: 14 })}</span> استودیوی هوش کمپلکس</a><button class="btn sm" id="newExam">+ آزمون جدید</button></div>`);
   const list = await api('/api/teacher/exams');
   el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>عنوان</th><th>نوع</th><th>پایه/کلاس</th><th>سؤال</th><th>شرکت‌کننده</th><th>میانگین</th><th>تاریخ</th></tr></thead><tbody>
     ${list.map((e) => `<tr class="click" data-href="#/exams/${e.id}"><td class="bold">${subjIcon(e.subject)} ${esc(e.title)}</td><td><span class="badge ${e.kind === 'online' ? 'blue' : 'orange'}">${e.kind === 'online' ? ' آنلاین' : ' کاغذی'}</span></td>
@@ -356,6 +357,7 @@ export const routes = [
   { path: '/assignments/report', view: asgReport },
   { path: '/exams', view: exams },
   { path: '/exams/:id', view: examDetail },
+  { path: '/hoosh-studio', view: L.hooshStudio },
   { path: '/students', view: students },
   { path: '/students/:id', view: studentDetail },
   { path: '/plans', view: plans },

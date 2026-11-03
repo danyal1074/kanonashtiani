@@ -261,8 +261,8 @@ export function runPenaltyJob() {
     // ۴) پرداخت نشدن حق عضویت پس از مهلت
     const fees = all(`SELECT center_id, grade, lock_date FROM fee_settings WHERE lock_date IS NOT NULL AND lock_date < ? AND amount>0`, today);
     for (const f of fees) {
-      const unpaid = all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND s.grade=? AND u.active=1
-        AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved')`, f.center_id, f.grade);
+      const unpaid = all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND s.grade=? AND u.active=1 AND date(u.created_at) <= ?
+        AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved')`, f.center_id, f.grade, f.lock_date);
       for (const u of unpaid) if (addPoints(u.id, -20, 'حق عضویت', 'پرداخت نشدن حق عضویت پس از پایان مهلت', `fee:${f.lock_date}`)) applied++;
     }
   });

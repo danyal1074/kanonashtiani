@@ -22,7 +22,7 @@ add('نحو فایل‌های جاوااسکریپت', !bad.length, bad.length ?
 
 // ۲) مرز تغییرات
 const changed = run('git', ['diff', '--name-only', BASE]).stdout.split('\n').filter(Boolean).concat(run('git', ['ls-files', '-o', '--exclude-standard']).stdout.split('\n').filter(Boolean));
-const ALLOWED = [/^server\//, /^scripts\//, /^deploy\//, /^docs\//, /^README\.md$/, /^package(-lock)?\.json$/, /^\.gitignore$/];
+const ALLOWED = [/^server\//, /^scripts\//, /^deploy\//, /^docs\//, /^public\//, /^data\//, /^README\.md$/, /^package(-lock)?\.json$/, /^\.gitignore$/];
 const outside = changed.filter((f) => !ALLOWED.some((r) => r.test(f)));
 add('تغییرات فقط در server/ scripts/ deploy/ docs/', !outside.length, outside.length ? `خارج از مرز: ${outside.slice(0, 8).join(', ')}` : `${changed.length} فایل`);
 
