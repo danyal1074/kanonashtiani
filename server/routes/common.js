@@ -1,5 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { CURATED_QUESTIONS } from '../self_exam.js';
 // مسیرهای مشترک: ورود، پروفایل، اطلاعیه، پیام‌رسان، صفحه عمومی کانون و فروشگاه
-import { all, get, run, tx } from '../db.js';
+import { all, get, run, tx, ROOT } from '../db.js';
 import { COOKIE, isHttps } from '../http.js';
 import { fail, hashPasswordAsync, verifyPasswordAsync, needsRehash, signToken, ymd, jMonthOf, toEnDigits, clampStr, randomCode, saveUpload } from '../util.js';
 import { feeStatus, announcementsFor, contactsOf, levelOf, totalPoints } from '../logic.js';
@@ -211,4 +214,110 @@ export default function register(r) {
   });
   r.get('/api/shop/orders', { roles: ['student', 'parent'] }, (ctx) =>
     all('SELECT id, items, total, discount, tracking_code, created_at FROM orders WHERE user_id=? ORDER BY id DESC', ctx.user.id).map((o) => ({ ...o, items: JSON.parse(o.items) })));
+
+  // ---------- بانک کتاب‌ها و آزمون‌های هوش (Option 2) ----------
+  r.get('/api/exam-books', { allowLocked: true }, (ctx) => {
+    return all('SELECT * FROM exam_books WHERE center_id=? OR center_id IS NULL ORDER BY is_custom ASC, id ASC', ctx.user.center_id);
+  });
+  r.get('/api/exam-books/:id/topics', { allowLocked: true }, (ctx) => {
+    const id = ctx.params.id;
+    if (id === 'hoosh_6') {
+      const p = path.join(ROOT, 'server', 'data', 'hoosh_topics.json');
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+    } else if (id === 'hoosh_8_9') {
+      const p = path.join(ROOT, 'server', 'data', 'hoosh_topics_8_9.json');
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+    }
+    const book = get('SELECT * FROM exam_books WHERE id=?', id);
+    if (!book) fail(404, 'کتاب آزمون یافت نشد');
+    if (book.topics_json) {
+      try { return JSON.parse(book.topics_json); } catch { /* */ }
+    }
+    const count = book.topics_count || 10;
+    const sample = [];
+    for (let i = 1; i <= count; i++) {
+      sample.push({
+        id: i,
+        title: `مبحث ${i}: فصل آزمون تحلیلی`,
+        sectionId: 1,
+        sectionTitle: 'سؤالات استخراج‌شده کتاب',
+        chapterId: 1,
+        chapterTitle: 'بخش تمرینات و آزمون‌ها',
+        bookStartPage: i * 2,
+        bookEndPage: i * 2 + 1,
+        pageCount: 2
+      });
+    }
+    return sample;
+  });
+  r.get('/api/exam-books/:id/questions', { allowLocked: true }, (ctx) => {
+    const topicId = Number(ctx.query.topic_id) || 1;
+    return CURATED_QUESTIONS.slice(0, 5).map((q, idx) => ({
+      id: topicId * 100 + idx + 1,
+      topic_id: topicId,
+      book_id: ctx.params.id,
+      text: q.text,
+      options: q.options,
+      subject: q.subject,
+      explanation: q.explanation
+    }));
+  });
+
+  // ---------- مشاور تحصیلی کانون (Option 3) ----------
+  r.get('/api/counselor', { allowLocked: true }, (ctx) => {
+    let c = get(`SELECT id, full_name, role FROM users WHERE center_id=? AND role='manager' AND active=1 LIMIT 1`, ctx.user.center_id);
+    if (!c) c = { id: 1, full_name: 'مشاور کانون رشد', role: 'manager' };
+    return {
+      id: c.id,
+      full_name: c.full_name,
+      role: 'counselor',
+      title: 'مشاور ارشد تحصیلی و استعدادپروری',
+      bio: 'پاسخگوی سوالات آموزشی، تحلیل آزمون‌های برپا، هدایت تحصیلی و حل چالش‌های یادگیری شما',
+      is_online: true,
+      center_id: ctx.user.center_id
+    };
+  });
+  r.get('/api/counselor/quick-chips', { allowLocked: true }, () => [
+    { id: 1, label: 'برنامه‌ریزی برای آزمون برپا', prompt: 'سلام استاد، لطفاً برای برنامه‌ریزی آزمون جامع مرحله بعد راهنمایی‌ام کنید.' },
+    { id: 2, label: 'روش مطالعه و تست‌زنی هوش', prompt: 'سلام، برای مباحث هوش تحلیلی و کلامی چه روش تمرین و تست‌زنی را پیشنهاد می‌کنید؟' },
+    { id: 3, label: 'افت نمرات مستمر و بی‌انگیزگی', prompt: 'استاد، اخیراً احساس خستگی و افت نمره در کلاس‌ها دارم، چطور انگیزه پیدا کنم؟' },
+    { id: 4, label: 'درخواست مشاوره آنلاین / تلفنی', prompt: 'سلام و احترام، مایل هستم یک جلسه مشاوره تحصیلی برای بررسی روند پیشرفت داشته باشم.' }
+  ]);
+
+  // ---------- کارنامه رسمی آزمون جامع «طرح برپا» (Option 9) ----------
+  r.get('/api/barpa-exams/reports', { allowLocked: true }, (ctx) => {
+    let rows;
+    if (ctx.user.role === 'student') {
+      rows = all('SELECT * FROM comprehensive_exam_reports WHERE student_id=? ORDER BY id DESC', ctx.user.id);
+    } else if (ctx.user.role === 'parent') {
+      const children = all('SELECT child_id FROM parent_children WHERE parent_id=?', ctx.user.id).map((x) => x.child_id);
+      if (!children.length) return [];
+      rows = all(`SELECT * FROM comprehensive_exam_reports WHERE student_id IN (${children.map(() => '?').join(',')}) ORDER BY id DESC`, ...children);
+    } else {
+      rows = all('SELECT r.*, u.full_name student_name, u.mobile FROM comprehensive_exam_reports r JOIN users u ON u.id=r.student_id WHERE r.center_id=? OR r.center_id IS NULL ORDER BY r.overall_traz DESC', ctx.user.center_id);
+    }
+    return rows.map((r) => ({
+      ...r,
+      subjects: JSON.parse(r.subjects_json || '[]'),
+      categories: JSON.parse(r.categories_json || '[]'),
+      answers: JSON.parse(r.answers_json || '[]')
+    }));
+  });
+  r.get('/api/barpa-exams/reports/:id', { allowLocked: true }, (ctx) => {
+    const row = get('SELECT * FROM comprehensive_exam_reports WHERE id=?', Number(ctx.params.id));
+    if (!row) fail(404, 'کارنامه آزمون جامع یافت نشد');
+    if (ctx.user.role === 'student' && row.student_id !== ctx.user.id) {
+      fail(403, 'دسترسی غیرمجاز به این کارنامه');
+    }
+    if (ctx.user.role === 'parent') {
+      const allowed = all('SELECT child_id FROM parent_children WHERE parent_id=?', ctx.user.id).map((x) => x.child_id);
+      if (!allowed.includes(row.student_id)) fail(403, 'دسترسی غیرمجاز به کارنامه');
+    }
+    return {
+      ...row,
+      subjects: JSON.parse(row.subjects_json || '[]'),
+      categories: JSON.parse(row.categories_json || '[]'),
+      answers: JSON.parse(row.answers_json || '[]')
+    };
+  });
 }

@@ -56,4 +56,39 @@ export default function register(r) {
       studyDays: all(`SELECT date, SUM(minutes) m FROM pomodoros WHERE student_id=? AND date>=date('now','-13 days') GROUP BY date ORDER BY date`, s.user_id),
     };
   });
+
+  r.get('/api/parent/children/:id/manual-scores', P, (ctx) => {
+    const s = ownChild(ctx);
+    return all(`
+      SELECT m.id, m.subject, m.title, m.score, m.created_at, u.full_name teacher_name, c.name class_name
+      FROM manual_scores m
+      JOIN users u ON u.id=m.teacher_id
+      LEFT JOIN classes c ON c.id=m.class_id
+      WHERE m.student_id=? ORDER BY m.id DESC
+    `, s.user_id);
+  });
+
+  r.get('/api/parent/children/:id/invoices', P, (ctx) => {
+    const s = ownChild(ctx);
+    return all(`
+      SELECT i.id, i.fee_type, i.period, i.amount, i.created_at,
+             COALESCE((SELECT SUM(amount) FROM payments p WHERE p.invoice_id=i.id AND p.status='approved'), 0) paid
+      FROM fee_invoices i
+      WHERE i.student_id=? ORDER BY i.id DESC
+    `, s.user_id).map((r) => ({
+      ...r,
+      remaining: Math.max(0, r.amount - r.paid),
+      status: r.paid >= r.amount ? 'settled' : (r.paid > 0 ? 'partially_paid' : 'unpaid')
+    }));
+  });
+
+  r.get('/api/parent/children/:id/barpa-reports', P, (ctx) => {
+    const s = ownChild(ctx);
+    return all('SELECT * FROM comprehensive_exam_reports WHERE student_id=? ORDER BY id DESC', s.user_id).map((r) => ({
+      ...r,
+      subjects: JSON.parse(r.subjects_json || '[]'),
+      categories: JSON.parse(r.categories_json || '[]'),
+      answers: JSON.parse(r.answers_json || '[]')
+    }));
+  });
 }

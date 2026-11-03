@@ -93,7 +93,7 @@ export default function register(r) {
       await Promise.all(rows.slice(i, i + 5).map(async (a) => {
         const [jy, jm, jd] = jMonthOf(a.date);
         const text = `${center.name}: ${a.full_name} امروز (${jy}/${jm}/${jd}) در کلاس ${a.class_name} غایب بود.`;
-        const r = await sendSms(a.parent_phone, text);
+        const r = await sendSms(a.parent_phone, text, { center_id: cid, student_id: a.user_id || a.id, message_type: 'absence' });
         if (r.ok) { run('UPDATE attendance SET sms_sent=1 WHERE id=?', a.id); result.sent++; } else { result.failed++; if (result.errors.length < 3) result.errors.push(r.error); }
       }));
     }
@@ -435,5 +435,173 @@ export default function register(r) {
   r.del('/api/manager/discount-codes/:code', M, (ctx) => {
     run('DELETE FROM discount_codes WHERE center_id=? AND code=?', ctx.user.center_id, ctx.params.code);
     return { ok: true };
+  });
+
+  // ---------- برگشت رسید تأییدشده با سند اصلاحی (Option 11) ----------
+  r.post('/api/manager/receipts/:id/reverse', M, (ctx) => {
+    const p = get(`SELECT p.*, u.full_name FROM payments p JOIN users u ON u.id=p.student_id WHERE p.id=? AND u.center_id=?`, Number(ctx.params.id), ctx.user.center_id);
+    if (!p) fail(404, 'رسید یافت نشد');
+    if (p.status !== 'approved') fail(400, 'فقط رسیدهای تأییدشده قابل برگشت هستند');
+    if (p.reversed_at) fail(400, 'این رسید قبلاً برگشت خورده و سند اصلاحی صادر شده است');
+
+    const reason = clampStr(ctx.body.reason, 200) || 'برگشت توسط مدیریت کانون';
+
+    tx(() => {
+      run(`UPDATE payments SET status='rejected', reversed_at=datetime('now'), reversed_by=?, reverse_reason=?, reject_reason=? WHERE id=?`,
+        ctx.user.id, reason, `برگشت رسید تأییدشده: ${reason}`, p.id);
+      run(`INSERT INTO transactions (center_id, type, amount, title, category, date, ref) VALUES (?,?,?,?,?,?,?)`,
+        ctx.user.center_id, 'expense', p.amount, `سند اصلاحی برگشت رسید - ${p.full_name}`, 'اصلاحیه', ymd(), `reversal:${p.id}`);
+    });
+
+    return { ok: true, id: p.id, reversed: true, reason };
+  });
+
+  // ---------- فاکتورهای بدهی دوره‌ای (Option 10) ----------
+  r.get('/api/manager/invoices', M, (ctx) => {
+    return all(`
+      SELECT i.*, u.full_name, c.name class_name, s.grade,
+             COALESCE((SELECT SUM(amount) FROM payments p WHERE p.invoice_id=i.id AND p.status='approved'), 0) paid
+      FROM fee_invoices i
+      JOIN users u ON u.id=i.student_id
+      LEFT JOIN students s ON s.user_id=u.id
+      LEFT JOIN classes c ON c.id=s.class_id
+      WHERE i.center_id=? ORDER BY i.id DESC
+    `, ctx.user.center_id).map((r) => ({
+      ...r,
+      remaining: Math.max(0, r.amount - r.paid),
+      status: r.paid >= r.amount ? 'settled' : (r.paid > 0 ? 'partially_paid' : 'unpaid')
+    }));
+  });
+
+  r.post('/api/manager/invoices', M, (ctx) => {
+    const b = ctx.body;
+    const fee_type = clampStr(b.fee_type, 40) || 'tuition';
+    const period = clampStr(b.period, 40);
+    const amount = Number(b.amount);
+    if (!period || !amount || amount <= 0) fail(400, 'دوره و مبلغ معتبر فاکتور الزامی است');
+
+    const studentIds = [];
+    if (b.class_id) {
+      const studs = all('SELECT user_id FROM students WHERE class_id=?', Number(b.class_id));
+      for (const s of studs) studentIds.push(s.user_id);
+    } else if (b.student_id) {
+      studentIds.push(Number(b.student_id));
+    }
+    if (!studentIds.length) fail(400, 'دانش‌آموز یا کلاس انتخاب نشده است');
+
+    const createdIds = [];
+    tx(() => {
+      for (const sid of studentIds) {
+        const res = run(`
+          INSERT INTO fee_invoices (center_id, student_id, fee_type, period, amount)
+          VALUES (?,?,?,?,?)
+          ON CONFLICT(student_id, fee_type, period) DO UPDATE SET amount=excluded.amount
+        `, ctx.user.center_id, sid, fee_type, period, amount);
+        createdIds.push(res.lastInsertRowid);
+      }
+    });
+
+    return { ok: true, count: createdIds.length, ids: createdIds };
+  });
+
+  // ---------- صندوق خروجی و صف پیامک‌ها (Option 12) ----------
+  r.get('/api/manager/sms-outbox', M, (ctx) => {
+    return all(`
+      SELECT o.*, u.full_name student_name
+      FROM sms_outbox o
+      LEFT JOIN users u ON u.id=o.student_id
+      WHERE o.center_id=? ORDER BY o.id DESC LIMIT 200
+    `, ctx.user.center_id);
+  });
+
+  r.post('/api/manager/sms-outbox/:id/retry', M, async (ctx) => {
+    const msg = get('SELECT * FROM sms_outbox WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id);
+    if (!msg) fail(404, 'پیامک در صندوق خروجی یافت نشد');
+    const r = await sendSms(msg.recipient_phone, msg.content);
+    if (r.ok) {
+      run(`UPDATE sms_outbox SET status='sent', sent_at=datetime('now'), error_message=NULL WHERE id=?`, msg.id);
+      return { ok: true, status: 'sent' };
+    } else {
+      run(`UPDATE sms_outbox SET status='failed', error_message=? WHERE id=?`, r.error, msg.id);
+      return { ok: false, status: 'failed', error: r.error };
+    }
+  });
+
+  // ---------- لاگ تغییرات حضور و غیاب برای مدیر (Option 7) ----------
+  r.get('/api/manager/attendance/changes', M, (ctx) => {
+    return all(`
+      SELECT ch.*, u.full_name student_name, actor.full_name actor_name, c.name class_name
+      FROM attendance_changes ch
+      JOIN users u ON u.id=ch.student_id
+      JOIN users actor ON actor.id=ch.actor_id
+      LEFT JOIN classes c ON c.id=ch.session_id
+      WHERE u.center_id=? ORDER BY ch.id DESC LIMIT 200
+    `, ctx.user.center_id);
+  });
+
+  // ---------- نمرات مستمر دستی کلاسی برای مدیر (Option 8) ----------
+  r.get('/api/manager/manual-scores', M, (ctx) => {
+    return all(`
+      SELECT m.*, u.full_name student_name, t.full_name teacher_name, c.name class_name
+      FROM manual_scores m
+      JOIN users u ON u.id=m.student_id
+      JOIN users t ON t.id=m.teacher_id
+      LEFT JOIN classes c ON c.id=m.class_id
+      WHERE m.center_id=? ORDER BY m.id DESC LIMIT 300
+    `, ctx.user.center_id);
+  });
+
+  // ---------- کارنامه رسمی آزمون جامع «طرح برپا» برای مدیر (Option 9) ----------
+  r.post('/api/manager/barpa-exams/reports', M, (ctx) => {
+    const b = ctx.body;
+    const exam_id = clampStr(b.exam_id, 80) || 'barpa_comprehensive';
+    const exam_title = clampStr(b.exam_title, 120) || 'آزمون جامع طرح برپا';
+    const grade = String(b.grade || 'نهم');
+    const records = Array.isArray(b.records) ? b.records : (b.student_id ? [b] : []);
+    if (!records.length) fail(400, 'حداقل یک کارنامه ارسال کنید');
+
+    const saved = [];
+    tx(() => {
+      for (const rec of records) {
+        const sid = Number(rec.student_id);
+        const stu = get('SELECT id, full_name, school FROM users u LEFT JOIN students s ON s.user_id=u.id WHERE u.id=? AND u.center_id=?', sid, ctx.user.center_id);
+        if (!stu) continue;
+
+        const res = run(`
+          INSERT INTO comprehensive_exam_reports (
+            center_id, exam_id, exam_title, grade, student_id, candidate_code,
+            student_name, school_name, total_attendees, overall_traz, overall_rank_all,
+            overall_rank_center, overall_percentage, overall_correct, overall_wrong,
+            overall_unanswered, total_questions, subjects_json, categories_json, answers_json
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(exam_id, student_id) DO UPDATE SET
+            overall_traz = excluded.overall_traz,
+            overall_rank_all = excluded.overall_rank_all,
+            overall_rank_center = excluded.overall_rank_center,
+            overall_percentage = excluded.overall_percentage,
+            subjects_json = excluded.subjects_json,
+            answers_json = excluded.answers_json
+        `, ctx.user.center_id, exam_id, exam_title, grade, sid,
+           rec.candidate_code || `STU_${sid}`,
+           rec.student_name || stu.full_name,
+           rec.school_name || stu.school || 'کانون شهید کاظمی آشتیانی',
+           Number(rec.total_attendees) || 1924,
+           Number(rec.overall_traz) || 6000,
+           Number(rec.overall_rank_all) || 1,
+           Number(rec.overall_rank_center) || 1,
+           Number(rec.overall_percentage) || 75.5,
+           Number(rec.overall_correct) || 80,
+           Number(rec.overall_wrong) || 15,
+           Number(rec.overall_unanswered) || 25,
+           Number(rec.total_questions) || 120,
+           typeof rec.subjects === 'string' ? rec.subjects : JSON.stringify(rec.subjects || []),
+           typeof rec.categories === 'string' ? rec.categories : JSON.stringify(rec.categories || []),
+           typeof rec.answers === 'string' ? rec.answers : JSON.stringify(rec.answers || [])
+        );
+        saved.push(res.lastInsertRowid);
+      }
+    });
+
+    return { ok: true, count: saved.length, ids: saved };
   });
 }

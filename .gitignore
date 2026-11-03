@@ -1,7 +1,10 @@
-node_modules/
-data/
-uploads/
+/node_modules/
+/data/
+/uploads/
 .claude/
 *.zip
 .preview-server.log
 *.log
+.demo-build/
+demo-hosting/
+demo-static/

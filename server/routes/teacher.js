@@ -126,6 +126,11 @@ export default function register(r) {
     tx(() => {
       for (const rec of ctx.body.records || []) {
         if (!valid.has(rec.student_id) || !['present', 'absent', 'excused'].includes(rec.status)) continue;
+        const prev = get('SELECT status FROM attendance WHERE class_id=? AND student_id=? AND date=?', c.id, rec.student_id, date);
+        if (prev && prev.status !== rec.status) {
+          run('INSERT INTO attendance_changes (session_id, student_id, old_status, new_status, actor_id, date) VALUES (?,?,?,?,?,?)',
+            c.id, rec.student_id, prev.status, rec.status, ctx.user.id, date);
+        }
         run(`INSERT INTO attendance (class_id, student_id, date, status, teacher_id) VALUES (?,?,?,?,?)
           ON CONFLICT(class_id, student_id, date) DO UPDATE SET status=excluded.status, teacher_id=excluded.teacher_id`, c.id, rec.student_id, date, rec.status, ctx.user.id);
         const ref = `abs:${c.id}:${date}`;
@@ -316,6 +321,82 @@ export default function register(r) {
     if (b.file) { const name = saveUpload(b.file, 10); url = `/uploads/${name}`; size = Math.round(Buffer.byteLength(b.file.data) * 0.75 / 1024); }
     if (!url || !/^(https?:\/\/|\/uploads\/)/.test(url)) fail(400, 'فایل یا لینک معتبر لازم است');
     run('INSERT INTO materials (center_id, grade, subject, title, kind, url, size_kb) VALUES (?,?,?,?,?,?,?)', ctx.user.center_id, Number(b.grade) || null, clampStr(b.subject, 40), title, kind, url, size);
+    return { ok: true };
+  });
+
+  // ---------- لاگ تغییرات حضور و غیاب (Option 7) ----------
+  r.get('/api/teacher/attendance/changes', T, (ctx) => {
+    const classIds = classFilter(ctx.user.id, ctx.query).map((c) => c.id);
+    if (!classIds.length) return [];
+    return all(`
+      SELECT ch.*, u.full_name student_name, actor.full_name actor_name, c.name class_name
+      FROM attendance_changes ch
+      JOIN users u ON u.id=ch.student_id
+      JOIN users actor ON actor.id=ch.actor_id
+      LEFT JOIN classes c ON c.id=ch.session_id
+      WHERE ch.session_id IN (${classIds.map(() => '?').join(',')})
+      ORDER BY ch.id DESC LIMIT 100
+    `, ...classIds);
+  });
+
+  // ---------- ثبت نمرات مستمر دستی کلاسی (Option 8) ----------
+  r.get('/api/teacher/manual-scores', T, (ctx) => {
+    const classIds = classFilter(ctx.user.id, ctx.query).map((c) => c.id);
+    if (!classIds.length) return [];
+    const subject = ctx.query.subject ? clampStr(ctx.query.subject, 50) : null;
+    let sql = `
+      SELECT m.*, u.full_name student_name, c.name class_name
+      FROM manual_scores m
+      JOIN users u ON u.id=m.student_id
+      LEFT JOIN classes c ON c.id=m.class_id
+      WHERE m.class_id IN (${classIds.map(() => '?').join(',')})
+    `;
+    const params = [...classIds];
+    if (subject) {
+      sql += ' AND m.subject = ?';
+      params.push(subject);
+    }
+    sql += ' ORDER BY m.id DESC LIMIT 300';
+    return all(sql, ...params);
+  });
+
+  r.post('/api/teacher/manual-scores', T, (ctx) => {
+    const b = ctx.body;
+    const c = ownClass(ctx.user.id, b.class_id);
+    const subject = clampStr(b.subject, 50);
+    const title = clampStr(b.title, 100);
+    if (!subject || !title) fail(400, 'نام درس و عنوان نمره مستمر الزامی است');
+
+    const records = Array.isArray(b.records) ? b.records : (b.student_id != null ? [{ student_id: b.student_id, score: b.score }] : []);
+    if (!records.length) fail(400, 'حداقل یک نمره ارسال کنید');
+
+    const validStudents = new Set(all('SELECT user_id FROM students WHERE class_id=?', c.id).map((s) => s.user_id));
+    const insertedIds = [];
+
+    tx(() => {
+      for (const rec of records) {
+        const sid = Number(rec.student_id);
+        if (!validStudents.has(sid)) continue;
+        const score = Number(rec.score);
+        if (isNaN(score) || score < 0 || score > 20) fail(400, 'نمره باید عددی بین ۰ تا ۲۰ باشد');
+        const res = run(`
+          INSERT INTO manual_scores (center_id, student_id, teacher_id, class_id, subject, title, score)
+          VALUES (?,?,?,?,?,?,?)
+        `, ctx.user.center_id, sid, ctx.user.id, c.id, subject, title, score);
+        insertedIds.push(res.lastInsertRowid);
+      }
+    });
+
+    return { ok: true, count: insertedIds.length, ids: insertedIds };
+  });
+
+  r.del('/api/teacher/manual-scores/:id', T, (ctx) => {
+    const score = get('SELECT * FROM manual_scores WHERE id=?', Number(ctx.params.id));
+    if (!score) fail(404, 'نمره یافت نشد');
+    if (score.teacher_id !== ctx.user.id && ctx.user.role !== 'admin' && ctx.user.role !== 'manager') {
+      fail(403, 'شما دسترسی حذف این نمره را ندارید');
+    }
+    run('DELETE FROM manual_scores WHERE id=?', score.id);
     return { ok: true };
   });
 }

@@ -338,6 +338,144 @@ export const migrations = [
     database.exec(SCHEMA);
     database.exec(INDEXES);
   },
+  // نسخه ۲: امکانات تکمیلی (خودسنجی، کتب هوش، لاگ حضور، نمرات مستمر، کارنامه برپا، فاکتورها، برگشت رسید، پیامک)
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS self_exams (
+        id INTEGER PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        duration_minutes INTEGER NOT NULL DEFAULT 15,
+        question_count INTEGER NOT NULL DEFAULT 5,
+        negative_marking INTEGER NOT NULL DEFAULT 0,
+        questions_json TEXT NOT NULL,
+        answers_json TEXT,
+        score REAL,
+        percentage REAL,
+        correct_count INTEGER,
+        wrong_count INTEGER,
+        blank_count INTEGER,
+        points_awarded INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'started' CHECK (status IN ('started', 'completed', 'abandoned')),
+        created_at TEXT DEFAULT (datetime('now')),
+        finished_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS ix_self_exams_student ON self_exams(student_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS exam_books (
+        id TEXT PRIMARY KEY,
+        center_id INTEGER REFERENCES centers(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        grade TEXT NOT NULL,
+        topics_count INTEGER DEFAULT 0,
+        pages_count INTEGER DEFAULT 0,
+        description TEXT,
+        file_url TEXT,
+        cover_url TEXT,
+        topics_json TEXT,
+        is_custom INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS ix_exam_books_grade ON exam_books(grade);
+
+      CREATE TABLE IF NOT EXISTS attendance_changes (
+        id INTEGER PRIMARY KEY,
+        session_id INTEGER,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        old_status TEXT,
+        new_status TEXT NOT NULL,
+        actor_id INTEGER NOT NULL REFERENCES users(id),
+        date TEXT NOT NULL,
+        changed_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS ix_att_changes_student ON attendance_changes(student_id, date);
+
+      CREATE TABLE IF NOT EXISTS manual_scores (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL,
+        subject TEXT NOT NULL,
+        title TEXT NOT NULL,
+        score REAL NOT NULL CHECK(score >= 0 AND score <= 20),
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS ix_manual_scores_student ON manual_scores(student_id, subject);
+      CREATE INDEX IF NOT EXISTS ix_manual_scores_teacher ON manual_scores(teacher_id, class_id);
+
+      CREATE TABLE IF NOT EXISTS comprehensive_exam_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        center_id INTEGER REFERENCES centers(id) ON DELETE CASCADE,
+        exam_id TEXT NOT NULL,
+        exam_title TEXT NOT NULL,
+        grade TEXT NOT NULL,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        candidate_code TEXT,
+        student_name TEXT NOT NULL,
+        school_name TEXT,
+        total_attendees INTEGER DEFAULT 1,
+        overall_traz INTEGER,
+        overall_rank_all INTEGER,
+        overall_rank_center INTEGER,
+        overall_percentage REAL,
+        overall_correct INTEGER,
+        overall_wrong INTEGER,
+        overall_unanswered INTEGER,
+        total_questions INTEGER DEFAULT 120,
+        subjects_json TEXT NOT NULL DEFAULT '[]',
+        categories_json TEXT NOT NULL DEFAULT '[]',
+        answers_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(exam_id, student_id)
+      );
+      CREATE INDEX IF NOT EXISTS ix_comp_reports_student ON comprehensive_exam_reports(student_id);
+      CREATE INDEX IF NOT EXISTS ix_comp_reports_exam ON comprehensive_exam_reports(exam_id, overall_traz);
+
+      CREATE TABLE IF NOT EXISTS fee_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        fee_type TEXT NOT NULL DEFAULT 'tuition',
+        period TEXT NOT NULL,
+        amount INTEGER NOT NULL CHECK(amount > 0),
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(student_id, fee_type, period)
+      );
+      CREATE INDEX IF NOT EXISTS ix_fee_invoices_student ON fee_invoices(student_id);
+
+      CREATE TABLE IF NOT EXISTS sms_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        recipient_phone TEXT NOT NULL,
+        student_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        message_type TEXT NOT NULL DEFAULT 'general',
+        content TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'sent', 'failed')),
+        provider_id TEXT,
+        error_message TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        sent_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS ix_sms_outbox_center ON sms_outbox(center_id, status);
+      CREATE INDEX IF NOT EXISTS ix_sms_outbox_student ON sms_outbox(student_id);
+    `);
+
+    const payCols = database.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
+    if (!payCols.includes('invoice_id')) database.exec('ALTER TABLE payments ADD COLUMN invoice_id INTEGER REFERENCES fee_invoices(id)');
+    if (!payCols.includes('fee_type')) database.exec("ALTER TABLE payments ADD COLUMN fee_type TEXT DEFAULT 'tuition'");
+    if (!payCols.includes('reversed_at')) database.exec('ALTER TABLE payments ADD COLUMN reversed_at TEXT');
+    if (!payCols.includes('reversed_by')) database.exec('ALTER TABLE payments ADD COLUMN reversed_by INTEGER REFERENCES users(id)');
+    if (!payCols.includes('reverse_reason')) database.exec('ALTER TABLE payments ADD COLUMN reverse_reason TEXT');
+
+    database.exec(`
+      INSERT OR IGNORE INTO exam_books (id, center_id, title, grade, topics_count, pages_count, description, cover_url, is_custom)
+      VALUES
+        ('hoosh_6', (SELECT id FROM centers LIMIT 1), 'هوش و استعداد تحلیلی ششم (هوش کمپلکس)', 'ششم', 58, 120, 'بانک جامع سوالات هوش و استعداد تحلیلی ورودی تیزهوشان ششم به هفتم', '/img/books/hoosh_6.jpg', 0),
+        ('hoosh_8_9', (SELECT id FROM centers LIMIT 1), 'هوش کمپلکس هشتم و نهم (طرح برپا)', 'نهم', 65, 140, 'بانک سوالات هوش منطقی، کلامی و تصویری نهم به دهم', '/img/books/hoosh_8_9.jpg', 0);
+    `);
+  },
 ];
 
 export function migrate(database = db) {

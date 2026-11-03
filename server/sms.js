@@ -1,6 +1,8 @@
 // ارسال پیامک با درگاه قابل تعویض. پیش‌فرض «simulated» است (فقط ثبت می‌کند و چیزی نمی‌فرستد).
 //   ROSHD_SMS_PROVIDER=kavenegar   ROSHD_SMS_API_KEY=...   ROSHD_SMS_SENDER=10008663   (کاوه‌نگار، سرویس ساده «sms/send»)
 //   ROSHD_SMS_PROVIDER=webhook     ROSHD_SMS_WEBHOOK_URL=https://...   (POST JSON: { to, text } برای هر سرویس دیگر با یک واسط کوچک)
+import { run } from './db.js';
+
 const PROVIDER = (process.env.ROSHD_SMS_PROVIDER || 'simulated').toLowerCase();
 const TIMEOUT = 10_000;
 
@@ -24,11 +26,35 @@ async function viaWebhook(to, text) {
 }
 
 // خروجی: { ok, simulated?, error? } ؛ هرگز پرتاب نمی‌کند تا یک پیامک ناموفق بقیه را متوقف نکند
-export async function sendSms(to, text) {
+export async function sendSms(to, text, meta = {}) {
+  let outboxId = null;
+  try {
+    if (meta.center_id) {
+      const r = run(`INSERT INTO sms_outbox (center_id, recipient_phone, student_id, message_type, content, status) VALUES (?,?,?,?,?, 'pending')`,
+        meta.center_id, to, meta.student_id || null, meta.message_type || 'general', text);
+      outboxId = r.lastInsertRowid;
+    }
+  } catch { /* نادیده گرفتن در صورت عدم وجود جدول در برخی تست‌ها */ }
+
   try {
     if (PROVIDER === 'kavenegar') await viaKavenegar(to, text);
     else if (PROVIDER === 'webhook') await viaWebhook(to, text);
-    else return { ok: true, simulated: true };
-    return { ok: true };
-  } catch (e) { return { ok: false, error: e.name === 'TimeoutError' ? 'مهلت ارسال پیامک تمام شد' : e.message }; }
+    else {
+      if (outboxId) {
+        run(`UPDATE sms_outbox SET status='sent', sent_at=datetime('now') WHERE id=?`, outboxId);
+      }
+      return { ok: true, simulated: true, outbox_id: outboxId };
+    }
+
+    if (outboxId) {
+      run(`UPDATE sms_outbox SET status='sent', sent_at=datetime('now') WHERE id=?`, outboxId);
+    }
+    return { ok: true, outbox_id: outboxId };
+  } catch (e) {
+    const err = e.name === 'TimeoutError' ? 'مهلت ارسال پیامک تمام شد' : e.message;
+    if (outboxId) {
+      run(`UPDATE sms_outbox SET status='failed', error_message=? WHERE id=?`, err, outboxId);
+    }
+    return { ok: false, error: err, outbox_id: outboxId };
+  }
 }

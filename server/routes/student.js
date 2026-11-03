@@ -1,3 +1,5 @@
+import { buildSelfExamQuestions, sanitizeQuestionsForStudent, evaluateSelfExam } from '../self_exam.js';
+import { LEVELS } from '../logic.js';
 // پنل دانش‌آموز
 import { all, get, run, tx } from '../db.js';
 import { fail, saveUpload, ymd, addDays, weekStart, faWeekday, nowIso, clampStr } from '../util.js';
@@ -209,5 +211,174 @@ export default function register(r) {
     if (game === 'story' && score > 0 && addPoints(ctx.user.id, 5, 'فعالیت', 'پایان داستان تعاملی «راز رصدخانه»', 'story:done')) reward = 5;
     const best = get('SELECT MAX(score) b FROM game_scores WHERE student_id=? AND game=?', ctx.user.id, game).b;
     return { ok: true, reward, best };
+  });
+
+  // ---------- آزمون‌های خودسنجی هوشمند (Option 1) ----------
+  r.post('/api/student/self-exams', S, (ctx) => {
+    const s = studentInfo(ctx.user.id);
+    const count = Math.max(3, Math.min(30, Number(ctx.body.count || ctx.body.question_count) || 5));
+    const duration = Math.max(5, Math.min(60, Number(ctx.body.duration_minutes) || Math.round(count * 2)));
+    const subject = clampStr(ctx.body.subject, 50) || 'عمومی';
+    const negative = ctx.body.negative_marking ? 1 : 0;
+
+    const questions = buildSelfExamQuestions({ subject, count, grade: s.grade });
+    const title = clampStr(ctx.body.title, 100) || `خودسنجی هوشمند (${subject})`;
+
+    const res = run(`
+      INSERT INTO self_exams (student_id, title, subject, duration_minutes, question_count, negative_marking, questions_json, status)
+      VALUES (?,?,?,?,?,?,?, 'started')
+    `, ctx.user.id, title, subject, duration, questions.length, negative, JSON.stringify(questions));
+
+    return {
+      id: res.lastInsertRowid,
+      title,
+      subject,
+      duration_minutes: duration,
+      question_count: questions.length,
+      negative_marking: !!negative,
+      questions: sanitizeQuestionsForStudent(questions),
+      created_at: nowIso()
+    };
+  });
+
+  r.get('/api/student/self-exams', S, (ctx) => {
+    return all(`
+      SELECT id, title, subject, duration_minutes, question_count, negative_marking,
+             score, percentage, correct_count, wrong_count, blank_count, points_awarded,
+             status, created_at, finished_at
+      FROM self_exams WHERE student_id=? ORDER BY id DESC
+    `, ctx.user.id).map((r) => ({
+      ...r,
+      negative_marking: !!r.negative_marking
+    }));
+  });
+
+  r.get('/api/student/self-exams/:id', S, (ctx) => {
+    const exam = get('SELECT * FROM self_exams WHERE id=? AND student_id=?', Number(ctx.params.id), ctx.user.id);
+    if (!exam) fail(404, 'آزمون خودسنجی یافت نشد');
+    const questions = JSON.parse(exam.questions_json || '[]');
+    const answers = exam.answers_json ? JSON.parse(exam.answers_json) : null;
+
+    if (exam.status === 'completed') {
+      const evaluation = evaluateSelfExam(questions, answers || {}, exam.negative_marking === 1);
+      return {
+        ...exam,
+        negative_marking: !!exam.negative_marking,
+        questions,
+        answers,
+        evaluation
+      };
+    }
+
+    return {
+      id: exam.id,
+      title: exam.title,
+      subject: exam.subject,
+      duration_minutes: exam.duration_minutes,
+      question_count: exam.question_count,
+      negative_marking: !!exam.negative_marking,
+      status: exam.status,
+      created_at: exam.created_at,
+      questions: sanitizeQuestionsForStudent(questions)
+    };
+  });
+
+  r.post('/api/student/self-exams/:id/submit', S, (ctx) => {
+    const exam = get('SELECT * FROM self_exams WHERE id=? AND student_id=?', Number(ctx.params.id), ctx.user.id);
+    if (!exam) fail(404, 'آزمون خودسنجی یافت نشد');
+    if (exam.status === 'completed') fail(409, 'پاسخ‌های این آزمون خودسنجی قبلاً ثبت شده است');
+
+    const questions = JSON.parse(exam.questions_json || '[]');
+    const answers = (typeof ctx.body.answers === 'object' && ctx.body.answers !== null) ? ctx.body.answers : {};
+    const evalResult = evaluateSelfExam(questions, answers, exam.negative_marking === 1);
+
+    tx(() => {
+      run(`
+        UPDATE self_exams SET
+          status = 'completed',
+          answers_json = ?,
+          score = ?,
+          percentage = ?,
+          correct_count = ?,
+          wrong_count = ?,
+          blank_count = ?,
+          points_awarded = ?,
+          finished_at = datetime('now')
+        WHERE id = ?
+      `, JSON.stringify(answers), evalResult.score, evalResult.percentage, evalResult.correctCount,
+         evalResult.wrongCount, evalResult.blankCount, evalResult.pointsAwarded, exam.id);
+
+      addPoints(ctx.user.id, evalResult.pointsAwarded, 'آزمون', `شرکت در خودسنجی: ${exam.title}`, `self_exam:${exam.id}`);
+    });
+
+    return {
+      ok: true,
+      exam_id: exam.id,
+      ...evalResult
+    };
+  });
+
+  // ---------- نقشه راه گرافیکی سطوح رشد (Option 5) ----------
+  r.get('/api/student/roadmap', S, (ctx) => {
+    const total = totalPoints(ctx.user.id);
+    const curLevel = levelOf(total);
+    const badges = [
+      { id: 'first_step', title: 'گام نخست', desc: 'اولین مطالعه ثبت‌شده', unlocked: total >= 10, icon: '🎯' },
+      { id: 'consistency', title: 'مداومت در یادگیری', desc: 'رسیدن به سطح نهال', unlocked: total >= 100, icon: '🌱' },
+      { id: 'sharp_mind', title: 'ذهن پویا', desc: 'رسیدن به سطح شکوفه', unlocked: total >= 250, icon: '💡' },
+      { id: 'scholar', title: 'پژوهشگر جوان', desc: 'رسیدن به سطح درخت', unlocked: total >= 450, icon: '📚' },
+      { id: 'shining_star', title: 'ستاره برتر کانون', desc: 'رسیدن به سطح ستاره', unlocked: total >= 700, icon: '⭐' },
+      { id: 'meteor', title: 'شهاب پرفروغ', desc: 'رسیدن به سطح شهاب', unlocked: total >= 1000, icon: '☄️' },
+      { id: 'galaxy', title: 'قهرمان کهکشان', desc: 'رسیدن به سطح کهکشان', unlocked: total >= 1400, icon: '🌌' },
+      { id: 'elite', title: 'نخبه کشوری', desc: 'بالاترین تراز و سطح نخبگی کانون', unlocked: total >= 1900, icon: '🏆' }
+    ];
+
+    const milestones = LEVELS.map((l, idx) => ({
+      level: idx + 1,
+      name: l.name,
+      min_points: l.min,
+      icon: l.icon,
+      is_unlocked: total >= l.min,
+      is_current: curLevel.index === idx + 1,
+      privilege: idx === 0 ? 'ورود به باشگاه دانش‌آموزی' :
+                 idx === 1 ? 'نشان ویژه دانش‌آموز کوشا' :
+                 idx === 2 ? 'دسترسی کامل به بانک تست‌های تیزهوشان' :
+                 idx === 3 ? 'کد تخفیف خرید کتاب‌های کمک‌آموزشی' :
+                 idx === 4 ? 'جلسه مشاوره فردی رایگان' :
+                 idx === 5 ? 'عضویت در تالار نخبگان کانون' :
+                 idx === 6 ? 'تقدیرنامه رسمی و لوح افتخار' : 'مدال طلایی و حمایت تحصیلی ویژه کانون'
+    }));
+
+    return {
+      current_points: total,
+      level: curLevel,
+      milestones,
+      badges
+    };
+  });
+
+  // ---------- ثبت نمرات مستمر دستی کلاسی (Option 8) ----------
+  r.get('/api/student/manual-scores', S, (ctx) => {
+    return all(`
+      SELECT m.id, m.subject, m.title, m.score, m.created_at, u.full_name teacher_name, c.name class_name
+      FROM manual_scores m
+      JOIN users u ON u.id=m.teacher_id
+      LEFT JOIN classes c ON c.id=m.class_id
+      WHERE m.student_id=? ORDER BY m.id DESC
+    `, ctx.user.id);
+  });
+
+  // ---------- فاکتورهای بدهی دوره‌ای (Option 10) ----------
+  r.get('/api/student/invoices', S, (ctx) => {
+    return all(`
+      SELECT i.id, i.fee_type, i.period, i.amount, i.created_at,
+             COALESCE((SELECT SUM(amount) FROM payments p WHERE p.invoice_id=i.id AND p.status='approved'), 0) paid
+      FROM fee_invoices i
+      WHERE i.student_id=? ORDER BY i.id DESC
+    `, ctx.user.id).map((r) => ({
+      ...r,
+      remaining: Math.max(0, r.amount - r.paid),
+      status: r.paid >= r.amount ? 'settled' : (r.paid > 0 ? 'partially_paid' : 'unpaid')
+    }));
   });
 }
