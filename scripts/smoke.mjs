@@ -21,7 +21,7 @@ async function login(role, id) {
   const r = await fetch(B + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, identifier: id, password: '123456' }) });
   return { status: r.status, ck: r.headers.get('set-cookie')?.split(';')[0] };
 }
-const call = (ck, method, p, body) => fetch(B + p, { method, headers: { ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}), ...(ck ? { Cookie: ck } : {}) }, body: method !== 'GET' ? JSON.stringify(body || {}) : undefined }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null) }));
+const call = (ck, method, p, body) => fetch(B + p, { method, headers: { ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}), ...(ck ? { Cookie: ck } : {}) }, body: method !== 'GET' ? JSON.stringify(body || {}) : undefined }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null), ck: r.headers.get('set-cookie')?.split(';')[0] }));
 
 const S = { student: await login('student', 'student'), teacher: await login('teacher', 'teacher'), manager: await login('manager', 'manager'), parent: await login('parent', '09120000000'), admin: await login('admin', 'admin'), locked: await login('student', 'student9') };
 for (const [k, v] of Object.entries(S)) check(`ورود ${k}`, v.status === 200, v.status);
@@ -69,10 +69,14 @@ check('ثبت‌نام دانش‌آموز', created.status === 200, JSON.string
 const li = await fetch(B + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'student', identifier: nc, password: nc }) });
 check('ورود دانش‌آموز تازه با رمز اولیه', li.status === 200);
 const fresh = { ck: li.headers.get('set-cookie').split(';')[0] };
+check('دانش‌آموز تازه قبل از تعویض رمز مسدود است (۴۲۸)', (await call(fresh.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 428);
+const pwChange = await call(fresh.ck, 'POST', '/api/me/password', { current: nc, next: 'StudentNew#123' });
+check('تعویض اجباری رمز توسط دانش‌آموز تازه', pwChange.status === 200);
+const freshAfterPw = { ck: pwChange.ck || (await login('student', nc, 'StudentNew#123')).ck };
 // پومودورو: ثبت و جلوگیری از ثبت پشت‌سرهم بی‌فاصله
-const p1 = await call(fresh.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 });
-check('ثبت پومودورو', p1.status === 200);
-check('پومودورو بی‌فاصله رد می‌شود', (await call(fresh.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 429);
+const p1 = await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 });
+check('ثبت پومودورو پس از تعویض رمز', p1.status === 200);
+check('پومودورو بی‌فاصله رد می‌شود', (await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 429);
 
 
 check('کد ملی تکراری رد می‌شود', (await call(S.manager.ck, 'POST', '/api/manager/students', { full_name: 'تکراری', national_code: nc, grade: 7, parent_phone: '09350001122' })).status === 400);

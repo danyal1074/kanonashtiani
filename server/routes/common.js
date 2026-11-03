@@ -105,7 +105,7 @@ export default function register(r) {
     if (!(await verifyPasswordAsync(current || '', row.pass_hash))) fail(400, 'رمز فعلی اشتباه است');
     if (!next || String(next).length < 6) fail(400, 'رمز جدید باید حداقل ۶ کاراکتر باشد');
     const h = await hashPasswordAsync(next);
-    run('UPDATE users SET pass_hash=?, must_change_password=0 WHERE id=?', h, ctx.user.id); u.must_change_password = 0;
+    run('UPDATE users SET pass_hash=?, must_change_password=0 WHERE id=?', h, ctx.user.id); if (ctx.user) ctx.user.must_change_password = 0;
     setSession(ctx, { id: ctx.user.id, pass_hash: h });
     return { ok: true };
   });
