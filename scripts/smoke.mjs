@@ -1,5 +1,6 @@
 // تست دودی: سرور موقت با داده نمونه، بررسی دسترسی هر نقش و چند جریان اصلی.  اجرا: npm run smoke
 import { spawn, spawnSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -98,6 +99,14 @@ check('خرید و کد پیگیری', co.status === 200 && /^RSH-\d{8}$/.test(c
 const t = await login('teacher', 'teacher');
 check('تغییر رمز', (await call(t.ck, 'POST', '/api/me/password', { current: '123456', next: 'NewPass#99' })).status === 200);
 check('توکن قدیمی پس از تغییر رمز باطل است', (await call(t.ck, 'GET', '/api/me')).status === 401);
+
+// سامانه مهاجرت: نسخه پایگاه داده و وجود ساختار جداول
+const sDb = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
+const ver = sDb.prepare('PRAGMA user_version').get()?.user_version;
+check('سامانه مهاجرت: PRAGMA user_version نسخه ۱ است', ver === 1, `نسخه: ${ver}`);
+const tbls = sDb.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table'").get()?.n;
+check('سامانه مهاجرت: جداول اولیه پایگاه داده ایجاد شده‌اند', tbls > 10, `تعداد: ${tbls}`);
+sDb.close();
 
 app.kill();
 await new Promise((r) => setTimeout(r, 300));

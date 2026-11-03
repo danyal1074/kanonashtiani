@@ -331,12 +331,37 @@ CREATE INDEX IF NOT EXISTS ix_plans_class ON study_plans(class_id, week_start);
 
 export let db;
 
-export function openDb() {
-  db = new DatabaseSync(DB_PATH);
+// آرایه مرتب مهاجرت‌های پایگاه داده: هر مهاجرت در نسخه (index + 1) با PRAGMA user_version اجرا می‌شود
+export const migrations = [
+  // نسخه ۱: ساختار و ایندکس‌های پایه سامانه رشد نخبه
+  (database) => {
+    database.exec(SCHEMA);
+    database.exec(INDEXES);
+  },
+];
+
+export function migrate(database = db) {
+  let version = Number(database.prepare('PRAGMA user_version').get()?.user_version || 0);
+  for (let i = version; i < migrations.length; i++) {
+    const nextVersion = i + 1;
+    database.exec('BEGIN');
+    try {
+      migrations[i](database);
+      database.exec(`PRAGMA user_version = ${nextVersion}`);
+      database.exec('COMMIT');
+    } catch (e) {
+      database.exec('ROLLBACK');
+      throw new Error(`خطا در اجرای مهاجرت نسخه ${nextVersion}: ${e.message}`);
+    }
+  }
+  return Number(database.prepare('PRAGMA user_version').get()?.user_version || 0);
+}
+
+export function openDb(dbPath = DB_PATH) {
+  db = new DatabaseSync(dbPath);
   db.exec(`PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL;
     PRAGMA cache_size = -65536; PRAGMA temp_store = MEMORY; PRAGMA mmap_size = 268435456; PRAGMA journal_size_limit = 67108864; PRAGMA wal_autocheckpoint = 1000;`);
-  db.exec(SCHEMA);
-  db.exec(INDEXES);
+  migrate(db);
   db.exec('PRAGMA optimize');
   stmtCache.clear();
   return db;
