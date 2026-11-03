@@ -1,0 +1,14 @@
+{
+  "name": "roshd-elite-platform",
+  "version": "1.0.0",
+  "description": "پلتفرم رشد نخبه - سامانه جامع آموزشی، پرورشی و مدیریتی کانون‌های نخبه‌پروری",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server/index.js",
+    "seed": "node server/seed.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
+  }
+}

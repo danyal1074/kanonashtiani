@@ -1,0 +1,410 @@
+{
+  "totalNames": 82,
+  "newNames": [
+    "file-text",
+    "timer",
+    "sparkles",
+    "gamepad",
+    "megaphone",
+    "user",
+    "user-check",
+    "user-x",
+    "card",
+    "bag",
+    "check",
+    "lock",
+    "logout",
+    "menu",
+    "x",
+    "chevron-left",
+    "chevron-right",
+    "arrow-left",
+    "arrow-right",
+    "plus",
+    "search",
+    "clock",
+    "star",
+    "flame",
+    "target",
+    "calculator",
+    "languages",
+    "bulb",
+    "globe",
+    "compass",
+    "zap",
+    "bot",
+    "play",
+    "pause",
+    "stop",
+    "upload",
+    "download",
+    "eye",
+    "eye-off",
+    "phone",
+    "alert",
+    "info",
+    "video",
+    "sprout",
+    "receipt",
+    "shield",
+    "printer",
+    "camera",
+    "coins",
+    "inbox",
+    "send",
+    "copy",
+    "cake",
+    "refresh",
+    "trash",
+    "edit",
+    "heart",
+    "database",
+    "more",
+    "key",
+    "cap"
+  ],
+  "icons": {
+    "book": [
+      "core",
+      0
+    ],
+    "clipboard": [
+      "core",
+      1
+    ],
+    "file-check": [
+      "core",
+      2
+    ],
+    "check-circle": [
+      "core",
+      2
+    ],
+    "users": [
+      "core",
+      3
+    ],
+    "calendar": [
+      "core",
+      4
+    ],
+    "chart": [
+      "core",
+      5
+    ],
+    "trend": [
+      "core",
+      5
+    ],
+    "trophy": [
+      "core",
+      6
+    ],
+    "award": [
+      "core",
+      7
+    ],
+    "home": [
+      "core",
+      8
+    ],
+    "message": [
+      "core",
+      9
+    ],
+    "bell": [
+      "core",
+      10
+    ],
+    "settings": [
+      "core",
+      11
+    ],
+    "sliders": [
+      "core",
+      11
+    ],
+    "graduation": [
+      "core",
+      12
+    ],
+    "backpack": [
+      "core",
+      12
+    ],
+    "flask": [
+      "core",
+      13
+    ],
+    "board": [
+      "core",
+      14
+    ],
+    "building": [
+      "core",
+      14
+    ],
+    "wallet": [
+      "core",
+      15
+    ],
+    "cap": [
+      "core",
+      12
+    ],
+    "file-text": [
+      "actions",
+      0
+    ],
+    "timer": [
+      "actions",
+      1
+    ],
+    "sparkles": [
+      "actions",
+      2
+    ],
+    "gamepad": [
+      "actions",
+      3
+    ],
+    "megaphone": [
+      "actions",
+      4
+    ],
+    "user": [
+      "actions",
+      5
+    ],
+    "user-check": [
+      "actions",
+      6
+    ],
+    "user-x": [
+      "actions",
+      7
+    ],
+    "card": [
+      "actions",
+      8
+    ],
+    "bag": [
+      "actions",
+      9
+    ],
+    "check": [
+      "actions",
+      10
+    ],
+    "lock": [
+      "actions",
+      11
+    ],
+    "logout": [
+      "actions",
+      12
+    ],
+    "menu": [
+      "actions",
+      13
+    ],
+    "x": [
+      "actions",
+      14
+    ],
+    "chevron-left": [
+      "actions",
+      15
+    ],
+    "chevron-right": [
+      "actions",
+      16
+    ],
+    "arrow-left": [
+      "actions",
+      17
+    ],
+    "arrow-right": [
+      "actions",
+      18
+    ],
+    "plus": [
+      "actions",
+      19
+    ],
+    "search": [
+      "actions",
+      20
+    ],
+    "clock": [
+      "actions",
+      21
+    ],
+    "star": [
+      "actions",
+      22
+    ],
+    "flame": [
+      "actions",
+      23
+    ],
+    "target": [
+      "actions",
+      24
+    ],
+    "calculator": [
+      "actions",
+      25
+    ],
+    "languages": [
+      "actions",
+      26
+    ],
+    "bulb": [
+      "actions",
+      27
+    ],
+    "globe": [
+      "actions",
+      28
+    ],
+    "compass": [
+      "actions",
+      29
+    ],
+    "zap": [
+      "tools",
+      0
+    ],
+    "bot": [
+      "tools",
+      1
+    ],
+    "play": [
+      "tools",
+      2
+    ],
+    "pause": [
+      "tools",
+      3
+    ],
+    "stop": [
+      "tools",
+      4
+    ],
+    "upload": [
+      "tools",
+      5
+    ],
+    "download": [
+      "tools",
+      6
+    ],
+    "eye": [
+      "tools",
+      7
+    ],
+    "eye-off": [
+      "tools",
+      8
+    ],
+    "phone": [
+      "tools",
+      9
+    ],
+    "alert": [
+      "tools",
+      10
+    ],
+    "info": [
+      "tools",
+      11
+    ],
+    "video": [
+      "tools",
+      12
+    ],
+    "sprout": [
+      "tools",
+      13
+    ],
+    "receipt": [
+      "tools",
+      14
+    ],
+    "shield": [
+      "tools",
+      15
+    ],
+    "printer": [
+      "tools",
+      16
+    ],
+    "camera": [
+      "tools",
+      17
+    ],
+    "coins": [
+      "tools",
+      18
+    ],
+    "inbox": [
+      "tools",
+      19
+    ],
+    "send": [
+      "tools",
+      20
+    ],
+    "copy": [
+      "tools",
+      21
+    ],
+    "cake": [
+      "tools",
+      22
+    ],
+    "refresh": [
+      "tools",
+      23
+    ],
+    "trash": [
+      "tools",
+      24
+    ],
+    "edit": [
+      "tools",
+      25
+    ],
+    "heart": [
+      "tools",
+      26
+    ],
+    "database": [
+      "tools",
+      27
+    ],
+    "more": [
+      "tools",
+      28
+    ],
+    "key": [
+      "tools",
+      29
+    ]
+  },
+  "atlasLayout": {
+    "core": [
+      4,
+      4
+    ],
+    "actions": [
+      6,
+      5
+    ],
+    "tools": [
+      6,
+      5
+    ]
+  }
+}
