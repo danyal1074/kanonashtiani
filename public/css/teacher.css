@@ -1,6 +1,6 @@
 /* پنل معلم — فقط زیر body.teacher-ui؛ پنل‌های دیگر تغییری نمی‌کنند */
 body.teacher-ui {
-  --tp-blue: #1266e6; --tp-blue-d: #0b4fc4; --tp-navy: #13215c; --tp-ink: #33406e; --tp-muted: #6c7aa3; --tp-line: #dfe9f8;
+  --tp-blue: #1266e6; --tp-blue-d: #0b4fc4; --tp-navy: #13215c; --tp-ink: #33406e; --tp-muted: #566489; --tp-line: #dfe9f8;
   --tp-card: rgba(255, 255, 255, .78); --tp-shadow: 0 8px 22px rgba(44, 90, 170, .13), inset 0 1px 0 #fff; --tp-radius: 22px;
   --primary: var(--tp-blue); --primary-hover: var(--tp-blue-d); --primary-soft: #e3eeff; --primary-2: #4b8df0;
   --teal-900: #0a2f7c; --teal-800: #0b3f9e; --teal-700: var(--tp-blue); --teal-600: #2a78ee; --teal-500: #4b8df0; --teal-400: #6ea4f4; --teal-300: #9dc1f8; --teal-200: #c5dafb; --teal-100: #e3eeff; --teal-50: #f0f6ff;
@@ -31,7 +31,7 @@ body.teacher-ui .nav-item > span:nth-child(2) { margin-inline-start: 0; flex: 1;
 body.teacher-ui .nav-item .ni { background: none !important; width: auto; height: auto; color: inherit; box-shadow: none; }
 body.teacher-ui .nav-item:hover { background: rgba(255, 255, 255, .1); color: #fff; }
 body.teacher-ui .nav-item.on { color: #fff; background: linear-gradient(90deg, #1a7cf4, #1266e6); box-shadow: 0 6px 14px rgba(0, 40, 130, .35); margin-inline-start: -12px; padding-inline-start: 24px; border-radius: 16px 0 0 16px; }
-body.teacher-ui .nav-item .cnt { background: #ff4d4f; color: #fff; }
+body.teacher-ui .nav-item .cnt { background: #d92331; color: #fff; }
 body.teacher-ui .sidebar .foot { margin-top: auto; border-top: 1px solid rgba(255, 255, 255, .16); padding-top: 8px; }
 body.teacher-ui .sidebar .foot .row > :not(#logoutBtn) { display: none; }
 body.teacher-ui .sidebar .foot .row { justify-content: center; padding: 0 !important; }
@@ -331,3 +331,5 @@ body.teacher-ui .table th { background: #edf3fe; color: var(--tp-navy); }
 }
 @media print { body.teacher-ui { background: #fff; } .tp-top { display: none; } }
 @media (prefers-reduced-motion: reduce) { .tp-tile { transition: none; } .tp-tile:hover { transform: none; } }
+
+body.teacher-ui .nav-item:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }

@@ -105,7 +105,8 @@ export const tehranIso = (ymd, hm) => new Date(`${ymd}T${hm || '23:59'}:00+03:30
 
 // ---------- API ----------
 export async function api(path, { method = 'GET', body } = {}) {
-  const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+  let res;
+  try { res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' }); } catch { throw new Error('ارتباط با سرور برقرار نشد؛ اتصال اینترنت را بررسی کنید و دوباره تلاش کنید'); }
   let data = null;
   try { data = await res.json(); } catch { /* بدون بدنه */ }
   if (res.status === 401 && !path.startsWith('/api/auth') && path !== '/api/me') { state.me = null; location.hash = '#/login'; throw new Error(data?.error || 'لطفاً دوباره وارد شوید'); }
@@ -173,7 +174,17 @@ export function modal({ title, body, wide = false, actions = [], onOpen }) {
       <div class="modal-body">${body}</div>${actions.length ? `<div class="modal-foot">${actions.map((a, i) => `<button class="btn ${a.cls || ''}" data-act="${i}">${String(a.label).trim()}</button>`).join('')}</div>` : ''}</div>`;
     document.body.append(back);
     const close = (v) => { back.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
-    const onKey = (e) => { if (e.key === 'Escape') close(null); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') return close(null);
+      if (e.key !== 'Tab') return;
+      // فوکوس کیبورد داخل پنجره می‌ماند
+      const items = [...back.querySelectorAll('a[href],button:not([disabled]),input:not([type=hidden]):not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter((x) => x.offsetParent);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1], a = document.activeElement;
+      if (!back.contains(a)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && a === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && a === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', onKey);
     back.addEventListener('click', async (e) => {
       if (e.target === back || e.target.closest('[data-close]')) return close(null);
@@ -359,3 +370,21 @@ export function matchRoute(hash) {
   return null;
 }
 export const go = (h) => { if (location.hash === h) window.dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = h; };
+
+// برچسب دسترس‌پذیر کنترل‌های فرم: برچسب‌های فیلد وصل می‌شوند و کنترل بدون برچسب از متن راهنمایش نام می‌گیرد
+let a11ySeq = 0;
+export function labelControls(root = document) {
+  root.querySelectorAll('.field > label:not([for])').forEach((l) => {
+    const c = l.parentElement.querySelector('input:not([type=hidden]),select,textarea');
+    if (!c || c.closest('label') === l) return;
+    c.id ||= `fld${++a11ySeq}`;
+    l.htmlFor = c.id;
+  });
+  // ردیف‌ها و کارت‌های کلیک‌پذیر با کیبورد هم در دسترس باشند
+  root.querySelectorAll('.contact, tr[data-href], tr.click, .feature-tile[onclick]').forEach((e) => { if (!e.hasAttribute('tabindex')) { e.tabIndex = 0; e.setAttribute('role', 'button'); } });
+  root.querySelectorAll('input:not([type=hidden]),select,textarea').forEach((c) => {
+    if (c.labels?.length || c.getAttribute('aria-label') || c.getAttribute('aria-labelledby')) return;
+    const name = c.placeholder?.trim() || c.title || (c.tagName === 'SELECT' ? c.options[0]?.textContent.trim() : '') || c.closest('.row, tr, .field')?.innerText?.trim().split('\n')[0];
+    if (name) c.setAttribute('aria-label', name.slice(0, 80));
+  });
+}

@@ -238,7 +238,7 @@ export async function attendance(el, params) {
       <div class="card tint-orange" style="margin-top:14px"><div class="row"><span class="ib">${icon('phone', { size: 18 })}</span><div><b>تعداد پیامک غیبت برای ارسال به والدین: ${fa(r.sms)}</b><div class="small muted">ارسال پیامک از داشبورد مدیر کانون انجام می‌شود. غیبت بدون اطلاع ۵ امتیاز منفی دارد.</div></div></div></div>`, actions: [{ label: 'باشه', value: true }] });
     load();
   });
-  load();
+  await load();
 }
 
 // ---------- گزارش‌ها ----------

@@ -25,9 +25,9 @@ function cartHtml(slug, products, quote) {
   const items = getCart(slug).map((i) => ({ ...i, p: products.find((p) => p.id === i.id) })).filter((i) => i.p);
   if (!items.length) return empty('bag', 'سبد خریدت خالی است');
   const sub = items.reduce((a, i) => a + unit(i.p) * i.qty, 0);
-  return `<div class="list">${items.map((i) => `<div class="list-item"><div class="avatar" style="background:${esc(i.p.color)}1f;color:${esc(i.p.color)}">${icon(i.p.kind === 'video' ? 'video' : 'book', { size: 20 })}</div><div class="grow"><div class="bold small">${esc(i.p.title)}</div><div class="tiny muted">${money(unit(i.p))}</div></div>
-    <div class="qty"><button data-inc="${i.id}" aria-label="افزایش">+</button><span>${fa(i.qty)}</span><button data-dec="${i.id}" aria-label="کاهش">−</button></div><b class="small" style="min-width:110px;text-align:left">${money(unit(i.p) * i.qty)}</b></div>`).join('')}</div>
-    <div class="row" style="margin-top:14px"><input class="input ltr" id="dcode" placeholder="کد تخفیف (مثلاً ROSHD10)" value="${esc(quote?.code || '')}"><button class="btn ghost" id="applyCode">اعمال</button></div>
+  return `<div class="list">${items.map((i) => `<div class="list-item" style="flex-wrap:wrap"><div class="avatar" style="background:${esc(i.p.color)}1f;color:${esc(i.p.color)}">${icon(i.p.kind === 'video' ? 'video' : 'book', { size: 20 })}</div><div class="grow"><div class="bold small">${esc(i.p.title)}</div><div class="tiny muted">${money(unit(i.p))}</div></div>
+    <div class="qty"><button data-inc="${i.id}" aria-label="افزایش">+</button><span>${fa(i.qty)}</span><button data-dec="${i.id}" aria-label="کاهش">−</button></div><b class="small" style="margin-inline-start:auto;text-align:left">${money(unit(i.p) * i.qty)}</b></div>`).join('')}</div>
+    <div class="row" style="margin-top:14px"><input class="input ltr" id="dcode" style="min-width:0" placeholder="کد تخفیف (مثلاً ROSHD10)" value="${esc(quote?.code || '')}"><button class="btn ghost" id="applyCode">اعمال</button></div>
     <div class="stack" style="gap:6px;margin-top:14px;background:var(--bg);border-radius:16px;padding:14px">
       <div class="row between"><span>جمع کل</span><b>${money(sub)}</b></div>
       ${quote?.discount ? `<div class="row between pos"><span>${icon('receipt', { size: 16 })} تخفیف (${fa(quote.percent)}٪)</span><b>− ${money(quote.discount)}</b></div>` : ''}
@@ -36,8 +36,11 @@ function cartHtml(slug, products, quote) {
 }
 
 function bindCart(box, slug, products, rerender) {
+  // شنونده‌ها فقط یک‌بار وصل می‌شوند؛ فراخوانی دوباره فقط سبد را تازه می‌کند
+  if (box.redrawCart) return box.redrawCart();
   let quote = null;
   const draw = () => { box.innerHTML = cartHtml(slug, products, quote); };
+  box.redrawCart = draw;
   draw();
   on(box, 'click', '[data-inc],[data-dec]', (e, b) => {
     const id = Number(b.dataset.inc || b.dataset.dec);
@@ -52,7 +55,7 @@ function bindCart(box, slug, products, rerender) {
     const code = $('#dcode', box).value.trim();
     if (!code) return;
     if (!state.me) { toast('برای اعمال کد تخفیف ابتدا وارد شو', 'err'); return; }
-    busy(b, async () => { const q = await post('/api/shop/quote', { items: getCart(slug), code }); quote = { ...q, code }; draw(); toast(`کد تخفیف ${fa(q.percent)}٪ اعمال شد ${icon('sparkles', { size: 16 })}`, 'ok'); });
+    busy(b, async () => { const q = await post('/api/shop/quote', { items: getCart(slug), code }); quote = { ...q, code }; draw(); toast(`کد تخفیف ${fa(q.percent)}٪ اعمال شد`, 'ok'); });
   });
   on(box, 'click', '#checkout', async () => {
     if (!state.me || !['student', 'parent'].includes(state.me.user.role)) {

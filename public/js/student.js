@@ -85,7 +85,7 @@ async function assignments(el) {
         label: 'ارسال تکلیف ', onClick: async (m) => {
           const file = await fileToData(m.querySelector('[name=file]').files[0]);
           const r = await post(`/api/student/assignments/${a.id}/submit`, { note: m.querySelector('[name=note]').value, file });
-          if (r.reward) { confetti(60); toast(`آفرین! ${fa(r.reward)} امتیاز تشویقی گرفتی ${icon('star', { size: 16 })}`, 'ok'); } else toast(r.late ? 'تکلیف با برچسب دیرکرد ثبت شد' : 'تکلیف ثبت شد', r.late ? '' : 'ok');
+          if (r.reward) { confetti(60); toast(`آفرین! ${fa(r.reward)} امتیاز تشویقی گرفتی`, 'ok'); } else toast(r.late ? 'تکلیف با برچسب دیرکرد ثبت شد' : 'تکلیف ثبت شد', r.late ? '' : 'ok');
           assignments(el);
         },
       }],
@@ -226,7 +226,7 @@ setInterval(async () => {
   beep(t.phase === 'focus' ? 4 : 2);
   if (t.phase === 'focus') {
     if (!t.demo) {
-      try { const r = await post('/api/student/pomodoro', { subject: t.subject, minutes: 25 }); toast(`${icon('timer', { size: 16 })} یک پومودورو ${t.subject} ثبت شد! +۲ امتیاز (امروز: ${fa(r.today)} دقیقه)`, 'ok'); } catch (e) { toast(e.message, 'err'); }
+      try { const r = await post('/api/student/pomodoro', { subject: t.subject, minutes: 25 }); toast(`یک پومودورو ${t.subject} ثبت شد! +۲ امتیاز (امروز: ${fa(r.today)} دقیقه)`, 'ok'); } catch (e) { toast(e.message, 'err'); }
     } else toast(' دوره تمرکز (حالت تست) تمام شد — در حالت تست، زمان ثبت نمی‌شود', 'ok');
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('پایان پومودورو ', { body: 'آفرین! حالا ۵ دقیقه استراحت کن.' });
     timer.set({ ...t, phase: 'break', finishing: false, endAt: Date.now() + (t.demo ? POMO.demoBreak : POMO.brk) * 1000, total: t.demo ? POMO.demoBreak : POMO.brk, count: (t.count || 0) + 1 });

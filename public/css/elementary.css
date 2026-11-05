@@ -1,5 +1,5 @@
 /* Elementary shell: the provided ZIP design, isolated from the secondary-school panel. */
-body.student-elementary { --primary:#14a05a; --primary-hover:#087d42; --primary-soft:#e3f7ed; --teal-700:#14875b; --teal-800:#106b4a; --teal-600:#1da66f; --teal-50:#edf9f2; --surface:#fff; --line:#d5e2f0; --muted:#64748b; --ep-header:72px; --ep-dock:96px; background:var(--page); color:var(--ink); padding:0; }
+body.student-elementary { --primary:#14a05a; --primary-hover:#087d42; --primary-soft:#e3f7ed; --teal-700:#14875b; --teal-800:#106b4a; --teal-600:#1da66f; --teal-50:#edf9f2; --surface:var(--card); --surface-2:var(--row); --sand-100:var(--row); --sand-50:var(--row); --line-strong:var(--line); --ink-900:var(--ink); --ink-700:var(--ink2); --ink-2:var(--ink2); --ink-600:var(--ink2); --ep-header:72px; --ep-dock:96px; background:var(--page); color:var(--ink); padding:0; }
 body.student-elementary .app { display:block; max-width:540px; margin:0 auto; padding:0; min-height:0; background:linear-gradient(var(--bg-top),var(--page) 340px); }
 body.student-elementary .main { padding:0 0 100px; max-width:none; }
 body.student-elementary .elementary-shell-header { max-width:540px; height:var(--ep-header); margin:auto; background:var(--bg-top); }
@@ -7,7 +7,7 @@ body.student-elementary .elementary-shell-header .hdr { padding:6px 11px; height
 body.student-elementary .elementary-shell-header .brand { padding:0; margin:0; border:0; background:none; border-radius:0; box-shadow:none; flex:1; justify-content:center; min-width:0; gap:4px; }
 body.student-elementary .elementary-shell-header .brand img { width:52px; height:52px; object-fit:contain; }
 body.student-elementary .elementary-shell-header .brand .t { font-size:11px; line-height:1.5; }
-body.student-elementary .elementary-shell-header .brand .t span { font-size:9px; }
+body.student-elementary .elementary-shell-header .brand .t span { font-size:11px; }
 body.student-elementary .elementary-shell-header .coins { direction:rtl; font-size:16px; padding:0 5px 0 9px; gap:4px; }
 body.student-elementary .elementary-shell-header .coins img { height:26px; width:26px; }
 body.student-elementary.elementary-native-page .topbar { display:none; }
@@ -62,7 +62,7 @@ body.student-elementary .elementary-native .ep-ring { display:grid;place-items:c
 body.student-elementary .elementary-native .ep-ring::before { content:'';position:absolute;inset:12px;border-radius:50%;background:var(--card);z-index:-1; }
 body.student-elementary .elementary-native .ep-ring div { text-align:center; }
 body.student-elementary .elementary-native .ep-ring b { display:block;font-size:26px;font-weight:900;color:var(--green); }
-body.student-elementary .elementary-native .ep-ring small { font-size:10px; }
+body.student-elementary .elementary-native .ep-ring small { font-size:11px; }
 body.student-elementary .elementary-native .ringbox { padding:16px; }
 body.student-elementary .elementary-native .pcard { padding:14px; margin:8px 12px 0; }
 body.student-elementary .elementary-native .pcard h2 { font-size:23px; }
@@ -94,21 +94,21 @@ body.student-elementary .bottom-nav a[data-path='/home'] .bi { width:27px;height
 body.student-elementary .bottom-nav .cnt { top:0;right:calc(50% - 26px); }
 body.student-elementary .elementary-native a:focus-visible,body.student-elementary .elementary-native button:focus-visible { outline:3px solid #159662;outline-offset:3px; }
 @media(max-width:380px) {
- body.student-elementary .elementary-shell-header .brand .t { font-size:10px; }
- body.student-elementary .elementary-shell-header .brand .t span { font-size:8px; }
+ body.student-elementary .elementary-shell-header .brand .t { font-size:11px; }
+ body.student-elementary .elementary-shell-header .brand .t span { font-size:11px; }
  body.student-elementary .elementary-shell-header .brand img { width:44px;height:44px; }
  body.student-elementary .elementary-native .tile > span:last-child { font-size:12px; }
  body.student-elementary .elementary-native .greet h1 { font-size:23px; }
  body.student-elementary .elementary-native .greet p { font-size:11px; }
  body.student-elementary .elementary-native .level .ttl { font-size:13px; }
- body.student-elementary .elementary-native .tabs button { font-size:10px;padding:0 7px; }
+ body.student-elementary .elementary-native .tabs button { font-size:11px;padding:0 7px; }
  body.student-elementary .elementary-native .rng { font-size:12px; }
  body.student-elementary .elementary-native .row h4 { font-size:14px; }
  body.student-elementary .elementary-native .phero h1 { font-size:24px; }
  body.student-elementary .elementary-native .tasks { top:34px; }
  body.student-elementary .elementary-native .task { height:23px; }
- body.student-elementary .elementary-native .task span:last-child { font-size:10px; }
- body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { font-size:10px; }
+ body.student-elementary .elementary-native .task span:last-child { font-size:11px; }
+ body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { font-size:11px; }
 }
 @media(max-height:700px) and (max-width:640px) {
  body.student-elementary { --ep-header:58px;--ep-dock:82px; }
@@ -117,30 +117,30 @@ body.student-elementary .elementary-native a:focus-visible,body.student-elementa
  body.student-elementary .elementary-first-screen { gap:6px;grid-template-rows:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.6fr) minmax(0,1fr); }
  body.student-elementary .elementary-native .greet { top:5%; }
  body.student-elementary .elementary-native .greet h1 { font-size:18px; }
- body.student-elementary .elementary-native .greet p { font-size:10px; }
+ body.student-elementary .elementary-native .greet p { font-size:11px; }
  body.student-elementary .elementary-native .greet .wave { font-size:18px; }
  body.student-elementary .elementary-native .level { height:48px;bottom:0;left:40%;padding-top:4px; }
  body.student-elementary .elementary-native .level .ttl { font-size:11px; }
  body.student-elementary .elementary-native .level .track { top:23px;height:7px; }
- body.student-elementary .elementary-native .level .score { top:33px;font-size:9px; }
+ body.student-elementary .elementary-native .level .score { top:33px;font-size:11px; }
  body.student-elementary .elementary-native .level .badge { width:25px;height:25px; }
  body.student-elementary .elementary-native .level .go { top:16px; }
  body.student-elementary .elementary-native .tile { padding-bottom:3px;border-radius:14px; }
  body.student-elementary .elementary-native .tile .ai { height:27px;margin-bottom:2px; }
- body.student-elementary .elementary-native .tile > span:last-child { font-size:10px; }
+ body.student-elementary .elementary-native .tile > span:last-child { font-size:11px; }
  body.student-elementary .elementary-native .banner .txt { top:4px; }
  body.student-elementary .elementary-native .banner h3 { font-size:12px; }
  body.student-elementary .elementary-native .banner p { display:none; }
- body.student-elementary .elementary-native .banner .cta { font-size:10px;height:18px;width:90px;margin-top:2px; }
+ body.student-elementary .elementary-native .banner .cta { font-size:11px;height:18px;width:90px;margin-top:2px; }
  body.student-elementary .elementary-native .today h2 { top:4px;font-size:12px; }
  body.student-elementary .elementary-native .today h2 i { width:16px;height:16px; }
  body.student-elementary .elementary-native .tasks { top:25px;gap:2px; }
  body.student-elementary .elementary-native .task { height:19px;gap:4px; }
- body.student-elementary .elementary-native .task span:last-child { font-size:9px; }
+ body.student-elementary .elementary-native .task span:last-child { font-size:11px; }
  body.student-elementary .elementary-native .task img { width:16px;height:16px; }
  body.student-elementary .elementary-native .box { width:14px;height:14px;border-width:1px;border-radius:4px; }
  body.student-elementary .bottom-nav { height:62px; }
- body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { height:52px;font-size:9px; }
+ body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { height:52px;font-size:11px; }
  body.student-elementary .bottom-nav a[data-path='/home'],body.student-elementary .bottom-nav a[data-path='/home'].on { width:54px;height:54px;margin-top:-24px; }
 }
 @media(prefers-reduced-motion:reduce) { body.student-elementary *,body.student-elementary *::after,body.student-elementary *::before { animation:none!important;transition:none!important;scroll-behavior:auto!important; } }
@@ -156,7 +156,7 @@ body.student-elementary:not(.student-home) .elementary-shell-header .ep-shell-ba
  body.student-elementary .elementary-first-screen { grid-template-rows:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.6fr) minmax(0,1.2fr); }
  body.student-elementary .elementary-native .tile .ai { height:18px;max-height:45%;margin-bottom:1px; }
  body.student-elementary .elementary-native .tile .ai img { max-height:18px; }
- body.student-elementary .elementary-native .tile > span:last-child { font-size:9px;line-height:1.35; }
+ body.student-elementary .elementary-native .tile > span:last-child { font-size:11px;line-height:1.35; }
 }
 /* Short landscape windows use both columns so the original scenes stay readable. */
 @media(min-width:641px) and (max-height:700px) {
@@ -171,29 +171,29 @@ body.student-elementary:not(.student-home) .elementary-shell-header .ep-shell-ba
  body.student-elementary .elementary-native .avwrap { width:37%;height:105%; }
  body.student-elementary .elementary-native .greet { top:3%;right:12px; }
  body.student-elementary .elementary-native .greet h1 { font-size:19px; }
- body.student-elementary .elementary-native .greet p { font-size:10px; }
+ body.student-elementary .elementary-native .greet p { font-size:11px; }
  body.student-elementary .elementary-native .greet .wave { font-size:17px; }
  body.student-elementary .elementary-native .level { height:48px;bottom:3px;left:39%;padding-top:4px; }
  body.student-elementary .elementary-native .level .ttl { font-size:11px; }
  body.student-elementary .elementary-native .level .track { top:22px;height:7px; }
- body.student-elementary .elementary-native .level .score { top:32px;font-size:9px; }
+ body.student-elementary .elementary-native .level .score { top:32px;font-size:11px; }
  body.student-elementary .elementary-native .level .badge { width:25px;height:25px; }
  body.student-elementary .elementary-native .level .go { top:16px; }
  body.student-elementary .elementary-native .tile { padding-bottom:3px;border-radius:14px; }
  body.student-elementary .elementary-native .tile .ai { height:23px;max-height:55%;margin-bottom:1px; }
  body.student-elementary .elementary-native .tile .ai img { max-height:23px; }
- body.student-elementary .elementary-native .tile > span:last-child { font-size:10px;line-height:1.4; }
+ body.student-elementary .elementary-native .tile > span:last-child { font-size:11px;line-height:1.4; }
  body.student-elementary .elementary-native .banner h3 { font-size:16px; }
- body.student-elementary .elementary-native .banner p { font-size:10px; }
+ body.student-elementary .elementary-native .banner p { font-size:11px; }
  body.student-elementary .elementary-native .banner .cta { font-size:11px;width:100px;height:21px; }
  body.student-elementary .elementary-native .today h2 { top:5px;font-size:13px; }
  body.student-elementary .elementary-native .tasks { top:30px;gap:2px; }
  body.student-elementary .elementary-native .task { height:20px; }
- body.student-elementary .elementary-native .task span:last-child { font-size:10px; }
+ body.student-elementary .elementary-native .task span:last-child { font-size:11px; }
  body.student-elementary .elementary-native .task img { width:16px;height:16px; }
  body.student-elementary .elementary-native .box { width:15px;height:15px;border-radius:4px;border-width:1px; }
  body.student-elementary .bottom-nav { height:62px; }
- body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { height:52px;font-size:10px; }
+ body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { height:52px;font-size:11px; }
  body.student-elementary .bottom-nav a[data-path='/home'],body.student-elementary .bottom-nav a[data-path='/home'].on { width:54px;height:54px;margin-top:-24px; }
 }
 /* Home standings and larger, readable daily action cards. */
@@ -209,12 +209,12 @@ body.student-elementary .ep-rank-copy h2 { position:static;font-size:13px;font-w
 body.student-elementary .ep-rank-number { display:flex;align-items:baseline;gap:5px; }
 body.student-elementary .ep-rank-number strong { font-size:30px;font-weight:900;line-height:1.15;color:#b77409; }
 body.student-elementary .ep-rank-center strong { color:#7642c0; }
-body.student-elementary .ep-rank-number small { font-size:10px;font-weight:650;color:#4c5871;white-space:nowrap; }
+body.student-elementary .ep-rank-number small { font-size:11px;font-weight:650;color:#4c5871;white-space:nowrap; }
 body.student-elementary .elementary-native > .banner { height:110px;min-height:110px;margin:16px 10px 0; }
 body.student-elementary .elementary-native .ep-today { display:flex;flex-direction:column;padding:11px 12px;gap:9px;border-radius:23px;background:radial-gradient(ellipse at left bottom,#dcf5e7,transparent 66%),linear-gradient(135deg,#fff,#f8faff); }
 body.student-elementary .ep-today-header { display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none; }
 body.student-elementary .elementary-native .ep-today h2 { position:static;display:block;font-size:17px;line-height:1.5;font-weight:900;margin:0; }
-body.student-elementary .ep-today-count { padding:3px 7px;border-radius:12px;background:#e1f5e9;color:#147348;font-size:10px;line-height:1.6;font-weight:750;white-space:nowrap; }
+body.student-elementary .ep-today-count { padding:3px 7px;border-radius:12px;background:#e1f5e9;color:#147348;font-size:11px;line-height:1.6;font-weight:750;white-space:nowrap; }
 body.student-elementary .ep-today-content { display:grid;grid-template-columns:minmax(0,1fr) 74px;gap:9px;flex:1;min-height:0;align-items:stretch; }
 body.student-elementary .elementary-native .ep-today .tasks { position:static;display:flex;flex-direction:column;justify-content:center;width:auto;min-width:0;min-height:0;gap:7px; }
 body.student-elementary .elementary-native .ep-today .task { flex:0 1 54px;width:100%;height:auto;min-height:44px;padding:6px 8px;gap:7px;border:1px solid #dce7f4;border-radius:15px;background:linear-gradient(110deg,#f2f7ff,#fff);box-shadow:0 2px 3px #356e9e08; }
@@ -223,7 +223,7 @@ body.student-elementary .elementary-native .ep-today .task .box { width:23px;hei
 body.student-elementary .elementary-native .ep-today .task img { width:27px;height:27px;object-fit:contain; }
 body.student-elementary .ep-task-copy { display:flex;flex:1;min-width:0;flex-direction:column;gap:1px; }
 body.student-elementary .ep-task-title { font-size:14px;font-weight:800;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-body.student-elementary .ep-task-copy small { font-size:10px;font-weight:600;line-height:1.4;color:#65728c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+body.student-elementary .ep-task-copy small { font-size:11px;font-weight:600;line-height:1.4;color:#65728c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 body.student-elementary .ep-task-go { display:grid;place-items:center;flex:none;color:#19855a; }
 body.student-elementary .ep-task-go svg { width:13px;height:13px; }
 body.student-elementary .ep-today-art { position:relative;min-width:0;min-height:0; }
@@ -234,11 +234,11 @@ body.student-elementary .elementary-native .ep-today .task:hover { border-color:
  body.student-elementary .ep-rank-icon { width:37px;height:37px; }
  body.student-elementary .ep-rank-copy h2 { font-size:12px; }
  body.student-elementary .ep-rank-number strong { font-size:28px; }
- body.student-elementary .ep-rank-number small { font-size:9px; }
+ body.student-elementary .ep-rank-number small { font-size:11px; }
  body.student-elementary .ep-today-content { grid-template-columns:minmax(0,1fr) 62px;gap:6px; }
  body.student-elementary .elementary-native .ep-today { padding:10px;gap:7px; }
  body.student-elementary .elementary-native .ep-today h2 { font-size:15px; }
- body.student-elementary .ep-today-count { font-size:9px;padding:3px 6px; }
+ body.student-elementary .ep-today-count { font-size:11px;padding:3px 6px; }
  body.student-elementary .elementary-native .ep-today .task { padding:5px 6px;gap:5px; }
  body.student-elementary .elementary-native .ep-today .task .box { width:21px;height:21px; }
  body.student-elementary .elementary-native .ep-today .task img { width:24px;height:24px; }
@@ -249,12 +249,12 @@ body.student-elementary .elementary-native .ep-today .task:hover { border-color:
  body.student-elementary .ep-rankings { gap:7px; }
  body.student-elementary .ep-rank-card { padding:4px 8px;border-radius:14px;gap:5px; }
  body.student-elementary .ep-rank-icon { width:29px;height:29px; }
- body.student-elementary .ep-rank-copy h2 { font-size:10px;line-height:1.3; }
+ body.student-elementary .ep-rank-copy h2 { font-size:11px;line-height:1.3; }
  body.student-elementary .ep-rank-number strong { font-size:21px;line-height:1.1; }
- body.student-elementary .ep-rank-number small { font-size:8px; }
+ body.student-elementary .ep-rank-number small { font-size:11px; }
  body.student-elementary .elementary-native .ep-today { padding:6px 8px;gap:5px; }
  body.student-elementary .elementary-native .ep-today h2 { font-size:13px;line-height:1.4; }
- body.student-elementary .ep-today-count { font-size:8px;padding:2px 5px; }
+ body.student-elementary .ep-today-count { font-size:11px;padding:2px 5px; }
  body.student-elementary .ep-today-content { grid-template-columns:minmax(0,1fr) 52px;gap:5px; }
  body.student-elementary .elementary-native .ep-today .tasks { gap:4px; }
  body.student-elementary .elementary-native .ep-today .task { flex:1 1 32px;min-height:26px;max-height:45px;padding:3px 5px;gap:5px;border-radius:11px; }
@@ -267,9 +267,9 @@ body.student-elementary .elementary-native .ep-today .task:hover { border-color:
  body.student-elementary .elementary-native .greet h1 { font-size:17px; }
  body.student-elementary .elementary-native .greet p { display:none; }
  body.student-elementary .elementary-native .level { height:33px;bottom:0;padding-top:3px; }
- body.student-elementary .elementary-native .level .ttl { font-size:10px;line-height:1.3; }
+ body.student-elementary .elementary-native .level .ttl { font-size:11px;line-height:1.3; }
  body.student-elementary .elementary-native .level .track { top:15px;height:5px; }
- body.student-elementary .elementary-native .level .score { top:21px;font-size:7px; }
+ body.student-elementary .elementary-native .level .score { top:21px;font-size:11px; }
  body.student-elementary .elementary-native .level .badge { width:22px;height:22px; }
  body.student-elementary .elementary-native .level .go { top:9px; }
 }
@@ -278,7 +278,7 @@ body.student-elementary .elementary-native .ep-today .task:hover { border-color:
  body.student-elementary .ep-rankings { grid-column:1;grid-row:2; }
  body.student-elementary .elementary-native .ep-today { padding:7px 10px;gap:5px; }
  body.student-elementary .elementary-native .ep-today h2 { font-size:14px;line-height:1.4; }
- body.student-elementary .ep-today-count { font-size:9px; }
+ body.student-elementary .ep-today-count { font-size:11px; }
  body.student-elementary .ep-today-content { grid-template-columns:minmax(0,1fr) 55px;gap:5px; }
  body.student-elementary .elementary-native .ep-today .tasks { gap:4px; }
  body.student-elementary .elementary-native .ep-today .task { flex:1 1 32px;max-height:42px;min-height:28px;padding:3px 5px;gap:5px; }
@@ -288,3 +288,16 @@ body.student-elementary .elementary-native .ep-today .task:hover { border-color:
  body.student-elementary .ep-task-copy small { display:none; }
 }
 @media print { body.student-elementary .elementary-native > .banner { display:none; } }
+
+/* تم تیره: رنگ‌های روشن کمکی باید همراه سطوح تیره شوند */
+@media (prefers-color-scheme:dark){body.student-elementary:not([data-elementary-theme="light"]){ --teal-50:#173a2a; --teal-100:#1e3a33; --primary-soft:#173a2a; --green-100:#173a2a; --red-100:#42202a; --sun-100:#3a2f12; --coral-100:#40281f; --slate-100:#223448; --opt-right:#173a2a; --green-700:#7ce8ab; --green-600:#55d98e; --red-700:#ffa3a9; --red-600:#ff8f96; --sun-700:#ffd77a; --sun-600:#ffcb5c; --coral-700:#ffb199; --slate-700:#a8c7e0; }}
+body.student-elementary[data-elementary-theme="dark"]{ --teal-50:#173a2a; --teal-100:#1e3a33; --primary-soft:#173a2a; --green-100:#173a2a; --red-100:#42202a; --sun-100:#3a2f12; --coral-100:#40281f; --slate-100:#223448; --opt-right:#173a2a; --green-700:#7ce8ab; --green-600:#55d98e; --red-700:#ffa3a9; --red-600:#ff8f96; --sun-700:#ffd77a; --sun-600:#ffcb5c; --coral-700:#ffb199; --slate-700:#a8c7e0; }
+body.student-elementary .option.right { background:var(--opt-right,#F3FAF5); }
+body.student-elementary:not([data-elementary-theme="dark"]) .bottom-nav a.on { color:#0e7a44; }
+@media (prefers-color-scheme:dark){body.student-elementary:not([data-elementary-theme="light"]) .bottom-nav a.on { color:var(--green2); }}
+body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { line-height:1.15; text-align:center; }
+@media(max-width:380px) { body.student-elementary .bottom-nav a { font-size:11px; letter-spacing:-.2px; } }
+body.student-elementary:not([data-elementary-theme="dark"]) #view a:not([class]) { color:#0e7a44; }
+@media (prefers-color-scheme:dark){body.student-elementary:not([data-elementary-theme="light"]) [style*="color:#047857"] { color:#7ce8ab!important; } body.student-elementary:not([data-elementary-theme="light"]) [style*="color:#b91c1c"] { color:#ffa3a9!important; }}
+body.student-elementary[data-elementary-theme="dark"] [style*="color:#047857"] { color:#7ce8ab!important; }
+body.student-elementary[data-elementary-theme="dark"] [style*="color:#b91c1c"] { color:#ffa3a9!important; }

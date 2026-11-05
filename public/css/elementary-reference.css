@@ -6,7 +6,7 @@ body.student-elementary{
   --page:#e9f3fc; --bg-top:#dcecfb; --scene:#e3f1fc;
   --card:#ffffff; --card-soft:rgba(255,255,255,.84); --row:#f1f6fc; --edge:rgba(255,255,255,.95);
   --tile:linear-gradient(180deg,#fff,#f2f7fd);
-  --ink:#15233a; --ink2:#3d4b60; --muted:#7d8ba0; --line:#d5e2f0; --track:#d3e3f4;
+  --ink:#15233a; --ink2:#3d4b60; --muted:#5d6b80; --line:#d5e2f0; --track:#d3e3f4;
   --green:#14a05a; --green2:#2bc07a; --red:#ef3340;
   --shadow:0 6px 14px rgba(60,115,185,.16);
   --nav:#ffffff; --school-op:.9;

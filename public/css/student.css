@@ -35,7 +35,7 @@ body.student-ui {
 .student-points small { display:block; text-align:center; font-weight:800; font-size:11px; }
 .student-header-actions { display:flex; justify-content:flex-end; gap:12px; }
 .student-round { display:inline-grid; place-items:center; position:relative; width:46px; height:46px; border-radius:50%; background:linear-gradient(145deg,#fff,#f4f9ff); color:#263d74; border:2px solid #fff; box-shadow:var(--shadow); flex:none; }
-.student-counter { display:grid; place-items:center; position:absolute; top:-6px; right:-2px; min-width:23px; height:23px; padding:0 5px; background:#ff2c38; border:2px solid #fff; border-radius:50%; color:#fff; font-size:12px; font-weight:900; line-height:1; }
+.student-counter { display:grid; place-items:center; position:absolute; top:-6px; right:-2px; min-width:23px; height:23px; padding:0 5px; background:#d92331; border:2px solid #fff; border-radius:50%; color:#fff; font-size:12px; font-weight:900; line-height:1; }
 .student-line { flex:none; vertical-align:middle; }
 .student-art { display:block; width:64px; height:64px; object-fit:contain; flex:none; }
 .student-panel,.student-ui .card { background:linear-gradient(140deg,#ffffffed,#f5f8ffed); border:2px solid #fff; border-radius:28px; box-shadow:0 6px 8px #2384ed35,inset 0 1px 4px #fff; }
@@ -73,7 +73,7 @@ body.student-ui {
 .student-rank h2 { font-size:19px; font-weight:900; }
 .student-rank strong { display:block; font-weight:900; font-size:52px; color:#ffe31c; line-height:1.05; margin:6px 0; text-shadow:0 2px 0 #ba8700; }
 .student-rank small { display:block; font-size:12px; font-weight:700; }
-.student-rank-caption { display:block; font-size:10px; margin-top:10px; color:#f3eaff; }
+.student-rank-caption { display:block; font-size:11px; margin-top:10px; color:#f3eaff; }
 .student-rank .student-art { width:43%; height:130px; order:2; }
 .student-level { display:flex; align-items:center; justify-content:space-between; gap:16px; color:var(--ink); }
 .student-level h2 { font-size:20px; display:block; margin:0 0 18px; }
@@ -132,7 +132,7 @@ body.student-ui {
 .student-ui .bottom-nav a.on .bi { color:inherit; }
 .student-ui .bottom-nav a[data-path='/home'],.student-ui .bottom-nav a[data-path='/home'].on { background:linear-gradient(135deg,#15c4ff,#0671ff 55%,#0043ee); color:#fff; border:4px solid #fff; box-shadow:0 4px 8px #0677ef69,inset 0 3px 6px #ffffff88; border-radius:50%; width:83px; height:83px; flex:0 0 83px; margin-top:-17px; font-size:17px; }
 .student-ui .bottom-nav a[data-path='/home'] .bi { color:white; }
-.student-ui .bottom-nav .cnt { position:absolute; top:3px; right:calc(50% - 26px); min-width:20px; height:20px; border-radius:50%; color:white; background:#fc2f3c; border:2px solid #fff; display:grid; place-items:center; font-size:10px; }
+.student-ui .bottom-nav .cnt { position:absolute; top:3px; right:calc(50% - 26px); min-width:20px; height:20px; border-radius:50%; color:white; background:#d92331; border:2px solid #fff; display:grid; place-items:center; font-size:11px; }
 .student-subjects { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:20px; }
 .student-subject { display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; min-height:150px; border:2px solid #fff; border-radius:25px; box-shadow:var(--shadow); color:var(--ink); font-weight:900; }
 .student-subject > .student-art { width:70px; height:65px; }
@@ -170,7 +170,7 @@ body.student-ui {
  .student-today-list { width:76%; }
  .student-today-row { padding:6px 8px; gap:6px; min-height:41px; }
  .student-today-row b { font-size:12px; }
- .student-today-row > span:last-child:not(.student-task-check) { font-size:9px; }
+ .student-today-row > span:last-child:not(.student-task-check) { font-size:11px; }
  .student-event-banner { min-height:140px; }
  .student-event-banner b { font-size:20px; }
 }
@@ -179,19 +179,19 @@ body.student-ui {
  .student-masthead { min-height:78px; padding:10px 12px 6px; grid-template-columns:1fr auto 1fr; gap:5px; }
  .student-brand { padding:0 7px 4px; gap:4px; border-radius:0 0 24px 24px; flex-direction:column; }
  .student-brand > img,.student-brand > svg { width:43px; height:40px; }
- .student-brand b { font-size:10px; line-height:1.6; }
- .student-brand small { max-width:130px; font-size:8px; line-height:1.4; }
+ .student-brand b { font-size:11px; line-height:1.6; }
+ .student-brand small { max-width:130px; font-size:11px; line-height:1.4; }
  .student-header-actions { gap:6px; }
  .student-round { width:35px; height:35px; }
  .student-header-actions .student-line { width:20px; height:20px; }
- .student-counter { height:19px; min-width:19px; font-size:10px; top:-5px; right:-3px; padding:0 3px; }
+ .student-counter { height:19px; min-width:19px; font-size:11px; top:-5px; right:-3px; padding:0 3px; }
  .student-points { padding:5px 8px 5px 5px; gap:3px; }
  .student-points .student-art { width:27px; height:30px; }
  .student-points b { font-size:17px; }
- .student-points small { font-size:9px; }
+ .student-points small { font-size:11px; }
  .student-ui .topbar { padding:12px 0 17px; }
  .student-ui .topbar h1 { font-size:22px; }
- .student-ui .topbar .sub { font-size:10px; }
+ .student-ui .topbar .sub { font-size:11px; }
  .student-ui .topbar .title { padding-inline-end:35px; }
  .student-dashboard { gap:12px; }
  .student-welcome { height:185px; margin:0 -12px -23px; }
@@ -203,14 +203,14 @@ body.student-ui {
  .student-rank { min-height:117px; padding:9px 10px; gap:3px; border-radius:21px; }
  .student-rank h2 { font-size:12px; white-space:nowrap; }
  .student-rank strong { font-size:36px; margin:3px 0; }
- .student-rank small { font-size:9px; }
- .student-rank-caption { margin-top:4px; font-size:7px; white-space:nowrap; }
+ .student-rank small { font-size:11px; }
+ .student-rank-caption { margin-top:4px; font-size:11px; white-space:nowrap; }
  .student-rank .student-art { width:39%; height:76px; }
  .student-level { padding:12px 10px; gap:8px; border-radius:21px; flex-direction:column-reverse; justify-content:center; }
  .student-level-copy { width:100%; }
  .student-level h2 { font-size:12px; text-align:center; margin:0 0 6px; }
  .student-level-medal { position:absolute; left:10px; top:-8px; width:33px; height:33px; border-width:3px; opacity:0; }
- .student-level-copy small { font-size:9px; white-space:nowrap; margin-top:5px; }
+ .student-level-copy small { font-size:11px; white-space:nowrap; margin-top:5px; }
  .student-level .student-progress { height:13px; }
  .student-features { gap:9px; }
  .student-feature { border-radius:20px; min-height:88px; padding:8px 2px 6px; gap:3px; }
@@ -223,7 +223,7 @@ body.student-ui {
  .student-today { min-height:145px; }
  .student-today-row { min-height:30px; padding:4px 8px; gap:6px; }
  .student-today-row b { font-size:11px; line-height:1.7; }
- .student-today-row > span:last-child:not(.student-task-check) { font-size:8px; }
+ .student-today-row > span:last-child:not(.student-task-check) { font-size:11px; }
  .student-task-check { width:20px; height:20px; border-radius:6px; }
  .student-tasks-art { height:105px; bottom:10px; }
  .student-today-list { gap:5px; }
@@ -233,7 +233,7 @@ body.student-ui {
  .student-yellow-button { font-size:12px; padding:3px 13px; gap:10px; margin-top:5px; }
  .student-event-dots { padding-top:8px; }
  .student-ui .bottom-nav { height:69px; bottom:8px; width:calc(100% - 16px); padding:3px 4px max(3px,env(safe-area-inset-bottom)); }
- .student-ui .bottom-nav a,.student-ui .bottom-nav a.on { height:56px; font-size:9px; border-radius:20px; gap:0; }
+ .student-ui .bottom-nav a,.student-ui .bottom-nav a.on { height:56px; font-size:11px; border-radius:20px; gap:0; }
  .student-ui .bottom-nav .bi { width:26px; height:29px; }
  .student-ui .bottom-nav .student-line { width:23px; height:23px; }
  .student-ui .bottom-nav a[data-path='/home'],.student-ui .bottom-nav a[data-path='/home'].on { width:70px; height:70px; flex:0 0 70px; font-size:13px; margin-top:-13px; border-width:3px; }
@@ -249,21 +249,21 @@ body.student-ui {
  .student-averages > div { gap:8px; }
  .student-averages strong { font-size:13px; width:36px; }
  .student-days { margin-bottom:15px; gap:0; }
- .student-days button { font-size:10px; padding:5px 8px; min-height:36px; }
+ .student-days button { font-size:11px; padding:5px 8px; min-height:36px; }
  .student-schedule-card { padding:12px 15px; min-height:94px; }
  .student-more-grid { gap:8px; }
  .student-more-grid .student-feature { min-height:91px; }
  .student-more-grid .student-feature .student-art { width:46px; height:44px; }
- .student-more-grid .student-feature b { font-size:10px; white-space:normal; }
+ .student-more-grid .student-feature b { font-size:11px; white-space:normal; }
  .student-more-group h2 { font-size:17px; }
  .student-own-photo .avatar { width:65px; height:65px; }
 }
 @media(max-width:360px) {
- .student-brand small { max-width:100px; font-size:7px; }
+ .student-brand small { max-width:100px; font-size:11px; }
  .student-points b { font-size:14px; }
  .student-header-actions { gap:4px; }
  .student-header-actions .student-round { width:31px; height:31px; }
- .student-feature b { font-size:9px; }
+ .student-feature b { font-size:11px; }
  .student-welcome h1 { font-size:20px; }
  .student-rank-caption { font-size:6px; }
  .student-rank h2 { font-size:11px; }
@@ -281,9 +281,9 @@ body.student-ui { background-attachment:scroll; }
  .student-level { flex-direction:row; padding:15px 9px 10px; gap:7px; }
  .student-level-medal { position:relative; left:auto; top:auto; opacity:1; width:55px; height:55px; border-width:6px; }
  .student-level-medal > .student-art { top:-25px; width:33px; height:28px; }
- .student-level-medal small { font-size:8px; line-height:1.2; }
+ .student-level-medal small { font-size:11px; line-height:1.2; }
  .student-level-medal b { font-size:15px; }
- .student-level-copy small { white-space:normal; font-size:8px; }
+ .student-level-copy small { white-space:normal; font-size:11px; }
  .student-level h2 { font-size:11px; line-height:1.8; }
 }
 .student-results,.student-roadmap { display:grid; gap:18px; }
@@ -297,7 +297,7 @@ body.student-ui { background-attachment:scroll; }
 .student-result-card > .student-art { width:42px; height:48px; }
 .student-result-card > div { flex:1; min-width:0; }
 .student-result-card b { font-size:15px; }
-.student-result-card small { display:block; font-size:10px; color:var(--muted); }
+.student-result-card small { display:block; font-size:11px; color:var(--muted); }
 .student-result-card > strong { color:#079b39; font-size:24px; font-weight:900; }
 .student-road-hero { display:flex; align-items:center; justify-content:space-between; min-height:240px; background:linear-gradient(140deg,#ecf9ff,#d0eaff); overflow:hidden; }
 .student-road-hero > div { width:42%; padding-inline-start:14px; }
@@ -332,8 +332,8 @@ body.student-ui { background-attachment:scroll; }
 .student-badges > div.unlocked { background:linear-gradient(#fff9e8,#ffedcd); }
 .student-badges .student-art { width:54px; height:54px; }
 .student-badges b { font-size:12px; }
-.student-badges small { font-size:10px; color:var(--muted); }
-.student-badges span:last-child { font-size:10px; font-weight:800; color:var(--muted); }
+.student-badges small { font-size:11px; color:var(--muted); }
+.student-badges span:last-child { font-size:11px; font-weight:800; color:var(--muted); }
 .student-badges .unlocked span:last-child { color:#0b7037; }
 @media(max-width:640px) {
  .student-exam-summary { min-height:135px; padding:14px 18px; }
@@ -341,7 +341,7 @@ body.student-ui { background-attachment:scroll; }
  .student-exam-summary > .student-art { width:100px; height:100px; }
  .student-result-card { padding:12px 10px; gap:8px; }
  .student-result-card b { font-size:13px; }
- .student-result-card small { font-size:9px; }
+ .student-result-card small { font-size:11px; }
  .student-result-card > strong { font-size:20px; }
  .student-result-card > .student-art { width:32px; height:38px; }
  .student-road-hero { min-height:185px; }
@@ -357,8 +357,8 @@ body.student-ui { background-attachment:scroll; }
  .student-next-level h2 { font-size:18px; }
  .student-next-level p { font-size:14px; }
  .student-badges { grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
- .student-badges b { font-size:10px; }
- .student-badges small { font-size:8px; }
+ .student-badges b { font-size:11px; }
+ .student-badges small { font-size:11px; }
 }
 .student-welcome-art { width:min(64%,487px); }
 @media(max-width:640px) { .student-welcome-art { width:64%; } }

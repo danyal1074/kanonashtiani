@@ -162,7 +162,7 @@ async function examDetail(el, { id }) {
   const e = await api(`/api/teacher/exams/${id}`);
   const done = new Set(e.results.map((r) => r.student_id));
   setHead(`${esc(e.title)}`, `${e.kind === 'online' ? 'آزمون آنلاین' : 'آزمون کاغذی'} • پایه ${gradeName(e.grade)} • ${fa(e.questions.length)} سؤال`,
-    `<a class="btn ghost sm" href="#/exams">→ آزمون‌ها</a> <button class="btn ghost sm" id="printSheet">${icon('printer', { size: 16 })} پاسخ‌برگ</button> <button class="btn sm green" id="scan">${icon('camera', { size: 16 })} اسکن پاسخ‌برگ</button> <button class="btn ghost sm" id="delExam">${icon('trash', { size: 16 })}</button>`);
+    `<a class="btn ghost sm" href="#/exams">→ آزمون‌ها</a> <button class="btn ghost sm" id="printSheet">${icon('printer', { size: 16 })} پاسخ‌برگ</button> <button class="btn sm green" id="scan">${icon('camera', { size: 16 })} اسکن پاسخ‌برگ</button> <button class="btn ghost sm" id="delExam" aria-label="حذف آزمون">${icon('trash', { size: 16 })}</button>`);
   const dist = [0, 0, 0, 0, 0];
   e.results.forEach((r) => { dist[Math.min(4, Math.floor(r.percent / 20))]++; });
   el.innerHTML = `<div class="grid c3"><div class="card center tint-violet">${ring(e.avg || 0, { size: 140, label: e.avg == null ? '—' : pct(e.avg), sub: 'میانگین' })}<div class="small" style="margin-top:8px">${fa(e.results.length)} از ${fa(e.students.length)} نفر شرکت کرده‌اند</div></div>
@@ -240,6 +240,7 @@ async function plans(el) {
   const classes = await myClasses();
   let classId = classes[0]?.id, week = null;
   setHead('برنامه پومودوروی هفتگی', 'تعیین تعداد پومودوروی هر درس برای هفته و بررسی اجرای آن');
+  if (!classes.length) { el.innerHTML = `<div class="card">${empty('users', 'کلاسی به شما اختصاص داده نشده')}</div>`; return; }
   const load = async () => {
     const d = await api(`/api/teacher/study-plans?class_id=${classId}${week ? `&week=${week}` : ''}`);
     week = d.week_start;
@@ -261,7 +262,7 @@ async function plans(el) {
     $('#nextW', el).onclick = () => { week = addDays(week, 7); load(); };
   };
   on(el, 'click', '[data-cls]', (e, b) => { classId = Number(b.dataset.cls); load(); });
-  load();
+  await load();
 }
 
 // ================= ویدیو و جزوه =================
