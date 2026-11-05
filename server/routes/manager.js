@@ -90,7 +90,7 @@ export default function register(r) {
   });
   r.post('/api/manager/attendance/:id/sms', M, async (ctx) => {
     const cid = ctx.user.center_id;
-    const rows = all(`SELECT a.id, a.date, u.full_name, s.parent_phone, c.name class_name, c.grade FROM attendance a JOIN classes c ON c.id=a.class_id
+    const rows = all(`SELECT a.id, a.student_id, a.date, u.full_name, s.parent_phone, c.name class_name, c.grade FROM attendance a JOIN classes c ON c.id=a.class_id
       JOIN users u ON u.id=a.student_id JOIN students s ON s.user_id=u.id
       WHERE c.center_id=? AND a.status='absent' AND a.sms_sent=0 AND ${ctx.params.id === 'all' ? 'a.date=?' : 'a.id=?'}`, cid, ctx.params.id === 'all' ? ymd() : Number(ctx.params.id));
     const center = get('SELECT name FROM centers WHERE id=?', cid);
@@ -100,7 +100,7 @@ export default function register(r) {
       await Promise.all(rows.slice(i, i + 5).map(async (a) => {
         const [jy, jm, jd] = jMonthOf(a.date);
         const text = `${center.name}: ${a.full_name} امروز (${jy}/${jm}/${jd}) در کلاس ${a.class_name} غایب بود.`;
-        const r = await sendSms(a.parent_phone, text, { center_id: cid, student_id: a.user_id || a.id, message_type: 'absence' });
+        const r = await sendSms(a.parent_phone, text, { center_id: cid, student_id: a.student_id, message_type: 'absence' });
         if (r.ok) { run('UPDATE attendance SET sms_sent=1 WHERE id=?', a.id); result.sent++; } else { result.failed++; if (result.errors.length < 3) result.errors.push(r.error); }
       }));
     }
@@ -343,7 +343,7 @@ export default function register(r) {
     const aud = announcementAudience(a);
     return { ...a, target_value: JSON.parse(a.target_value || '[]'), audience: aud.length, seen: aud.filter((x) => x.seen_at).length };
   }));
-  r.post('/api/manager/announcements', M, (ctx) => {
+  r.post('/api/manager/announcements', M, async (ctx) => {
     const b = ctx.body;
     const title = clampStr(b.title, 150), body = clampStr(b.body, 4000);
     if (!title || !body) fail(400, 'عنوان و متن اطلاعیه را وارد کنید');
@@ -352,9 +352,47 @@ export default function register(r) {
     if (type === 'grade') value = value.filter((g) => GRADES.includes(g));
     if (type === 'classes') value = value.filter((id) => get('SELECT 1 FROM classes WHERE id=? AND center_id=?', id, ctx.user.center_id));
     if (type !== 'all' && !value.length) fail(400, 'مخاطبان اطلاعیه را انتخاب کنید');
-    run('INSERT INTO announcements (center_id, title, body, emoji, target_type, target_value, author_id) VALUES (?,?,?,?,?,?,?)',
+    const ins = run('INSERT INTO announcements (center_id, title, body, emoji, target_type, target_value, author_id) VALUES (?,?,?,?,?,?,?)',
       ctx.user.center_id, title, body, clampStr(b.emoji, 8) || '📢', type, JSON.stringify(value), ctx.user.id);
-    return { ok: true };
+
+    let smsResult = null;
+    if (b.send_sms) {
+      const ann = { id: ins.lastInsertRowid, center_id: ctx.user.center_id, target_type: type, target_value: JSON.stringify(value) };
+      const people = announcementAudience(ann);
+      const center = get('SELECT name FROM centers WHERE id=?', ctx.user.center_id);
+      const prefix = center?.name ? `[${center.name}] ` : '';
+      const text = `${prefix}${title}\n${body}`.slice(0, 300);
+      const rec = b.sms_recipient || 'parent';
+      const queue = [];
+      const seen = new Set();
+      for (const p of people) {
+        if (p.role === 'student') {
+          if ((rec === 'parent' || rec === 'both')) {
+            const st = get('SELECT parent_phone FROM students WHERE user_id=?', p.id);
+            if (st?.parent_phone && !seen.has(st.parent_phone)) {
+              seen.add(st.parent_phone);
+              queue.push({ phone: st.parent_phone, student_id: p.id });
+            }
+          }
+          if ((rec === 'student' || rec === 'both')) {
+            const u = get('SELECT mobile FROM users WHERE id=?', p.id);
+            if (u?.mobile && !seen.has(u.mobile)) {
+              seen.add(u.mobile);
+              queue.push({ phone: u.mobile, student_id: p.id });
+            }
+          }
+        }
+      }
+      let sent = 0, failed = 0;
+      for (let i = 0; i < queue.length; i += 5) {
+        await Promise.all(queue.slice(i, i + 5).map(async (q) => {
+          const r = await sendSms(q.phone, text, { center_id: ctx.user.center_id, student_id: q.student_id, message_type: 'announcement' });
+          if (r.ok) sent++; else failed++;
+        }));
+      }
+      smsResult = { total: queue.length, sent, failed, simulated: smsProvider() === 'simulated' };
+    }
+    return { ok: true, id: ins.lastInsertRowid, sms: smsResult };
   });
   r.get('/api/manager/announcements/:id', M, (ctx) => {
     const a = get('SELECT * FROM announcements WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id);
@@ -576,6 +614,71 @@ export default function register(r) {
       run(`UPDATE sms_outbox SET status='failed', error_message=? WHERE id=?`, r.error, msg.id);
       return { ok: false, status: 'failed', error: r.error };
     }
+  });
+
+  // ---------- ارسال پیامک گروهی یا تکی به دانش‌آموزان / اولیا ----------
+  r.post('/api/manager/sms/send', M, async (ctx) => {
+    const cid = ctx.user.center_id;
+    const b = ctx.body || {};
+    const text = clampStr(b.text || b.message, 500);
+    if (!text) fail(400, 'متن پیامک را وارد کنید');
+
+    const targetType = ['all', 'grade', 'class', 'student'].includes(b.target_type) ? b.target_type : 'all';
+    const recipient = ['parent', 'student', 'both'].includes(b.recipient) ? b.recipient : 'parent';
+
+    let students = [];
+    if (targetType === 'student') {
+      const sid = Number(b.target_value);
+      const st = get(`SELECT u.id, u.full_name, u.mobile, s.parent_phone FROM users u JOIN students s ON s.user_id=u.id WHERE u.id=? AND u.center_id=? AND u.active=1`, sid, cid);
+      if (!st) fail(404, 'دانش‌آموز یافت نشد');
+      students = [st];
+    } else if (targetType === 'class') {
+      const clsId = Number(b.target_value);
+      students = all(`SELECT u.id, u.full_name, u.mobile, s.parent_phone FROM users u JOIN students s ON s.user_id=u.id WHERE s.class_id=? AND u.center_id=? AND u.active=1`, clsId, cid);
+    } else if (targetType === 'grade') {
+      const gr = Number(b.target_value);
+      students = all(`SELECT u.id, u.full_name, u.mobile, s.parent_phone FROM users u JOIN students s ON s.user_id=u.id WHERE s.grade=? AND u.center_id=? AND u.active=1`, gr, cid);
+    } else {
+      students = all(`SELECT u.id, u.full_name, u.mobile, s.parent_phone FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.active=1`, cid);
+    }
+
+    if (!students.length) fail(400, 'مخاطبی برای ارسال پیامک یافت نشد');
+
+    const result = { ok: true, total: 0, sent: 0, failed: 0, simulated: smsProvider() === 'simulated', errors: [] };
+    const queue = [];
+    for (const st of students) {
+      if ((recipient === 'parent' || recipient === 'both') && st.parent_phone) {
+        queue.push({ phone: st.parent_phone, student_id: st.id });
+      }
+      if ((recipient === 'student' || recipient === 'both') && st.mobile) {
+        queue.push({ phone: st.mobile, student_id: st.id });
+      }
+    }
+
+    const seen = new Set();
+    const uniqueQueue = [];
+    for (const item of queue) {
+      const ph = String(item.phone).trim();
+      if (ph && !seen.has(ph)) {
+        seen.add(ph);
+        uniqueQueue.push({ ...item, phone: ph });
+      }
+    }
+
+    result.total = uniqueQueue.length;
+    for (let i = 0; i < uniqueQueue.length; i += 5) {
+      await Promise.all(uniqueQueue.slice(i, i + 5).map(async (item) => {
+        const r = await sendSms(item.phone, text, { center_id: cid, student_id: item.student_id, message_type: 'broadcast' });
+        if (r.ok) {
+          result.sent++;
+        } else {
+          result.failed++;
+          if (result.errors.length < 3) result.errors.push(r.error);
+        }
+      }));
+    }
+
+    return result;
   });
 
   // ---------- لاگ تغییرات حضور و غیاب برای مدیر (Option 7) ----------

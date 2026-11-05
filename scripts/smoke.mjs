@@ -444,6 +444,28 @@ check('آپلود فایل بیش از سقف مجاز رد می‌شود (۴۰�
 const foreignGrade = await call(S.teacher.ck, 'POST', '/api/teacher/assignments/submissions/999999/grade', { score: 20 });
 check('معلم به ثبت نمره برای ارسال‌های خارج از کلاس خودش دسترسی ندارد (۴۰۴)', foreignGrade.status === 404);
 
+// ۶) سامانه پیامکی و ارسال گروهی/تکی مدیر
+const emptySms = await call(S.manager.ck, 'POST', '/api/manager/sms/send', {});
+check('ارسال پیامک بدون متن رد می‌شود (۴۰۰)', emptySms.status === 400);
+
+const meStu = (await call(S.student.ck, 'GET', '/api/me')).data.user;
+const sendStudentSms = await call(S.manager.ck, 'POST', '/api/manager/sms/send', {
+  target_type: 'student',
+  target_value: meStu.id,
+  recipient: 'both',
+  text: 'آزمون آزمایشی جمعه برگزار می‌شود'
+});
+check('ارسال پیامک به دانش‌آموز خاص با موفقیت شبیه‌سازی/ارسال می‌شود', sendStudentSms.status === 200 && sendStudentSms.data.ok);
+
+const annWithSms = await call(S.manager.ck, 'POST', '/api/manager/announcements', {
+  title: 'جلسه اولیا و مربیان',
+  body: 'چهارشنبه ساعت ۱۶ در سالن اجتماعات',
+  target_type: 'all',
+  send_sms: true,
+  sms_recipient: 'parent'
+});
+check('ثبت اطلاعیه به همراه ارسال پیامک موفق است', annWithSms.status === 200 && annWithSms.data.ok && annWithSms.data.sms?.total >= 0);
+
 app.kill();
 await new Promise((r) => setTimeout(r, 300));
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* */ }
