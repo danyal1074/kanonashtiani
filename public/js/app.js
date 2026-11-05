@@ -9,10 +9,9 @@ import * as teacher from './teacher.js';
 import { prepareManager, decorateManager } from './manager-ui.js';
 import { prepareTeacher } from './teacher-ui.js';
 import * as manager from './manager.js';
-import * as parent from './parent.js';
 import * as admin from './admin.js';
 
-const PANELS = { student, teacher, manager, parent, admin };
+const PANELS = { student, teacher, manager, admin };
 document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.contact, tr[data-href], tr.click, .feature-tile[onclick]')) { e.preventDefault(); e.target.click(); } });
 // خطای عملیات‌های پس‌زمینه بی‌صدا نماند
 window.addEventListener('unhandledrejection', (e) => { if (e.reason?.message) toast(e.reason.message, 'err'); });

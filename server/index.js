@@ -13,7 +13,6 @@ import registerCommon from './routes/common.js';
 import registerStudent from './routes/student.js';
 import registerTeacher from './routes/teacher.js';
 import registerManager from './routes/manager.js';
-import registerParent from './routes/parent.js';
 import registerAdmin from './routes/admin.js';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -31,7 +30,7 @@ const ALLOWED_ORIGINS = new Set((process.env.ROSHD_ALLOWED_ORIGINS || '').split(
 const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' https: data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
 
 const router = new Router();
-[registerCommon, registerStudent, registerTeacher, registerManager, registerParent, registerAdmin].forEach((r) => r(router));
+[registerCommon, registerStudent, registerTeacher, registerManager, registerAdmin].forEach((r) => r(router));
 router.get('/api/health', { auth: false }, () => {
   get('SELECT 1 x'); // اتصال به پایگاه داده زنده است
   return { ok: true, uptime_s: Math.round((Date.now() - metrics.started) / 1000) };
@@ -42,7 +41,7 @@ function loadUser(req) {
   const p = readToken(tok);
   if (!p) return {};
   const user = get('SELECT id, center_id, role, username, national_code, mobile, full_name, gender, active, pass_hash, must_change_password FROM users WHERE id=?', p.uid);
-  if (!user || !user.active) return {};
+  if (!user || !user.active || user.role === 'parent') return {};
   // اعتبار توکن پس از تغییر رمز از بین می‌رود
   if (p.pv && p.pv !== user.pass_hash.slice(-8)) return {};
   delete user.pass_hash;

@@ -6,10 +6,9 @@ const ROLES = [
   { key: 'student', icon: 'graduation', name: 'دانش‌آموز', label: 'کد ملی یا نام کاربری', ph: '0012345679' },
   { key: 'teacher', icon: 'book', name: 'معلم', label: 'کد ملی یا نام کاربری', ph: 'teacher' },
   { key: 'manager', icon: 'building', name: 'مدیر کانون', label: 'کد ملی یا نام کاربری', ph: 'manager' },
-  { key: 'parent', icon: 'users', name: 'والدین', label: 'شماره موبایل', ph: '09121234567' },
 ];
 const ADMIN = { key: 'admin', icon: 'shield', name: 'مدیر سامانه', label: 'نام کاربری پشتیبانی', ph: 'admin' };
-const DEMO = { student: 'student', teacher: 'teacher', manager: 'manager', parent: '09120000000', admin: 'admin' };
+const DEMO = { student: 'student', teacher: 'teacher', manager: 'manager', admin: 'admin' };
 const FEATURES = [['book', 'مطالعه هدفمند'], ['clipboard', 'آزمون و کارنامه'], ['message', 'همراهی پشتیبان']];
 
 export async function loginView(root, onDone) {
@@ -43,7 +42,7 @@ export async function loginView(root, onDone) {
           <div class="chips">
             <button class="chip" data-demo="student">${icon('graduation', { size: 14 })} آرین</button><button class="chip" data-demo="student9">${icon('lock', { size: 14 })} کیان (قفل)</button>
             <button class="chip" data-demo="teacher">${icon('book', { size: 14 })} معلم</button><button class="chip" data-demo="manager">${icon('building', { size: 14 })} مدیر</button>
-            <button class="chip" data-demo="parent">${icon('users', { size: 14 })} والد</button><button class="chip" data-demo="admin">${icon('shield', { size: 14 })} مدیر سامانه</button></div></details>
+            <button class="chip" data-demo="admin">${icon('shield', { size: 14 })} مدیر سامانه</button></div></details>
       </div>
     </main>
     <section class="lg-art" aria-label="معرفی کانون">
@@ -62,7 +61,7 @@ export async function loginView(root, onDone) {
     $$('.role', root).forEach((b) => { const on = b.dataset.role === r.key; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
     $('#idLabel', root).textContent = r.label;
     $('#ident', root).placeholder = r.ph;
-    $('#ident', root).inputMode = r.key === 'parent' ? 'tel' : 'text';
+    $('#ident', root).inputMode = 'text';
     setErr('');
   };
   $$('.role', root).forEach((b) => {

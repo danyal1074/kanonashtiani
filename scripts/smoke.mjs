@@ -29,13 +29,13 @@ async function login(role, id, pass = '123456') {
 }
 const call = (ck, method, p, body) => fetch(B + p, { method, headers: { ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}), ...(ck ? { Cookie: ck } : {}) }, body: method !== 'GET' ? JSON.stringify(body || {}) : undefined }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => null), ck: r.headers.get('set-cookie')?.split(';')[0], headers: r.headers }));
 
-const S = { student: await login('student', 'student'), teacher: await login('teacher', 'teacher'), manager: await login('manager', 'manager'), parent: await login('parent', '09120000000'), admin: await login('admin', 'admin'), locked: await login('student', 'student9') };
+const S = { student: await login('student', 'student'), teacher: await login('teacher', 'teacher'), manager: await login('manager', 'manager'), admin: await login('admin', 'admin'), locked: await login('student', 'student9') };
 for (const [k, v] of Object.entries(S)) check(`ورود ${k}`, v.status === 200, v.status);
 check('رمز اشتباه رد می‌شود', (await fetch(B + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'student', identifier: 'student', password: 'x' }) })).status === 401);
 check('نقش اشتباه رد می‌شود', (await fetch(B + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'manager', identifier: 'student', password: '123456' }) })).status === 401);
 
 // ماتریس دسترسی: هر نقش فقط به مسیر خودش
-const AREAS = { student: '/api/student/dashboard', teacher: '/api/teacher/overview', manager: '/api/manager/dashboard', admin: '/api/admin/overview', parent: '/api/parent/children/995' };
+const AREAS = { student: '/api/student/dashboard', teacher: '/api/teacher/overview', manager: '/api/manager/dashboard', admin: '/api/admin/overview' };
 for (const [role, s] of Object.entries(S)) {
   if (role === 'locked') continue;
   for (const [area, p] of Object.entries(AREAS)) {
@@ -85,7 +85,7 @@ check('پنل قفل‌شده: صفحه پرداخت باز است', (await call
 check('پنل قفل‌شده: اطلاعیه‌ها باز است', (await call(S.locked.ck, 'GET', '/api/announcements')).status === 200);
 
 // والد فقط فرزند خودش
-check('والد: فرزند دیگران ممنوع', (await call(S.parent.ck, 'GET', '/api/parent/children/1')).status === 403);
+check('ورود والدین غیرفعال است (پنل والدین حذف شده)', (await call('', 'POST', '/api/auth/login', { role: 'parent', identifier: '09120000000', password: '123456' })).status === 400);
 // معلم فقط دانش‌آموز کلاس خودش
 const other = (await call(S.manager.ck, 'GET', '/api/manager/students?grade=4&limit=1')).data.rows[0];
 check('معلم: دانش‌آموز کلاس دیگر ممنوع', (await call(S.teacher.ck, 'GET', `/api/teacher/students/${other.id}`)).status === 403);
@@ -118,6 +118,21 @@ check('ثبت پومودورو پس از تعویض رمز', p1.status === 200);
 check('پومودورو بی‌فاصله رد می‌شود', (await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 429);
 
 check('کد ملی تکراری رد می‌شود', (await call(S.manager.ck, 'POST', '/api/manager/students', { full_name: 'تکراری', national_code: nc, grade: 7, parent_phone: '09350001122' })).status === 400);
+// ثبت‌نام بدون موبایل (اختیاری) و اشتراک سامانه جدا از حق عضویت
+const nc2 = (() => { const d = [2, 7, 1, 8, 2, 8, 1, 8, 2]; const s = d.reduce((a, x, i) => a + x * (10 - i), 0) % 11; return d.join('') + (s < 2 ? s : 11 - s); })();
+check('ثبت‌نام بدون موبایل والدین مجاز است', (await call(S.manager.ck, 'POST', '/api/manager/students', { full_name: 'بدون موبایل', national_code: nc2, grade: 4 })).status === 200);
+const feesCfg = (await call(S.manager.ck, 'GET', '/api/manager/fees')).data;
+check('اشتراک سامانه پیش‌فرض ۱۰۰ هزار تومان است', feesCfg.system_fee === 100000, feesCfg.system_fee);
+const payInfo = (await call(S.student.ck, 'GET', '/api/student/payment')).data;
+check('مجموع پرداخت = حق عضویت + اشتراک سامانه (جدا)', payInfo.total === payInfo.amount + payInfo.system_fee && (payInfo.amount === 0 ? payInfo.system_fee === 0 : payInfo.system_fee === 100000), JSON.stringify([payInfo.amount, payInfo.system_fee, payInfo.total]));
+check('مسیرهای پنل والدین حذف شده‌اند', (await call(S.manager.ck, 'GET', '/api/parent/children/1')).status === 404);
+check('دانش‌آموز بدون موبایل با کد ملی وارد می‌شود', (await login('student', nc2, nc2)).status === 200);
+check('مدیر اشتراک سامانه را تغییر می‌دهد', (await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 120000, settings: [] })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/fees')).data.system_fee === 120000);
+check('اشتراک سامانه عددی نامعتبر صفر می‌شود', (await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 'abc', settings: [] })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/fees')).data.system_fee === 0);
+await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 100000, settings: [] });
+check('نقش ناشناخته (والدین) در ورود رد می‌شود', (await call('', 'POST', '/api/auth/login', { role: 'parent', identifier: '09120000000', password: 'x' })).status === 400);
+check('جدول هفتگی مدیر برمی‌گردد', Array.isArray((await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data));
+check('جدول هفتگی معلم برمی‌گردد', Array.isArray((await call(S.teacher.ck, 'GET', '/api/teacher/schedule')).data?.sessions));
 
 // حق عضویت: رسید ← تأیید ← باز شدن قفل
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -168,7 +183,6 @@ check('بند ۳: مستندسازی kanonashtiani.service و /var/www/kanonasht
 
 // [بند ۴] کتاب‌های هوش (فقط معلم و مدیر، حذف endpoint جعلی، دسترسی امن به صفحات، حذف extracted_pages)
 check('بند ۴: دسترسی دانش‌آموز به /api/exam-books مسدود است (۴۰۳)', (await call(S.student.ck, 'GET', '/api/exam-books')).status === 403);
-check('بند ۴: دسترسی والد به /api/exam-books مسدود است (۴۰۳)', (await call(S.parent.ck, 'GET', '/api/exam-books')).status === 403);
 const teacherBooks = await call(S.teacher.ck, 'GET', '/api/exam-books');
 check('بند ۴: دسترسی معلم به /api/exam-books باز است (۲۰۰)', teacherBooks.status === 200 && Array.isArray(teacherBooks.data) && teacherBooks.data.length >= 2);
 check('بند ۴: حذف اندپوینت جعلی /api/exam-books/:id/questions (۴۰۴)', (await call(S.teacher.ck, 'GET', '/api/exam-books/hoosh_6/questions')).status === 404);
@@ -199,7 +213,6 @@ check('بند ۶: آپلود کارنامه برپا بدون فایل ورود�
 check('بند ۶: مسیر تکراری /api/barpa-exams/upload حذف شده است (۴۰۴)', (await call(S.manager.ck, 'POST', '/api/barpa-exams/upload', {})).status === 404);
 
 // [بند ۷] رفع خطای ۵۰۰ کارنامه برای اولیا، حذف OR center_id IS NULL و حذف answers_json از فهرست
-check('بند ۷: کارنامه برپا برای اولیا خطای ۵۰۰ نمی‌دهد (ستون student_id)', (await call(S.parent.ck, 'GET', '/api/barpa-exams/reports')).status === 200);
 const studentBarpaList = await call(S.student.ck, 'GET', '/api/barpa-exams/reports');
 check('بند ۷: فهرست کارنامه‌ها ستون حجیم answers_json را بازنمی‌گرداند', studentBarpaList.status === 200 && studentBarpaList.data.length > 0 && !('answers' in studentBarpaList.data[0]));
 
@@ -267,8 +280,6 @@ const counselorInfo = await call(S.student.ck, 'GET', '/api/counselor');
 check('بند ۱۳: مشاور تحصیلی اطلاعات مدیر کانون را برمی‌گرداند و فاقد is_online جعلی است', counselorInfo.status === 200 && counselorInfo.data.role === 'counselor' && !('is_online' in counselorInfo.data));
 const studentContacts = await call(S.student.ck, 'GET', '/api/messages/contacts');
 check('بند ۱۳: مدیر کانون در لیست مخاطبان پیام‌رسان دانش‌آموز وجود دارد', studentContacts.status === 200 && studentContacts.data.some(c => c.role === 'manager'));
-const parentContacts = await call(S.parent.ck, 'GET', '/api/messages/contacts');
-check('بند ۱۳: مدیر کانون در لیست مخاطبان پیام‌رسان اولیا وجود دارد', parentContacts.status === 200 && parentContacts.data.some(c => c.role === 'manager'));
 
 // [بند ۱۴] صندوق خروجی پیامک: تلاش مجدد فقط برای پیام‌های failed
 const outboxList = (await call(S.manager.ck, 'GET', '/api/manager/sms-outbox')).data;
@@ -316,11 +327,9 @@ check('بند ۱: پس از برگشت رسید، فاکتور مجدداً به
 
 // [بند ۲ جدید] یکسان‌سازی وضعیت فاکتور (issued / partial / paid همراه با paid و remaining)
 const stuInvs = (await call(S.student.ck, 'GET', '/api/student/invoices')).data;
-const parentInvs = (await call(S.parent.ck, 'GET', `/api/parent/children/${stuUser.id}/invoices`)).data;
 const mgrInvs = (await call(S.manager.ck, 'GET', '/api/manager/invoices')).data;
 const validStatuses = ['issued', 'partial', 'paid'];
 check('بند ۲: ساختار و وضعیت فاکتور در پنل دانش‌آموز یکپارچه است', stuInvs.every(i => validStatuses.includes(i.status) && typeof i.paid === 'number' && typeof i.remaining === 'number'));
-check('بند ۲: ساختار و وضعیت فاکتور در پنل اولیا یکپارچه است', parentInvs.every(i => validStatuses.includes(i.status) && typeof i.paid === 'number' && typeof i.remaining === 'number'));
 check('بند ۲: ساختار و وضعیت فاکتور در پنل مدیر یکپارچه است', mgrInvs.every(i => validStatuses.includes(i.status) && typeof i.paid === 'number' && typeof i.remaining === 'number'));
 
 // [بند ۳ جدید] تفکیک فاکتور از حق عضویت در logic.js و داشبورد
@@ -397,7 +406,7 @@ sDb7.close();
 // بررسی سامانه مهاجرت و نسخه ۵ پایگاه داده
 const sDbEnd = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
 const ver5 = sDbEnd.prepare('PRAGMA user_version').get()?.user_version;
-check('مهاجرت: PRAGMA user_version دقیقاً برابر ۶ است', ver5 === 6, `نسخه فعلی: ${ver5}`);
+check('مهاجرت: PRAGMA user_version دقیقاً برابر ۷ است', ver5 === 7, `نسخه فعلی: ${ver5}`);
 const defaultBooks = sDbEnd.prepare("SELECT COUNT(*) n FROM exam_books WHERE center_id IS NULL").get()?.n;
 check('مهاجرت نسخه ۵: کتاب‌های پیش‌فرض دارای center_id NULL هستند (عمومی)', defaultBooks >= 2);
 sDbEnd.close();

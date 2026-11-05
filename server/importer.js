@@ -64,8 +64,9 @@ function cleanRow(raw) {
   const nc = normalizeNationalCode(raw.national_code);
   if (!isValidNationalCode(nc)) throw new Error(`کد ملی «${raw.national_code}» معتبر نیست`);
 
-  const phone = normalizeIranianMobile(raw.parent_phone);
-  if (!phone) throw new Error(`موبایل والدین «${raw.parent_phone}» معتبر نیست (باید شماره همراه ۱۱ رقمی باشد)`);
+  const hasPhone = !!String(raw.parent_phone ?? '').trim();
+  const phone = hasPhone ? normalizeIranianMobile(raw.parent_phone) : null;
+  if (hasPhone && !phone) throw new Error(`موبایل «${raw.parent_phone}» معتبر نیست (باید شماره همراه ۱۱ رقمی باشد یا خالی بماند)`);
 
   const gradeRaw = norm(raw.grade).replace(/پایه|کلاس|تحصیلی/g, '').trim();
   const grade = GRADES[gradeRaw] || Number(gradeRaw);
@@ -88,7 +89,7 @@ export async function importStudents(centerId, csvText, { dryRun = false } = {})
   if (table.length < 2) throw new Error('فایل خالی است یا سطر عنوان ندارد');
   if (table.length - 1 > MAX_ROWS) throw new Error(`حداکثر ${MAX_ROWS} دانش‌آموز در هر بار`);
   const col = mapColumns(table[0]);
-  const missing = ['full_name', 'national_code', 'grade', 'parent_phone'].filter((k) => !(k in col));
+  const missing = ['full_name', 'national_code', 'grade'].filter((k) => !(k in col));
   if (missing.length) throw new Error(`ستون‌های لازم پیدا نشد: ${missing.map((k) => HEADERS[k][0]).join('، ')}`);
 
   const errors = [], good = [], seen = new Set();
@@ -109,9 +110,8 @@ export async function importStudents(centerId, csvText, { dryRun = false } = {})
   if (dryRun || !good.length) return summary;
 
   // هش رمز (ناهمزمان و موازی با سقف) پیش از تراکنش
-  const parentPhones = [...new Set(good.map((g) => g.parent_phone))].filter((p) => !get(`SELECT 1 FROM users WHERE role='parent' AND mobile=?`, p));
-  const studentHash = new Map(), parentHash = new Map();
-  const jobs = [...good.map((g) => () => hashPasswordAsync(g.national_code).then((h) => studentHash.set(g.national_code, h))), ...parentPhones.map((p) => () => hashPasswordAsync(p.slice(-6)).then((h) => parentHash.set(p, h)))];
+  const studentHash = new Map();
+  const jobs = good.map((g) => () => hashPasswordAsync(g.national_code).then((h) => studentHash.set(g.national_code, h)));
   for (let i = 0; i < jobs.length; i += 24) await Promise.all(jobs.slice(i, i + 24).map((j) => j()));
 
   tx(() => {
@@ -122,9 +122,6 @@ export async function importStudents(centerId, csvText, { dryRun = false } = {})
       if (!cid) { cid = Number(run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', centerId, d.grade, d.class_name).lastInsertRowid); classIds.set(key, cid); summary.classes_created++; }
       const uid = Number(run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`, centerId, 'student', d.national_code, studentHash.get(d.national_code), d.full_name, d.gender).lastInsertRowid);
       run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar) VALUES (?,?,?,?,?,?,?,?)', uid, d.school, d.grade, cid, d.birth_date, d.parent_phone, d.address, 'sprout');
-      let p = get(`SELECT id FROM users WHERE role='parent' AND mobile=?`, d.parent_phone);
-      if (!p) { p = { id: Number(run(`INSERT INTO users (center_id, role, mobile, pass_hash, full_name) VALUES (?,?,?,?,?)`, centerId, 'parent', d.parent_phone, parentHash.get(d.parent_phone), `ولیِ ${d.full_name}`).lastInsertRowid) }; summary.parents_created++; }
-      run('INSERT OR IGNORE INTO parent_children (parent_id, student_id) VALUES (?,?)', p.id, uid);
       summary.created++;
     }
   });

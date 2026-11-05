@@ -218,7 +218,7 @@ export default function register(r) {
     if (fs_.status === 'pending') fail(400, 'رسید قبلی شما در انتظار تأیید است');
     if (!ctx.body.file) fail(400, 'تصویر رسید را بارگذاری کنید');
     const file = saveUpload(ctx.body.file, 6);
-    run('INSERT INTO payments (student_id, amount, receipt_path, fee_type) VALUES (?,?,?,?)', ctx.user.id, fs_.amount, file, 'tuition');
+    run('INSERT INTO payments (student_id, amount, system_fee, receipt_path, fee_type) VALUES (?,?,?,?,?)', ctx.user.id, fs_.total, fs_.system_fee, file, 'tuition');
     return { ok: true };
   });
 

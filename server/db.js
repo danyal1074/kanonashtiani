@@ -591,6 +591,13 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     if (!cols.includes('kind')) database.exec("ALTER TABLE schedule ADD COLUMN kind TEXT NOT NULL DEFAULT 'academic'");
     database.exec('CREATE INDEX IF NOT EXISTS ix_schedule_teacher ON schedule(teacher_id, weekday)');
   },
+  // نسخه ۷: اشتراک سامانه (مبلغ جدا از حق عضویت، پیش‌فرض ۱۰۰ هزار تومان) و ثبت سهم آن در هر رسید
+  (database) => {
+    const cc = database.prepare('PRAGMA table_info(centers)').all().map((c) => c.name);
+    if (!cc.includes('system_fee')) database.exec('ALTER TABLE centers ADD COLUMN system_fee INTEGER NOT NULL DEFAULT 100000');
+    const pc = database.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
+    if (!pc.includes('system_fee')) database.exec('ALTER TABLE payments ADD COLUMN system_fee INTEGER NOT NULL DEFAULT 0');
+  },
 ];
 
 export function migrate(database = db) {

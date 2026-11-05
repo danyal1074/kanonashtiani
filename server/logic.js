@@ -64,7 +64,8 @@ export function feeStatus(sid) {
   const st = get('SELECT s.grade, u.center_id FROM students s JOIN users u ON u.id=s.user_id WHERE s.user_id=?', sid);
   if (!st) return null;
   const fee = get('SELECT amount, lock_date FROM fee_settings WHERE center_id=? AND grade=?', st.center_id, st.grade) || { amount: 0, lock_date: null };
-  const pays = all('SELECT id, amount, status, reject_reason, receipt_path, created_at, reviewed_at FROM payments WHERE student_id=? AND invoice_id IS NULL ORDER BY id DESC', sid);
+  const sysFee = fee.amount ? (get('SELECT system_fee FROM centers WHERE id=?', st.center_id)?.system_fee ?? 0) : 0;
+  const pays = all('SELECT id, amount, system_fee, status, reject_reason, receipt_path, created_at, reviewed_at FROM payments WHERE student_id=? AND invoice_id IS NULL ORDER BY id DESC', sid);
   const activePays = pays.filter((p) => p.status !== 'reversed');
   let status = 'unpaid';
   if (activePays.some((p) => p.status === 'approved')) status = 'paid';
@@ -73,7 +74,7 @@ export function feeStatus(sid) {
   if (!fee.amount) status = status === 'unpaid' || status === 'rejected' ? 'free' : status;
   const deadlinePassed = !!fee.lock_date && ymd() > fee.lock_date;
   const locked = deadlinePassed && !['paid', 'free'].includes(status);
-  return { grade: st.grade, amount: fee.amount, lock_date: fee.lock_date, status, locked, payments: pays };
+  return { grade: st.grade, amount: fee.amount, system_fee: sysFee, total: fee.amount + sysFee, lock_date: fee.lock_date, status, locked, payments: pays };
 }
 
 export function recalcInvoice(invoiceId) {

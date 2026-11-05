@@ -29,10 +29,11 @@ function ownStudent(ctx, id) {
 function studentPayload(ctx, b, existingId = null) {
   const full_name = clampStr(b.full_name, 80);
   const national_code = normalizeNationalCode(b.national_code);
-  const parent_phone = normalizeIranianMobile(b.parent_phone);
+  const hasPhone = !!String(b.parent_phone ?? '').trim();
+  const parent_phone = hasPhone ? normalizeIranianMobile(b.parent_phone) : null;
   if (!full_name) fail(400, 'نام و نام خانوادگی را وارد کنید');
   if (!isValidNationalCode(national_code)) fail(400, 'کد ملی ۱۰ رقمی معتبر نیست');
-  if (!parent_phone) fail(400, 'شماره موبایل والدین باید ۱۱ رقم و با ۰۹ شروع شود');
+  if (hasPhone && !parent_phone) fail(400, 'شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود (یا خالی بماند)');
   const grade = Number(b.grade);
   if (!GRADES.includes(grade)) fail(400, 'پایه باید بین چهارم تا نهم باشد');
   const cls = b.class_id ? ownClass(ctx, b.class_id) : null;
@@ -45,19 +46,6 @@ function studentPayload(ctx, b, existingId = null) {
   if (dup) fail(400, 'دانش‌آموزی با این کد ملی قبلاً ثبت شده است');
   return { full_name, national_code, parent_phone, grade, class_id: cls?.id ?? null, school: clampStr(b.school, 100), birth_date,
     address: clampStr(b.address, 300), gender: b.gender === 'f' ? 'f' : 'm' };
-}
-
-function linkParent(ctx, studentId, phone, studentName) {
-  let p = get(`SELECT id FROM users WHERE role='parent' AND mobile=?`, phone);
-  let created = false;
-  if (!p) {
-    const r = run(`INSERT INTO users (center_id, role, mobile, pass_hash, full_name) VALUES (?,?,?,?,?)`, ctx.user.center_id, 'parent', phone, hashPassword(phone.slice(-6)), `ولیِ ${studentName}`);
-    p = { id: Number(r.lastInsertRowid) };
-    created = true;
-  }
-  run('DELETE FROM parent_children WHERE student_id=?', studentId);
-  run('INSERT OR IGNORE INTO parent_children (parent_id, student_id) VALUES (?,?)', p.id, studentId);
-  return created;
 }
 
 function paymentStateSql() {
@@ -159,8 +147,6 @@ export default function register(r) {
       ...r,
       student_user: r.national_code,
       student_pass: r.national_code,
-      parent_user: r.parent_phone,
-      parent_pass: r.parent_phone ? r.parent_phone.slice(-6) : '—',
     }));
   });
 
@@ -170,15 +156,13 @@ export default function register(r) {
   });
   r.post('/api/manager/students', M, (ctx) => {
     const d = studentPayload(ctx, ctx.body);
-    let parentCreated;
     const id = tx(() => {
       const res = run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`, ctx.user.center_id, 'student', d.national_code, hashPassword(d.national_code), d.full_name, d.gender);
       const uid = Number(res.lastInsertRowid);
       run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar) VALUES (?,?,?,?,?,?,?,?)', uid, d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, 'sprout');
-      parentCreated = linkParent(ctx, uid, d.parent_phone, d.full_name);
       return uid;
     });
-    return { ok: true, id, credentials: { student: `نام کاربری و رمز اولیه دانش‌آموز: کد ملی (${d.national_code})`, parent: parentCreated ? `ورود والدین با موبایل ${d.parent_phone} و رمز اولیه: ۶ رقم آخر موبایل` : 'والد از قبل ثبت شده بود و فرزند به حسابش اضافه شد' } };
+    return { ok: true, id, credentials: { student: `نام کاربری و رمز اولیه دانش‌آموز: کد ملی (${d.national_code})` } };
   });
   // ثبت‌نام گروهی از CSV؛ با dry_run فقط اعتبارسنجی و گزارش خطای هر سطر بدون ثبت
   r.post('/api/manager/students/import', M, async (ctx) => {
@@ -192,7 +176,6 @@ export default function register(r) {
     tx(() => {
       run('UPDATE users SET full_name=?, national_code=?, gender=? WHERE id=?', d.full_name, d.national_code, d.gender, s.id);
       run('UPDATE students SET school=?, grade=?, class_id=?, birth_date=?, parent_phone=?, address=? WHERE user_id=?', d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, s.id);
-      if (d.parent_phone !== s.parent_phone) linkParent(ctx, s.id, d.parent_phone, d.full_name);
     });
     return { ok: true };
   });
@@ -274,10 +257,11 @@ export default function register(r) {
       const st = all(`SELECT ${paymentStateSql()} st FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.active=1`, c.id);
       return { ...c, paid: st.filter((x) => x.st === 'paid').length, pending: st.filter((x) => x.st === 'pending').length, unpaid: st.filter((x) => x.st === 'unpaid').length };
     });
-    return { settings: GRADES.map((g) => set[g] || { grade: g, amount: 0, lock_date: null }), classes };
+    return { settings: GRADES.map((g) => set[g] || { grade: g, amount: 0, lock_date: null }), classes, system_fee: get('SELECT system_fee FROM centers WHERE id=?', ctx.user.center_id)?.system_fee ?? 0 };
   });
   r.put('/api/manager/fees', M, (ctx) => {
     tx(() => {
+      if (ctx.body.system_fee !== undefined) run('UPDATE centers SET system_fee=? WHERE id=?', Math.max(0, Math.round(Number(ctx.body.system_fee) || 0)), ctx.user.center_id);
       for (const f of ctx.body.settings || []) {
         if (!GRADES.includes(Number(f.grade))) continue;
         if (f.lock_date && !isDate(f.lock_date)) fail(400, 'تاریخ قفل نامعتبر است');

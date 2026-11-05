@@ -79,7 +79,7 @@ class Client {
   }
 }
 
-const ASSETS = ['/', '/css/app.css', '/css/reference.css', '/js/app.js', '/js/core.js', '/js/icons.js', '/js/login.js', '/js/student.js', '/js/shop.js', '/js/common.js', '/js/games.js', '/js/teacher.js', '/js/manager.js', '/js/parent.js', '/js/admin.js', '/js/reference-ui.js', '/js/profile-photo.js', '/fonts/Vazirmatn.woff2', '/img/education-icons-3d.png', '/img/education-icons-actions-3d.png', '/img/education-icons-tools-3d.png', '/img/logo-ashtiani.png'];
+const ASSETS = ['/', '/css/app.css', '/css/reference.css', '/js/app.js', '/js/core.js', '/js/icons.js', '/js/login.js', '/js/student.js', '/js/shop.js', '/js/common.js', '/js/games.js', '/js/teacher.js', '/js/manager.js', '/js/admin.js', '/js/reference-ui.js', '/js/profile-photo.js', '/fonts/Vazirmatn.woff2', '/img/education-icons-3d.png', '/img/education-icons-actions-3d.png', '/img/education-icons-tools-3d.png', '/img/logo-ashtiani.png'];
 
 async function loadAssets(c) {
   if (WARM && !etags.size) { const w = new Client(); for (const p of ASSETS) await w.req('warmup', 'GET', p); stats.delete('warmup'); }

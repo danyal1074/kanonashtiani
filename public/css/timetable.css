@@ -29,3 +29,16 @@
 @media(max-width:720px){.tt-mrow{grid-template-columns:1fr 1fr;row-gap:2px}.tt-mrow.head{display:none}.tt-mrow span:nth-child(1){grid-column:1}.tt-mrow span:nth-child(2){grid-column:2;text-align:end}.tt-mrow span:nth-child(3){grid-column:1}.tt-mrow span:nth-child(4),.tt-mrow span:nth-child(5){grid-column:1/-1}}
 .tt-print .tt-mday{break-inside:avoid;border-radius:0}
 @media(prefers-reduced-motion:no-preference){.tt-pill{transition:transform .15s}.tt-pill:active{transform:scale(.96)}}
+
+/* کارت ورود دانش‌آموز (چاپ) */
+.cred-sheet{display:grid;grid-template-columns:repeat(2,9.6cm);gap:.4cm;justify-content:center;direction:rtl;color:#0f172a}
+.cred-card{width:9.6cm;height:6.2cm;box-sizing:border-box;border:1.2px dashed #64748b;border-radius:.35cm;padding:.3cm .35cm;display:flex;flex-direction:column;gap:.15cm;background:#fff;break-inside:avoid;page-break-inside:avoid;font-size:10.5px}
+.cred-head{display:flex;align-items:center;gap:.2cm;border-bottom:1px solid #cbd5e1;padding-bottom:.12cm}.cred-head b{display:block;font-size:12px}.cred-head small{color:#475569;font-size:9.5px}
+.cred-logo{width:1cm;height:1cm;display:grid;place-items:center;font-size:22px;overflow:hidden;flex:none}.cred-logo img{max-width:100%;max-height:100%}
+.cred-body{display:flex;gap:.25cm;flex:1;align-items:center}.cred-info{flex:1;display:grid;gap:.08cm;min-width:0}
+.cred-name{font-size:14px;font-weight:800}.cred-cls{color:#475569;margin-bottom:.05cm}
+.cred-row{display:flex;justify-content:space-between;align-items:center;gap:.15cm;background:#f1f5f9;border-radius:.15cm;padding:.07cm .18cm}.cred-row span{color:#475569}
+.cred-row code{font-family:monospace;font-weight:800;font-size:12px;direction:ltr;letter-spacing:.5px}.cred-row code.url{font-size:9.5px;letter-spacing:0}
+.cred-qr svg{width:2.5cm;height:2.5cm}.cred-qr{display:grid;justify-items:center;gap:.05cm;flex:none}.cred-qr small{font-size:8.5px;color:#475569}
+.cred-foot{font-size:9px;color:#475569;text-align:center;border-top:1px solid #e2e8f0;padding-top:.1cm}
+@media print{.cred-sheet{grid-template-columns:repeat(2,9.6cm)}}

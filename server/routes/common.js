@@ -46,20 +46,15 @@ export default function register(r) {
     const role = ctx.body.role;
     const id = toEnDigits(clampStr(ctx.body.identifier, 64));
     const pw = String(ctx.body.password || '');
-    if (!['student', 'teacher', 'manager', 'parent', 'admin'].includes(role)) fail(400, 'نقش کاربری نامعتبر است');
+    if (!['student', 'teacher', 'manager', 'admin'].includes(role)) fail(400, 'نقش کاربری نامعتبر است');
     if (!id || !pw) fail(400, 'شناسه و رمز عبور را وارد کنید');
     const t = throttle(ctx.ip, id);
     let user;
-    if (role === 'parent') {
-      const cleanPhone = normalizeIranianMobile(id);
-      user = get(`SELECT * FROM users WHERE role='parent' AND (mobile=? OR mobile=?)`, id, cleanPhone || id);
-    } else {
-      const cleanNc = normalizeNationalCode(id);
-      user = get(`SELECT * FROM users WHERE role=? AND (national_code=? OR national_code=? OR username=?)`, role, id, cleanNc || id, id);
-    }
+    const cleanNc = normalizeNationalCode(id);
+    user = get(`SELECT * FROM users WHERE role=? AND (national_code=? OR national_code=? OR username=?)`, role, id, cleanNc || id, id);
     if (!user || !user.active || !(await verifyPasswordAsync(pw, user.pass_hash))) {
       t.failed();
-      fail(401, role === 'parent' ? 'شماره موبایل یا رمز عبور اشتباه است' : 'نام کاربری/کد ملی یا رمز عبور اشتباه است');
+      fail(401, 'نام کاربری/کد ملی یا رمز عبور اشتباه است');
     }
     t.ok();
     if (needsRehash(user.pass_hash)) {

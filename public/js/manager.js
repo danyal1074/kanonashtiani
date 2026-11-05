@@ -91,7 +91,7 @@ function studentForm(m, s = {}) {
     <div class="field"><label>پایه *</label><select class="input" name="grade" id="stGrade">${m.grades.map((g) => `<option value="${g}" ${s.grade === g ? 'selected' : ''}>${gradeName(g)}</option>`).join('')}</select></div>
     <div class="field"><label>کلاس</label><select class="input" name="class_id" id="stClass"></select></div>
     <div class="field"><label>تاریخ تولد</label>${dateField('birth', s.birth_date, { minYear: 1385, maxYear: 1400 })}</div>
-    <div class="field"><label>موبایل والدین *</label><input class="input ltr" name="parent_phone" value="${esc(s.parent_phone || '')}" maxlength="11" inputmode="tel" placeholder="09xxxxxxxxx" required></div></div>
+    <div class="field"><label>موبایل (اختیاری، فقط برای پیامک)</label><input class="input ltr" name="parent_phone" value="${esc(s.parent_phone || '')}" maxlength="11" inputmode="tel" placeholder="09xxxxxxxxx"></div></div>
     <div class="field"><label>نشانی منزل</label><textarea class="input" name="address" style="min-height:60px">${esc(s.address || '')}</textarea></div></form>`;
 }
 function bindStudentForm(m, md, s = {}) {
@@ -137,12 +137,12 @@ async function students(el) {
   const save = async (m, id) => {
     const body = readStudent(m);
     if (id) { await put(`/api/manager/students/${id}`, body); toast('اطلاعات ذخیره شد', 'ok'); }
-    else { const r = await post('/api/manager/students', body); await modal({ title: ' ثبت‌نام انجام شد', body: `<div class="stack small"><div>${icon('backpack', { size: 16 })} ${esc(r.credentials.student)}</div><div>${icon('users', { size: 16 })} ${esc(r.credentials.parent)}</div></div>`, actions: [{ label: 'باشه', value: true }] }); }
+    else { const r = await post('/api/manager/students', body); await modal({ title: ' ثبت‌نام انجام شد', body: `<div class="stack small"><div>${icon('backpack', { size: 16 })} ${esc(r.credentials.student)}</div></div>`, actions: [{ label: 'باشه', value: true }] }); }
     metaCache = null; load();
   };
   $('#importSt').onclick = () => modal({
     title: 'ثبت‌نام گروهی از فایل CSV', wide: true,
-    body: `<div class="stack"><p class="small muted" style="margin:0;line-height:2">فایل اکسل را با «Save As ← CSV UTF-8» ذخیره کنید. ستون‌های لازم: نام و نام خانوادگی، کد ملی، پایه، موبایل والدین. ستون‌های اختیاری: جنسیت، مدرسه، کلاس، تاریخ تولد (شمسی)، نشانی.
+    body: `<div class="stack"><p class="small muted" style="margin:0;line-height:2">فایل اکسل را با «Save As ← CSV UTF-8» ذخیره کنید. ستون‌های لازم: نام و نام خانوادگی، کد ملی، پایه. ستون‌های اختیاری: جنسیت، مدرسه، کلاس (مثلاً «دختر ۱»)، تاریخ تولد (شمسی)، موبایل (برای پیامک)، نشانی.
       <a href="/samples/students-template.csv" download>دانلود فایل نمونه</a></p>
       <div class="field"><label for="csvFile">فایل CSV</label><input class="input" type="file" id="csvFile" accept=".csv,text/csv,.txt"></div><div id="csvOut" aria-live="polite"></div></div>`,
     actions: [{ label: 'بستن', cls: 'ghost', value: false },
@@ -154,28 +154,27 @@ async function students(el) {
     if (!f) throw new Error('ابتدا فایل CSV را انتخاب کنید');
     const r = await post('/api/manager/students/import', { csv: await f.text(), dry_run: dry });
     const bad = r.errors.filter((e) => !e.message.includes('قبلاً ثبت'));
-    $('#csvOut', m).innerHTML = `<div class="row wrap" style="gap:var(--s-2)"><span class="badge">${fa(r.total)} سطر</span><span class="badge green">${dry ? 'قابل ثبت' : 'ثبت‌شده'}: ${fa(dry ? r.valid : r.created)}</span>${r.skipped_existing ? `<span class="badge gray">تکراری: ${fa(r.skipped_existing)}</span>` : ''}${bad.length ? `<span class="badge red">خطا: ${fa(bad.length)}</span>` : ''}${!dry && r.parents_created ? `<span class="badge blue">والد جدید: ${fa(r.parents_created)}</span>` : ''}</div>
+    $('#csvOut', m).innerHTML = `<div class="row wrap" style="gap:var(--s-2)"><span class="badge">${fa(r.total)} سطر</span><span class="badge green">${dry ? 'قابل ثبت' : 'ثبت‌شده'}: ${fa(dry ? r.valid : r.created)}</span>${r.skipped_existing ? `<span class="badge gray">تکراری: ${fa(r.skipped_existing)}</span>` : ''}${bad.length ? `<span class="badge red">خطا: ${fa(bad.length)}</span>` : ''}</div>
       ${r.errors.length ? `<div class="table-wrap" style="max-height:240px;margin-top:var(--s-3)"><table class="table"><thead><tr><th>سطر</th><th>نام</th><th>مشکل</th></tr></thead><tbody>${r.errors.slice(0, 100).map((e) => `<tr><td>${fa(e.line)}</td><td>${esc(e.name || '')}</td><td class="small">${esc(e.message)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      ${dry ? (bad.length ? '' : '<p class="small pos" style="margin-top:var(--s-3)">همه‌چیز درست است؛ «ثبت دانش‌آموزان» را بزنید.</p>') : '<p class="small" style="margin-top:var(--s-3)">رمز اولیه دانش‌آموز کد ملی و رمز اولیه والد ۶ رقم آخر موبایل است.</p>'}`;
+      ${dry ? (bad.length ? '' : '<p class="small pos" style="margin-top:var(--s-3)">همه‌چیز درست است؛ «ثبت دانش‌آموزان» را بزنید.</p>') : '<p class="small" style="margin-top:var(--s-3)">نام کاربری و رمز اولیه هر دانش‌آموز کد ملی خودش است. از «چاپ کارت ورود» برگهٔ ورود را بگیرید.</p>'}`;
     if (!dry) { metaCache = null; toast(`${fa(r.created)} دانش‌آموز ثبت شد`, 'ok'); load(); }
     return false;
   }
   $('#printCreds').onclick = async () => {
     const list = await api(`/api/manager/students/credentials?${new URLSearchParams({ grade: q.grade, class_id: q.class_id })}`);
     if (!list.length) { toast('دانش‌آموزی برای چاپ یافت نشد'); return; }
-    const cards = list.map((st) => `
-      <div class="entry-card" style="page-break-inside:avoid;border:1px dashed #94a3b8;border-radius:12px;padding:12px 14px;background:#f8fafc;margin-bottom:12px;display:inline-block;width:calc(50% - 10px);box-sizing:border-box;vertical-align:top">
-        <div style="font-weight:bold;font-size:14px;color:#0f766e;border-bottom:1px solid #cbd5e1;padding-bottom:6px;margin-bottom:8px">
-          ${esc(st.full_name)} <span style="font-size:11px;font-weight:normal;color:#64748b">(${gradeName(st.grade)} • ${esc(st.class_name || 'بدون کلاس')})</span>
-        </div>
-        <div style="font-size:12px;line-height:1.8">
-          <div><b>ورود دانش‌آموز:</b> <code style="background:#e0f2fe;padding:2px 6px;border-radius:4px;color:#0369a1">${fa(st.student_user)}</code> | رمز اولیه: <code style="background:#e0f2fe;padding:2px 6px;border-radius:4px;color:#0369a1">${fa(st.student_pass)}</code></div>
-          <div><b>ورود والدین:</b> <code style="background:#fef3c7;padding:2px 6px;border-radius:4px;color:#92400e">${fa(st.parent_user)}</code> | رمز اولیه: <code style="background:#fef3c7;padding:2px 6px;border-radius:4px;color:#92400e">${fa(st.parent_pass)}</code></div>
-        </div>
-        <div style="font-size:11px;color:#64748b;margin-top:6px;text-align:left">پلتفرم رشد نخبه • لطفاً پس از اولین ورود رمز عبور خود را تغییر دهید.</div>
-      </div>
-    `).join('');
-    printOverlay(`<div style="display:flex;flex-wrap:wrap;gap:16px;direction:rtl">${cards}</div>`, `کارت ورود ${fa(list.length)} دانش‌آموز`);
+    if (!q.class_id && !q.grade && !(await confirmBox(`کارت ورود همهٔ ${fa(list.length)} دانش‌آموز چاپ شود؟ برای چاپ یک کلاس، ابتدا کلاس یا پایه را فیلتر کنید.`, 'چاپ همه'))) return;
+    const c = state.me?.center || {}, url = `${location.origin}/#/login`, shortUrl = location.host;
+    const card = (st) => `<div class="cred-card">
+      <div class="cred-head"><span class="cred-logo">${logoHtml(c.logo)}</span><div><b>${esc(c.name || 'کانون')}</b><small>پلتفرم رشد نخبه</small></div></div>
+      <div class="cred-body"><div class="cred-info">
+        <div class="cred-name">${esc(st.full_name)}</div><div class="cred-cls">${gradeName(st.grade)} ${esc(st.class_name || '')}</div>
+        <div class="cred-row"><span>نام کاربری</span><code>${fa(st.student_user)}</code></div>
+        <div class="cred-row"><span>رمز عبور اولیه</span><code>${fa(st.student_pass)}</code></div>
+        <div class="cred-row"><span>آدرس پنل</span><code class="url">${esc(shortUrl)}</code></div></div>
+        <div class="cred-qr">${qrSvg(url)}<small>با گوشی اسکن کنید</small></div></div>
+      <div class="cred-foot">پس از اولین ورود، رمز عبور خود را تغییر دهید.</div></div>`;
+    printOverlay(`<div class="cred-sheet">${list.map(card).join('')}</div>`, `کارت ورود ${fa(list.length)} دانش‌آموز`);
   };
   $('#addSt').onclick = () => modal({ title: ' ثبت‌نام دانش‌آموز', wide: true, body: studentForm(md), onOpen: (m) => bindStudentForm(m, md), actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: ' ثبت‌نام', onClick: (m) => save(m) }] });
   on(el, 'click', '[data-edit]', (e, b) => {
@@ -259,13 +258,14 @@ async function fees(el) {
   const d = await api('/api/manager/fees');
   el.innerHTML = `<div class="grid c3"><div class="card span2"><div class="card-title"><span class="ib">${icon('receipt', { size: 18 })}</span>صف بررسی رسیدها<div class="seg more">${[['pending', ' در انتظار'], ['approved', ' تأییدشده'], ['rejected', ' ردشده'], ['reversed', ' برگشتی']].map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div></div><div id="rq"></div></div>
     <div class="card"><div class="card-title"><span class="ib sun">${icon('sliders', { size: 18 })}</span>مبلغ و تاریخ قفل هر پایه</div><form id="feeForm" class="stack">
+      <div class="card flat" style="padding:12px"><b>اشتراک سامانه (همهٔ پایه‌ها)</b><div class="field" style="margin-top:6px"><label for="sysFee">مبلغ اشتراک سامانه (تومان، جدا از حق عضویت)</label><input class="input ltr" id="sysFee" value="${d.system_fee}" inputmode="numeric"></div><p class="tiny muted" style="margin:0">به مبلغ حق عضویت هر پایه اضافه می‌شود و در صفحهٔ پرداخت دانش‌آموز جداگانه نوشته می‌شود. برای حذف، صفر بگذارید.</p></div>
       ${d.settings.map((f) => `<div class="card flat" style="padding:12px"><b>پایه ${gradeName(f.grade)}</b><div class="field" style="margin-top:6px"><label>مبلغ (تومان)</label><input class="input ltr" data-amt="${f.grade}" value="${f.amount}" inputmode="numeric"></div><div class="field"><label>تاریخ قفل پنل</label>${dateField(`lock${f.grade}`, f.lock_date, { minYear: 1404, maxYear: 1406 })}</div></div>`).join('')}
       <button class="btn">${icon('check', { size: 16 })} ذخیره تنظیمات</button></form></div></div>
     <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('building', { size: 18 })}</span>گزارش وضعیت پرداخت هر کلاس</div><div class="table-wrap"><table class="table"><thead><tr><th>کلاس</th><th>پرداخت‌شده</th><th>در انتظار</th><th>پرداخت‌نشده</th><th style="min-width:160px">درصد وصول</th><th></th></tr></thead><tbody>
     ${d.classes.map((c) => { const t = c.paid + c.pending + c.unpaid; const r = t ? (c.paid / t) * 100 : 0; return `<tr><td><b>${gradeName(c.grade)} ${esc(c.name)}</b></td><td class="pos">${fa(c.paid)}</td><td style="color:#c2410c">${fa(c.pending)}</td><td class="neg">${fa(c.unpaid)}</td><td><div class="row">${progress(r, 'green sm')}<b class="small">${pct(r)}</b></div></td><td><button class="btn ghost sm" data-cls="${c.id}" data-name="${gradeName(c.grade)} ${esc(c.name)}">فهرست</button></td></tr>`; }).join('')}</tbody></table></div></div>`;
   const drawQueue = async () => {
     const list = await api(`/api/manager/receipts?status=${tab}`);
-    $('#rq', el).innerHTML = list.length ? `<div class="grid c2">${list.map((p) => `<div class="card flat"><div class="row">${nameAvatar(p.full_name, 'sm')}<div class="grow"><b class="small">${esc(p.full_name)}</b><div class="tiny muted">${gradeName(p.grade)} ${esc(p.class_name || '')} • ${timeAgo(p.created_at)}</div></div><div style="text-align:end"><b class="small">${money(p.amount)}</b><div><span class="badge ${p.invoice_id ? 'blue' : ''}">${p.invoice_id ? `فاکتور #${fa(p.invoice_id)}` : 'حق عضویت'}</span></div></div></div>
+    $('#rq', el).innerHTML = list.length ? `<div class="grid c2">${list.map((p) => `<div class="card flat"><div class="row">${nameAvatar(p.full_name, 'sm')}<div class="grow"><b class="small">${esc(p.full_name)}</b><div class="tiny muted">${gradeName(p.grade)} ${esc(p.class_name || '')} • ${timeAgo(p.created_at)}</div></div><div style="text-align:end"><b class="small">${money(p.amount)}</b>${p.system_fee ? `<div class="tiny muted">شامل اشتراک سامانه ${money(p.system_fee)}</div>` : ''}<div><span class="badge ${p.invoice_id ? 'blue' : ''}">${p.invoice_id ? `فاکتور #${fa(p.invoice_id)}` : 'حق عضویت'}</span></div></div></div>
       ${p.receipt_path ? `<a href="/uploads/${esc(p.receipt_path)}" target="_blank" aria-label="مشاهده تصویر رسید ${esc(p.full_name)}"><img src="/uploads/${esc(p.receipt_path)}" alt="رسید" loading="lazy" style="width:100%;max-height:220px;object-fit:contain;background:var(--bg);border-radius:12px;margin:10px 0"></a>` : ''}
       ${p.status === 'pending' ? `<div class="row"><button class="btn green grow" data-ok="${p.id}">${icon('check-circle', { size: 16 })} تأیید</button><button class="btn red grow" data-no="${p.id}">${icon('x', { size: 16 })} رد</button></div>` : p.status === 'rejected' ? `<div class="small" style="color:var(--red)">علت: ${esc(p.reject_reason)}</div>` : p.status === 'reversed' ? `<div class="small"><span class="badge orange">برگشت‌خورده ${jdate(p.reversed_at)}</span> ${esc(p.reverse_reason || '')}</div>` : `<div class="row"><span class="badge green">تأیید شد ${jdate(p.reviewed_at)}</span><button class="btn sm ghost" style="margin-inline-start:auto" data-rev="${p.id}">برگشت رسید</button></div>`}</div>`).join('')}</div>` : empty(tab === 'pending' ? 'check-circle' : 'inbox', tab === 'pending' ? 'رسیدی در صف بررسی نیست' : 'موردی نیست');
   };
@@ -285,7 +285,7 @@ async function fees(el) {
   $('#feeForm', el).onsubmit = (e) => {
     e.preventDefault();
     busy(e.submitter, async () => {
-      await put('/api/manager/fees', { settings: d.settings.map((f) => ({ grade: f.grade, amount: Number(en($(`[data-amt="${f.grade}"]`, el).value)), lock_date: readDate(el, `lock${f.grade}`) })) });
+      await put('/api/manager/fees', { system_fee: Number(en($('#sysFee', el).value)) || 0, settings: d.settings.map((f) => ({ grade: f.grade, amount: Number(en($(`[data-amt="${f.grade}"]`, el).value)), lock_date: readDate(el, `lock${f.grade}`) })) });
       toast('تنظیمات حق عضویت ذخیره شد', 'ok');
     });
   };
