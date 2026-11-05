@@ -623,8 +623,9 @@ export default function register(r) {
     const text = clampStr(b.text || b.message, 500);
     if (!text) fail(400, 'متن پیامک را وارد کنید');
 
-    const targetType = ['all', 'grade', 'class', 'student'].includes(b.target_type) ? b.target_type : 'all';
+    const targetType = ['all', 'grade', 'class', 'student', 'debtors'].includes(b.target_type) ? b.target_type : 'all';
     const recipient = ['parent', 'student', 'both'].includes(b.recipient) ? b.recipient : 'parent';
+    const msgType = b.message_type || (targetType === 'debtors' ? 'fee_reminder' : 'broadcast');
 
     let students = [];
     if (targetType === 'student') {
@@ -638,6 +639,8 @@ export default function register(r) {
     } else if (targetType === 'grade') {
       const gr = Number(b.target_value);
       students = all(`SELECT u.id, u.full_name, u.mobile, s.parent_phone FROM users u JOIN students s ON s.user_id=u.id WHERE s.grade=? AND u.center_id=? AND u.active=1`, gr, cid);
+    } else if (targetType === 'debtors') {
+      students = all(`SELECT u.id, u.full_name, u.mobile, s.parent_phone FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.active=1 AND ${paymentStateSql()} = 'unpaid'`, cid);
     } else {
       students = all(`SELECT u.id, u.full_name, u.mobile, s.parent_phone FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.active=1`, cid);
     }
@@ -647,11 +650,12 @@ export default function register(r) {
     const result = { ok: true, total: 0, sent: 0, failed: 0, simulated: smsProvider() === 'simulated', errors: [] };
     const queue = [];
     for (const st of students) {
+      const personalized = text.replace(/\{نام\}|\{name\}/gi, st.full_name);
       if ((recipient === 'parent' || recipient === 'both') && st.parent_phone) {
-        queue.push({ phone: st.parent_phone, student_id: st.id });
+        queue.push({ phone: st.parent_phone, student_id: st.id, text: personalized });
       }
       if ((recipient === 'student' || recipient === 'both') && st.mobile) {
-        queue.push({ phone: st.mobile, student_id: st.id });
+        queue.push({ phone: st.mobile, student_id: st.id, text: personalized });
       }
     }
 
@@ -668,7 +672,7 @@ export default function register(r) {
     result.total = uniqueQueue.length;
     for (let i = 0; i < uniqueQueue.length; i += 5) {
       await Promise.all(uniqueQueue.slice(i, i + 5).map(async (item) => {
-        const r = await sendSms(item.phone, text, { center_id: cid, student_id: item.student_id, message_type: 'broadcast' });
+        const r = await sendSms(item.phone, item.text, { center_id: cid, student_id: item.student_id, message_type: msgType });
         if (r.ok) {
           result.sent++;
         } else {

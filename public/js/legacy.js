@@ -51,8 +51,8 @@ export async function barpaDetail(el, p) {
         </div>
         <div class="seg" id="ansFilters" style="display:flex;gap:4px">
           <button class="btn sm active" data-filter="all" type="button">همه (${num(answers.length)})</button>
-          <button class="btn sm soft" data-filter="correct" type="button" style="color:#059669">درست‌ها (${nv(r.overall_correct)})</button>
-          <button class="btn sm soft" data-filter="wrong" type="button" style="color:#dc2626">نادرست‌ها (${nv(r.overall_wrong)})</button>
+          <button class="btn sm soft" data-filter="correct" type="button" style="color:#047857">درست‌ها (${nv(r.overall_correct)})</button>
+          <button class="btn sm soft" data-filter="wrong" type="button" style="color:#b91c1c">نادرست‌ها (${nv(r.overall_wrong)})</button>
           <button class="btn sm soft" data-filter="unanswered" type="button" style="color:#64748b">نزده‌ها (${nv(r.overall_unanswered)})</button>
         </div>
       </div>
@@ -63,14 +63,14 @@ export async function barpaDetail(el, p) {
           const bg = isCorrect ? '#ecfdf5' : (isWrong ? '#fef2f2' : '#f8fafc');
           const border = isCorrect ? '#6ee7b7' : (isWrong ? '#fca5a5' : '#e2e8f0');
           const textCol = isCorrect ? '#065f46' : (isWrong ? '#991b1b' : '#64748b');
-          const badgeBg = isCorrect ? '#059669' : (isWrong ? '#dc2626' : '#cbd5e1');
+          const badgeBg = isCorrect ? '#047857' : (isWrong ? '#b91c1c' : '#cbd5e1');
           const badgeText = isCorrect || isWrong ? '#ffffff' : '#334155';
           const iconSymbol = isCorrect ? '✓' : (isWrong ? '✗' : '—');
           return `
             <div class="ans-bubble" data-status="${a.status}" style="background:${bg};border:1px solid ${border};border-radius:8px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:${textCol}">
               <span style="font-weight:700;color:#64748b">#${num(a.q)}</span>
               <div style="display:flex;align-items:center;gap:6px">
-                ${a.choice > 0 ? `<span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:6px;background:${badgeBg};color:${badgeText};font-weight:900;font-size:11px">${num(a.choice)}</span>` : '<span style="font-size:10px;color:#94a3b8">نزده</span>'}
+                ${a.choice > 0 ? `<span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:6px;background:${badgeBg};color:${badgeText};font-weight:900;font-size:11px">${num(a.choice)}</span>` : '<span style="font-size:11px;color:#64748b">نزده</span>'}
                 <span style="font-weight:900;font-size:13px">${iconSymbol}</span>
               </div>
             </div>`;
@@ -141,8 +141,8 @@ export async function barpaDetail(el, p) {
                 <tr>
                   <td class="bold">${esc(s.name || s.subject)}</td>
                   <td>${num(s.count || s.total || 0)}</td>
-                  <td style="color:#059669;font-weight:700">${num(s.correct || 0)}</td>
-                  <td style="color:#dc2626;font-weight:700">${num(s.wrong || 0)}</td>
+                  <td style="color:#047857;font-weight:700">${num(s.correct || 0)}</td>
+                  <td style="color:#b91c1c;font-weight:700">${num(s.wrong || 0)}</td>
                   <td class="muted">${num(s.unanswered || s.blank || 0)}</td>
                   <td>
                     <span class="badge ${s.percentage >= 50 ? 'green' : (s.percentage >= 25 ? 'blue' : 'orange')}">
@@ -181,8 +181,8 @@ export async function barpaDetail(el, p) {
                 <tr>
                   <td class="bold">${esc(c.label || c.name)}</td>
                   <td>${num(c.count || 0)}</td>
-                  <td style="color:#059669;font-weight:700">${num(c.correct || 0)}</td>
-                  <td style="color:#dc2626;font-weight:700">${num(c.wrong || 0)}</td>
+                  <td style="color:#047857;font-weight:700">${num(c.correct || 0)}</td>
+                  <td style="color:#b91c1c;font-weight:700">${num(c.wrong || 0)}</td>
                   <td class="muted">${num(c.unanswered || 0)}</td>
                   <td><span class="badge ${c.percentage >= 40 ? 'green' : 'blue'}">${pct(c.percentage)}</span></td>
                   <td class="bold">${num(c.traz || 0)}</td>
@@ -370,11 +370,158 @@ export async function mgrInvoices(el) {
   }); };
 }
 const SMS = { sent: ['ارسال شد', 'green'], failed: ['ناموفق', 'red'], pending: ['در صف', 'orange'] };
+
+export async function openSmsModal(prefill = {}) {
+  const md = await api('/api/manager/meta');
+  return modal({
+    title: '✉️ ارسال پیامک جدید',
+    wide: true,
+    body: `
+      <div class="stack" style="gap:14px">
+        <div class="field">
+          <label>گروه هدف مخاطبان</label>
+          <select class="input" id="smsTargetType">
+            <option value="all" ${prefill.target_type === 'all' ? 'selected' : ''}>همه دانش‌آموزان کانون</option>
+            <option value="debtors" ${prefill.target_type === 'debtors' ? 'selected' : ''}>⚠️ بدهکاران حق عضویت (پرداخت‌نشده)</option>
+            <option value="grade" ${prefill.target_type === 'grade' ? 'selected' : ''}>پایه تحصیلی خاص</option>
+            <option value="class" ${prefill.target_type === 'class' ? 'selected' : ''}>کلاس خاص</option>
+            <option value="student" ${prefill.target_type === 'student' ? 'selected' : ''}>دانش‌آموز خاص</option>
+          </select>
+        </div>
+
+        <div class="field" id="boxGrade" style="display:none">
+          <label>انتخاب پایه</label>
+          <select class="input" id="smsGrade">
+            ${md.grades.map(g => `<option value="${g}">${gradeName(g)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="field" id="boxClass" style="display:none">
+          <label>انتخاب کلاس</label>
+          <select class="input" id="smsClass">
+            ${md.classes.map(c => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)} (${fa(c.students)} نفر)</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="field" id="boxStudent" style="display:none">
+          <label>دانش‌آموز منتخب</label>
+          <div class="row" style="gap:8px">
+            <input class="input grow" id="smsStudentName" readonly value="${esc(prefill.student_name || '')}" placeholder="روی دکمه انتخاب کلیک کنید">
+            <input type="hidden" id="smsStudentId" value="${esc(prefill.student_id || '')}">
+            <button type="button" class="btn soft sm" id="btnPickStu">انتخاب دانش‌آموز</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>گیرنده پیامک</label>
+          <select class="input" id="smsRecipient">
+            <option value="parent" ${prefill.recipient === 'parent' ? 'selected' : ''}>تلفن اولیا (والدین)</option>
+            <option value="student" ${prefill.recipient === 'student' ? 'selected' : ''}>موبایل خود دانش‌آموز</option>
+            <option value="both" ${prefill.recipient === 'both' ? 'selected' : ''}>هر دو (اولیا و دانش‌آموز)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>قالب‌های پیامک آماده (جهت درج سریع)</label>
+          <select class="input" id="smsTemplate">
+            <option value="">-- انتخاب متن آماده یا تایپ آزاد --</option>
+            <option value="fee">یادآوری پرداخت حق عضویت کانون</option>
+            <option value="meeting">اطلاع‌رسانی جلسه اولیا و مربیان</option>
+            <option value="exam">یادآوری برگزاری آزمون کانون</option>
+            <option value="encourage">پیام تشویقی و تقدیر از پیشرفت تحصیلی</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <div class="row between"><label for="smsText">متن پیامک</label><span class="tiny muted" id="smsCharCount">۰ کاراکتر (۱ پیامک)</span></div>
+          <textarea class="input" id="smsText" rows="4" placeholder="متن پیامک را بنویسید... برای درج نام دانش‌آموز می‌توانید از عبارت {نام} استفاده کنید.">${esc(prefill.text || '')}</textarea>
+          <div class="tiny muted" style="margin-top:4px">نکته: عبارت {نام} به‌صورت خودکار با نام هر دانش‌آموز جایگزین می‌شود.</div>
+        </div>
+      </div>
+    `,
+    actions: [
+      { label: 'انصراف', cls: 'ghost', value: false },
+      {
+        label: 'ارسال پیامک',
+        onClick: async (m) => {
+          const target_type = m.querySelector('#smsTargetType').value;
+          const recipient = m.querySelector('#smsRecipient').value;
+          const text = m.querySelector('#smsText').value.trim();
+          if (!text) { toast('لطفاً متن پیامک را وارد کنید', 'err'); return false; }
+
+          let target_value = null;
+          if (target_type === 'grade') target_value = m.querySelector('#smsGrade').value;
+          else if (target_type === 'class') target_value = m.querySelector('#smsClass').value;
+          else if (target_type === 'student') {
+            target_value = m.querySelector('#smsStudentId').value;
+            if (!target_value) { toast('لطفاً دانش‌آموز را انتخاب کنید', 'err'); return false; }
+          }
+
+          const r = await post('/api/manager/sms/send', { target_type, target_value, recipient, text });
+          if (r.ok) {
+            toast(r.simulated ? `ارسال شبیه‌سازی شد (${fa(r.sent)} پیامک)` : `${fa(r.sent)} پیامک ارسال شد`, 'ok');
+            return true;
+          } else {
+            toast(`ارسال نشد: ${r.errors?.[0] || 'خطا در درگاه'}`, 'err');
+            return false;
+          }
+        }
+      }
+    ],
+    onOpen: (m) => {
+      const tt = m.querySelector('#smsTargetType');
+      const bg = m.querySelector('#boxGrade'), bc = m.querySelector('#boxClass'), bs = m.querySelector('#boxStudent');
+      const updateBoxes = () => {
+        bg.style.display = tt.value === 'grade' ? '' : 'none';
+        bc.style.display = tt.value === 'class' ? '' : 'none';
+        bs.style.display = tt.value === 'student' ? '' : 'none';
+      };
+      tt.onchange = updateBoxes;
+      updateBoxes();
+
+      const ta = m.querySelector('#smsText'), cc = m.querySelector('#smsCharCount');
+      const updateCount = () => {
+        const len = ta.value.length;
+        const parts = len <= 70 ? 1 : Math.ceil(len / 67);
+        cc.textContent = `${fa(len)} کاراکتر (${fa(parts)} پیامک)`;
+      };
+      ta.oninput = updateCount;
+      updateCount();
+
+      const tmpl = m.querySelector('#smsTemplate');
+      const templates = {
+        fee: 'ولی گرامی دانش‌آموز {نام}، با سلام؛ لطفاً نسبت به پرداخت حق عضویت کانون نخبه‌پروری اقدام فرمایید. با تشکر، مدیریت کانون',
+        meeting: 'ولی گرامی دانش‌آموز {نام}، بدین‌وسیله از جنابعالی دعوت می‌شود در جلسه اولیا و مربیان کانون در روز چهارشنبه شرکت فرمایید.',
+        exam: 'دانش‌آموز گرامی {نام}، آزمون بعدی کانون روز جمعه ساعت ۹ صبح برگزار خواهد شد. لطفاً به‌موقع حضور داشته باشید.',
+        encourage: 'ولی گرامی، از تلاش و پیشرفت چشمگیر تحصیلی فرزندتان {نام} در آزمون‌ها و فعالیت‌های کانون تقدیر می‌گردد.'
+      };
+      tmpl.onchange = () => {
+        if (templates[tmpl.value]) {
+          ta.value = templates[tmpl.value];
+          updateCount();
+        }
+      };
+
+      m.querySelector('#btnPickStu').onclick = async () => {
+        const p = await pickStudent('انتخاب دانش‌آموز برای ارسال پیامک');
+        if (p) {
+          m.querySelector('#smsStudentId').value = p.id;
+          m.querySelector('#smsStudentName').value = p.name;
+        }
+      };
+    }
+  });
+}
+
 export async function smsOutbox(el) {
-  setHead('صندوق خروجی پیامک', 'وضعیت همه‌ی پیامک‌های کانون؛ پیامک ناموفق را دوباره بفرستید');
+  setHead('صندوق خروجی پیامک', 'وضعیت همه‌ی پیامک‌های کانون و ارسال پیامک جدید به دانش‌آموزان و اولیا', `<button class="btn sm" id="btnNewSms">${icon('send', { size: 16 })} ارسال پیامک جدید</button>`);
   const rows = await api('/api/manager/sms-outbox');
   el.innerHTML = `<section class="card">${rows.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>گیرنده</th><th>دانش‌آموز</th><th>متن</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead><tbody>${rows.map((m) => `<tr><td dir="ltr">${esc(m.recipient_phone)}</td><td>${esc(m.student_name || '—')}</td><td class="small">${esc(m.content)}${m.error_message ? `<div class="tiny red-t">${esc(m.error_message)}</div>` : ''}</td><td><span class="badge ${(SMS[m.status] || ['', ''])[1]}">${(SMS[m.status] || [m.status])[0]}</span></td><td class="tiny muted">${dt(m.sent_at || m.created_at)}</td><td>${m.status === 'failed' ? `<button class="btn sm soft" data-retry="${m.id}">ارسال مجدد</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'پیامکی ثبت نشده')}</section>`;
   on(el, 'click', '[data-retry]', (e, b) => busy(b, async () => { const r = await post(`/api/manager/sms-outbox/${b.dataset.retry}/retry`); toast(r.ok ? 'پیامک ارسال شد' : `ناموفق: ${r.error}`, r.ok ? 'ok' : ''); smsOutbox(el); }));
+  $('#btnNewSms', el)?.addEventListener('click', async () => {
+    const res = await openSmsModal();
+    if (res) smsOutbox(el);
+  });
 }
 // انتخاب دانش‌آموز با جست‌وجوی سرور؛ نتیجه { id, name } یا null
 const pickStudent = (title, hint = '') => modal({
@@ -593,13 +740,13 @@ export async function hooshStudio(el) {
       <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);color:#fff;padding:20px;border-radius:16px">
         <div class="row between" style="flex-wrap:wrap;gap:12px;align-items:center">
           <div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
               <span class="badge yellow" style="font-weight:900">میز کار تخصصی معلمان کانون</span>
-              <span class="badge" style="background:rgba(255,255,255,0.15);color:#fff">${esc(activeBook?.title || 'هوش کمپلکس')}</span>
+              <span class="badge" style="background:rgba(255,255,255,0.15);color:#fff;white-space:normal;height:auto">${esc(activeBook?.title || 'هوش کمپلکس')}</span>
             </div>
             <div style="font-size:20px;font-weight:900">میز کار هوشمند طراحی و چاپ آزمون تیزهوشان</div>
             <div class="small" style="color:#94a3b8;margin-top:4px">
-              انتخاب مباحث از کتب هوش کمپلکس، گزینش برگه‌های استاندارد سؤال، پیش‌نمایش چاپ A4 با سربرگ رسمی کانون و انتشار آزمون آنلاین.
+              انتخاب مباحث از کتب هوش کمپلکس، گزینش برگه‌های استاندارد سؤال، پیش‌نمایش چاپ A4 با سربرگ رسمی کانون.
             </div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -619,7 +766,7 @@ export async function hooshStudio(el) {
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <span class="small bold" style="color:#cbd5e1">کتاب منبع:</span>
           ${books.map((b) => `
-            <button class="btn sm ${b.id === activeBookId ? '' : 'soft'}" data-book="${b.id}" type="button" style="${b.id === activeBookId ? 'background:#f59e0b;color:#0f172a;font-weight:900' : 'background:rgba(255,255,255,0.1);color:#fff'}">
+            <button class="btn sm ${b.id === activeBookId ? '' : 'soft'}" data-book="${b.id}" type="button" style="white-space:normal;height:auto;min-height:36px;${b.id === activeBookId ? 'background:#f59e0b;color:#0f172a;font-weight:900' : 'background:rgba(255,255,255,0.1);color:#fff'}">
               ${esc(b.title)} (${esc(b.grade)})
             </button>
           `).join('')}
@@ -705,7 +852,7 @@ export async function hooshStudio(el) {
                     <div class="card" style="padding:10px;border:1.5px solid ${inBasket ? '#2563eb' : 'var(--border)'};background:${inBasket ? '#f8faff' : '#fff'};border-radius:12px">
                       <div class="row between" style="margin-bottom:8px;align-items:center">
                         <span class="small bold">برگه شماره ${num(pageNum)}</span>
-                        <button class="btn sm ${inBasket ? 'soft' : ''}" data-page="${pageNum}" data-toggle-page style="${inBasket ? 'color:#dc2626;border-color:#fca5a5' : 'background:#2563eb;color:#fff'}">
+                        <button class="btn sm ${inBasket ? 'soft' : ''}" data-page="${pageNum}" data-toggle-page style="${inBasket ? 'color:#b91c1c;border-color:#fca5a5' : 'background:#2563eb;color:#fff'}">
                           ${inBasket ? 'حذف از سبد' : '+ افزودن به آزمون'}
                         </button>
                       </div>
@@ -730,7 +877,7 @@ export async function hooshStudio(el) {
                 <span class="ib blue">${icon('clipboard', { size: 18 })}</span>
                 <span>سبد برگه‌های آزمون انتخابی (${num(basket.length)} برگه انتخاب‌شده)</span>
               </div>
-              ${basket.length ? `<button class="btn sm soft" id="clearBasketBtn" style="color:#dc2626">خالی‌کردن سبد</button>` : ''}
+              ${basket.length ? `<button class="btn sm soft" id="clearBasketBtn" style="color:#b91c1c">خالی‌کردن سبد</button>` : ''}
             </div>
 
             ${basket.length ? `
@@ -740,7 +887,7 @@ export async function hooshStudio(el) {
                   <div style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;font-size:11px">
                     <span style="font-weight:700">برگه ${num(item.pageNum)}</span>
                     <span class="tiny muted">(${esc(item.topicTitle)})</span>
-                    <button class="icon-btn" data-remove-basket="${idx}" style="cursor:pointer;color:#dc2626;border:0;background:none;padding:0;margin-right:4px">✕</button>
+                    <button class="icon-btn" data-remove-basket="${idx}" style="cursor:pointer;color:#b91c1c;border:0;background:none;padding:0;margin-right:4px">✕</button>
                   </div>
                 `).join('')}
               </div>
@@ -962,7 +1109,7 @@ export async function hooshStudio(el) {
                 <div style="font-weight:900;color:#1e40af">${esc(examConfig.title)} | ${esc(examConfig.grade)}</div>
                 <div style="color:#475569">
                   طراح: <b>${esc(examConfig.teacher)}</b>
-                  ${examConfig.hasNegativeScore ? '<span style="color:#dc2626;font-weight:700;margin-right:8px">| دارای نمره منفی</span>' : ''}
+                  ${examConfig.hasNegativeScore ? '<span style="color:#b91c1c;font-weight:700;margin-right:8px">| دارای نمره منفی</span>' : ''}
                 </div>
               </div>
               ${index === 0 ? `

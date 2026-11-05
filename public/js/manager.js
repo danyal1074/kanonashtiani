@@ -112,7 +112,7 @@ async function students(el) {
   const fillClasses = () => { $('#fc', el).innerHTML = `<option value="">همه کلاس‌ها</option>${md.classes.filter((c) => !q.grade || c.grade === Number(q.grade)).map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}`; };
   fillClasses();
   const rowHtml = (s) => `<tr><td class="click" data-view="${s.id}"><b>${esc(s.full_name)}</b></td><td class="num">${fa(s.national_code)}</td><td>${gradeName(s.grade)} ${esc(s.class_name || '—')}</td><td class="small">${esc(s.school || '')}</td><td class="num">${fa(s.parent_phone)}</td>
-    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td><td><div class="row" style="gap:4px"><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
+    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td><td><div class="row" style="gap:4px"><button class="icon-btn" data-sms="${s.id}" title="ارسال پیامک" aria-label="ارسال پیامک">${icon('message', { size: 16 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
   let seq = 0;
   const load = async (append) => {
     const my = ++seq;
@@ -170,7 +170,7 @@ async function students(el) {
           <div><b>ورود دانش‌آموز:</b> <code style="background:#e0f2fe;padding:2px 6px;border-radius:4px;color:#0369a1">${fa(st.student_user)}</code> | رمز اولیه: <code style="background:#e0f2fe;padding:2px 6px;border-radius:4px;color:#0369a1">${fa(st.student_pass)}</code></div>
           <div><b>ورود والدین:</b> <code style="background:#fef3c7;padding:2px 6px;border-radius:4px;color:#92400e">${fa(st.parent_user)}</code> | رمز اولیه: <code style="background:#fef3c7;padding:2px 6px;border-radius:4px;color:#92400e">${fa(st.parent_pass)}</code></div>
         </div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:6px;text-align:left">پلتفرم رشد نخبه • لطفاً پس از اولین ورود رمز عبور خود را تغییر دهید.</div>
+        <div style="font-size:11px;color:#64748b;margin-top:6px;text-align:left">پلتفرم رشد نخبه • لطفاً پس از اولین ورود رمز عبور خود را تغییر دهید.</div>
       </div>
     `).join('');
     printOverlay(`<div style="display:flex;flex-wrap:wrap;gap:16px;direction:rtl">${cards}</div>`, `کارت ورود ${fa(list.length)} دانش‌آموز`);
@@ -187,6 +187,18 @@ async function students(el) {
   on(el, 'click', '[data-view]', async (e, td) => {
     const d = await api(`/api/manager/students/${td.dataset.view}`);
     modal({ title: `${esc(d.info.avatar)} ${esc(d.info.full_name)}`, wide: true, body: studentDetailHtml(d) });
+  });
+  on(el, 'click', '[data-sms]', async (e, b) => {
+    const s = rows.find((x) => x.id === Number(b.dataset.sms));
+    if (!s) return;
+    const { openSmsModal } = await import('./legacy.js');
+    await openSmsModal({
+      target_type: 'student',
+      student_id: s.id,
+      student_name: s.full_name,
+      recipient: 'parent',
+      text: s.pay === 'unpaid' ? `ولی گرامی دانش‌آموز ${s.full_name}، با سلام؛ لطفاً نسبت به تسویه حق عضویت کانون اقدام فرمایید.` : `ولی گرامی دانش‌آموز ${s.full_name}، `
+    });
   });
 }
 
@@ -345,7 +357,7 @@ async function accounting(el, _p, me) {
   });
   $('#addExp').onclick = () => txModal('expense');
   $('#addInc').onclick = () => txModal('income');
-  load();
+  await load();
 }
 
 // ================= آزمون جامع =================
@@ -422,7 +434,7 @@ async function performance(el) {
       ${list.map((s) => `<tr><td><b>${fa(s.rank)}</b></td><td>${esc(s.full_name)}</td><td>${gradeName(s.grade)} ${esc(s.class_name)}</td><td><b>${fa(s.points)}</b></td><td>${s.level.name}</td><td>${s.avg_percent == null ? '—' : pct(s.avg_percent)}</td><td>${fa(s.absences)}</td><td>${fa(s.week_minutes)} دقیقه</td></tr>`).join('')}</tbody></table></div></div>`;
   };
   on(el, 'click', '[data-g]', (e, b) => { grade = b.dataset.g; load(); });
-  load();
+  await load();
 }
 
 // ================= فروشگاه =================

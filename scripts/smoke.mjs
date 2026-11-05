@@ -453,9 +453,16 @@ const sendStudentSms = await call(S.manager.ck, 'POST', '/api/manager/sms/send',
   target_type: 'student',
   target_value: meStu.id,
   recipient: 'both',
-  text: 'آزمون آزمایشی جمعه برگزار می‌شود'
+  text: 'دانش‌آموز گرامی {نام}، آزمون آزمایشی جمعه برگزار می‌شود'
 });
 check('ارسال پیامک به دانش‌آموز خاص با موفقیت شبیه‌سازی/ارسال می‌شود', sendStudentSms.status === 200 && sendStudentSms.data.ok);
+
+const debtorSms = await call(S.manager.ck, 'POST', '/api/manager/sms/send', {
+  target_type: 'debtors',
+  recipient: 'parent',
+  text: 'ولی گرامی دانش‌آموز {نام}، لطفاً نسبت به پرداخت حق عضویت اقدام نمایید'
+});
+check('ارسال پیامک یادآوری حق عضویت به بدهکاران با موفقیت شبیه‌سازی/ارسال می‌شود', debtorSms.status === 200 && debtorSms.data.ok);
 
 const annWithSms = await call(S.manager.ck, 'POST', '/api/manager/announcements', {
   title: 'جلسه اولیا و مربیان',
