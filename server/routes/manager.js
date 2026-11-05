@@ -226,6 +226,20 @@ export default function register(r) {
     t.assign = all('SELECT class_id, subject FROM teacher_classes WHERE teacher_id=?', t.id);
     return t;
   });
+  r.get('/api/manager/schedule/colors', M, (ctx) => JSON.parse(get('SELECT config FROM schedule_colors WHERE center_id=?', ctx.user.center_id)?.config || '{}'));
+  r.put('/api/manager/schedule/colors', M, (ctx) => {
+    const config = { kinds: Object.create(null), subjects: Object.create(null) };
+    for (const group of ['kinds', 'subjects']) {
+      const values = ctx.body[group] ?? {};
+      if (!values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length > 100) fail(400, 'تنظیمات رنگ معتبر نیست');
+      for (const [key, color] of Object.entries(values)) {
+        if (!key.trim() || key.length > 40 || (group === 'kinds' && !SESSION_KINDS.includes(key)) || typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color)) fail(400, 'نام درس یا رنگ معتبر نیست');
+        config[group][key] = color.toLowerCase();
+      }
+    }
+    run('INSERT INTO schedule_colors (center_id, config) VALUES (?,?) ON CONFLICT(center_id) DO UPDATE SET config=excluded.config', ctx.user.center_id, JSON.stringify(config));
+    return { ok: true };
+  });
   r.get('/api/manager/schedule', M, (ctx) => {
     const c = ownClass(ctx, ctx.query.class_id);
     return all('SELECT sc.*, u.full_name teacher FROM schedule sc LEFT JOIN users u ON u.id=sc.teacher_id WHERE class_id=? ORDER BY weekday, start', c.id);

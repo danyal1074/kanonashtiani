@@ -1,34 +1,61 @@
-/* جدول هفتگی (معلم: شبکه، مدیر: خطی) */
-.tt{--k-academic:#e3eeff;--k-academic-t:#0b3f9e;--k-tarbiati:#fbe9a0;--k-tarbiati-t:#6b4e00;--k-chess:#cdf0d6;--k-chess-t:#0d5a2a;--k-robotics:#e4e7ec;--k-robotics-t:#3b4455;--k-language:#c9f0ee;--k-language-t:#0b5953;--k-sport:#e1f2bd;--k-sport-t:#3f5a07;--k-other:#ecdcf8;--k-other-t:#59237e;display:grid;gap:12px}
-.tt .k-academic{--kb:var(--k-academic);--kt:var(--k-academic-t)}.tt .k-tarbiati{--kb:var(--k-tarbiati);--kt:var(--k-tarbiati-t)}.tt .k-chess{--kb:var(--k-chess);--kt:var(--k-chess-t)}
-.tt .k-robotics{--kb:var(--k-robotics);--kt:var(--k-robotics-t)}.tt .k-language{--kb:var(--k-language);--kt:var(--k-language-t)}.tt .k-sport{--kb:var(--k-sport);--kt:var(--k-sport-t)}.tt .k-other{--kb:var(--k-other);--kt:var(--k-other-t)}
-.tt-chip{display:inline-block;padding:2px 10px;border-radius:99px;background:var(--kb);color:var(--kt);font-size:12px;font-weight:700;font-style:normal;white-space:nowrap}
-.tt-legend{display:flex;flex-wrap:wrap;gap:6px}
-.tt-time{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
-.tt-sum{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
-.tt-pill{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:14px;background:#fff;border:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:12px;min-height:44px}
-.tt-pill b{font-size:18px}.tt-pill.today{background:var(--primary);color:#fff;border-color:var(--primary)}.tt-pill.off{opacity:.6}
-.tt-grid-wrap{display:none;overflow:auto;border-radius:18px;border:1px solid var(--line);background:#fff}
-.tt-grid{width:100%;border-collapse:separate;border-spacing:0;min-width:760px}
-.tt-grid th,.tt-grid td{padding:8px;border-bottom:1px solid var(--line);border-inline-start:1px solid var(--line);vertical-align:top;text-align:center}
-.tt-grid thead th{background:#f0f6ff;font-size:14px}.tt-grid tbody th{background:#f7faff;font-size:13px;white-space:nowrap}
-.tt-grid .today{background:#f2f7ff}.tt-grid thead th.today{background:var(--primary);color:#fff}
-.tt-cell{display:grid;gap:1px;padding:6px 8px;border-radius:12px;background:var(--kb);color:var(--kt);text-align:start;margin-bottom:4px;font-size:13px}.tt-cell b{font-size:14px}.tt-cell small{opacity:.85}
-.tt-days{display:grid;gap:10px}
-.tt-day{background:#fff;border:1px solid var(--line);border-radius:18px;padding:10px 12px;scroll-margin-top:70px}.tt-day.today{border-color:var(--primary);box-shadow:0 0 0 2px #1266e622}
-.tt-day h3{margin:0 0 6px;font-size:16px}.tt-day h3 small{font-size:12px;color:var(--primary);margin-inline-start:6px}
-.tt-line{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px;border-radius:12px;background:var(--kb);color:var(--kt);margin-top:6px;min-height:48px}
-.tt-line div{display:grid;gap:1px}.tt-line span{font-size:13px}.tt-line .tt-chip{background:#ffffffb0}
-@media(min-width:900px){.tt-grid-wrap{display:block}.tt-days{display:none}.tt-sum{max-width:520px}}
-.tt-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:640px}.tt-filters label{display:grid;gap:4px;font-size:13px;color:var(--muted)}.tt-filters select{min-height:44px}
-.tt-mday{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-bottom:6px}
-.tt-mday h2{margin:0;padding:10px 14px;background:#eaf2ff;font-size:17px;color:var(--ink)}.tt-mday h2 small{font-size:12px;color:var(--muted);margin-inline-start:8px;font-weight:500}
-.tt-mrow{display:grid;grid-template-columns:130px 1.3fr 1fr 1.6fr 1fr;gap:8px;padding:9px 14px;align-items:center;border-top:1px solid var(--line);border-inline-start:5px solid var(--kt,transparent)}
-.tt-mrow.head{background:#f7faff;font-size:12px;color:var(--muted);font-weight:700;border-inline-start-color:transparent}
-.tt-mrow .room{font-weight:600}.tt-mrow .tch{color:var(--muted);font-size:13px}
-@media(max-width:720px){.tt-mrow{grid-template-columns:1fr 1fr;row-gap:2px}.tt-mrow.head{display:none}.tt-mrow span:nth-child(1){grid-column:1}.tt-mrow span:nth-child(2){grid-column:2;text-align:end}.tt-mrow span:nth-child(3){grid-column:1}.tt-mrow span:nth-child(4),.tt-mrow span:nth-child(5){grid-column:1/-1}}
-.tt-print .tt-mday{break-inside:avoid;border-radius:0}
-@media(prefers-reduced-motion:no-preference){.tt-pill{transition:transform .15s}.tt-pill:active{transform:scale(.96)}}
+/* Reference weekly schedule: desktop matrix and mobile day/week/list modes. */
+.tt-reference{display:grid;gap:14px;min-width:0;color:#111f52;--tt-border:#c7def9}
+.tt-reference .tt-banner{display:flex;align-items:center;gap:20px;padding:18px 24px;background:linear-gradient(130deg,#eef8ff,#d2eaff);border:2px solid #fff;border-radius:25px;box-shadow:0 5px 10px #65a7ea33}
+.tt-banner h2{font-size:24px;margin:0 0 6px}.tt-banner p{font-size:13px;margin:0}.tt-banner-icon{display:grid;place-items:center;flex:none}
+.tt-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.tt-view-tabs{display:flex;gap:10px;flex-wrap:wrap}
+.tt-view-tabs button,.tt-datebar button{border:1px solid #fff;border-radius:24px;background:linear-gradient(#fff,#d8eaff);box-shadow:0 3px 5px #6aa5e342;color:#13235c;min-height:44px;padding:10px 22px;font:inherit;font-weight:800;cursor:pointer}
+.tt-view-tabs button.active{background:linear-gradient(#00bcff,#0064ff);color:#fff;border-color:#b4ecff}
+.tt-datebar{display:flex;align-items:center;gap:10px;border:1px solid #fff;border-radius:24px;padding:8px;background:#e4f1ff;box-shadow:0 3px 7px #6aa5e333}
+.tt-datebar strong{flex:1;text-align:center;font-size:16px}.tt-datebar button{padding:8px 12px;display:flex;align-items:center;justify-content:center}
+.tt-repeat-note{margin:0;font-size:11px;color:#526487}
+.tt-reference .tt-filters{display:flex;gap:10px;flex-wrap:wrap;max-width:none}
+.tt-reference .tt-filters label{display:grid;gap:5px;font-size:12px;min-width:140px;flex:1}
+.tt-reference .tt-grid-wrap{display:block;max-width:100%;overflow:auto;border:2px solid #fff;border-radius:22px;background:#edf6ff;box-shadow:0 6px 12px #6aa5e333}
+.tt-reference .tt-grid{min-width:1120px;width:100%;border-collapse:separate;border-spacing:0;background:#edf6ff;table-layout:fixed}
+.tt-reference .tt-grid th,.tt-reference .tt-grid td{border:1px solid #d1e3fb;vertical-align:top;padding:6px;text-align:center;width:auto}
+.tt-reference .tt-grid th:first-child{width:85px}
+.tt-reference .tt-grid thead th{background:linear-gradient(#fff,#dcecff);font-size:15px}
+.tt-reference .tt-grid th button{background:transparent;border:0;color:inherit;font:inherit;font-weight:800;cursor:pointer;min-height:56px;width:100%}
+.tt-reference .tt-grid th small{display:block;font-size:11px;font-weight:500;margin-top:5px}
+.tt-reference .tt-grid tbody th{vertical-align:middle;background:#e1efff;color:#14244e;font-size:12px}
+.tt-reference .tt-grid .tt-selected{background:#c5e8ff;box-shadow:inset 0 -3px #0677ff}
+.tt-free{display:block;color:#9fb9d6;padding:20px 0}
+.tt-event{display:grid;gap:5px;padding:10px 8px;border-radius:14px;margin-bottom:7px;background:var(--session-bg,#eee7fa);color:var(--session-ink,#101d36);border:1px solid #ffffffb3;box-shadow:0 2px 4px #416da119;text-align:start;overflow-wrap:anywhere}
+.tt-event:last-child{margin-bottom:0}.tt-event-title{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.tt-event-title b{font-size:14px}
+.tt-event span{font-size:12px}.tt-location{display:flex;gap:4px;align-items:center}.tt-event-time{font-size:11px!important}
+.tt-overlap{display:inline-block;background:#ffffffc9;color:#27345d;border-radius:12px;padding:2px 5px;font-size:9px}
+.tt-teacher-name{font-size:10px}.tt-subject{font-weight:700}
+.tt-agenda{display:grid;gap:12px}.tt-agenda-row{display:grid;grid-template-columns:100px minmax(0,1fr);gap:10px;padding:10px;border-radius:23px;border:2px solid #fff;background:linear-gradient(145deg,#f4fbff,#dceeff);box-shadow:0 5px 9px #7db2e537}
+.tt-agenda-time{display:grid;place-items:center;border-radius:18px;background:linear-gradient(#fff,#d9eaff);font-size:13px;font-weight:900;color:#152453}
+.tt-agenda-time bdi{white-space:normal;text-align:center}
+.tt-agenda-row .tt-event{padding:16px;margin:0;min-height:106px;grid-template-columns:1fr auto;align-content:center}
+.tt-agenda-row .tt-event-title,.tt-agenda-row .tt-location,.tt-agenda-row .tt-teacher-name{grid-column:1/-1}
+.tt-agenda-row .tt-event-title b{font-size:18px}
+.tt-list{display:grid;gap:18px}.tt-list h3{font-size:18px;margin:0 0 10px}
+.tt-reference .tt-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:15px;border:2px solid #fff;border-radius:22px;background:#edf6ff;box-shadow:0 3px 8px #75afe533}
+.tt-chip{padding:7px 12px;border-radius:18px;background:var(--session-bg,#eee7fa);color:var(--session-ink,#101d36);font-size:12px;font-weight:800}
+.tt-daily-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:14px;border-radius:22px;border:2px solid #fff;background:#e9f4ff}
+.tt-daily-summary span{display:grid;text-align:center;gap:6px;background:#f6fbff;border-radius:16px;padding:12px 3px;font-size:12px}.tt-daily-summary b{font-size:22px}
+.tt-colors{border:1px solid #c7def9;border-radius:20px;background:#f7fbff;padding:15px}
+.tt-colors summary{cursor:pointer;display:flex;gap:8px;font-weight:800;min-height:36px;align-items:center}
+.tt-colors p{font-size:12px;color:#465e7d}.tt-colors h3{font-size:15px;margin:20px 0 10px}
+.tt-color-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.tt-color-fields label{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid #d1e3f6;border-radius:14px;background:#fff;font-size:12px}
+.tt-color-fields input[type=color]{width:48px;height:38px;min-width:48px;cursor:pointer;padding:2px}
+.tt-color-fields input[type=checkbox]{width:18px;height:18px;vertical-align:middle}
+.tt-color-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+.tt-reference button:focus-visible,.tt-reference select:focus-visible,.tt-reference input:focus-visible,.tt-grid-wrap:focus-visible{outline:3px solid #004bb5;outline-offset:3px}
+@media(max-width:700px){
+.tt-reference{gap:12px}.tt-reference .tt-banner{padding:14px;gap:12px}.tt-banner h2{font-size:18px}.tt-banner-icon .ic{width:48px!important;height:48px!important}
+.tt-view-tabs{gap:6px;flex:1}.tt-view-tabs button{flex:1;padding:9px 10px;font-size:12px;white-space:nowrap}
+.tt-datebar{gap:4px;padding:6px}.tt-datebar strong{font-size:12px}.tt-datebar button{font-size:11px;padding:8px;min-width:36px}
+.tt-agenda-row{grid-template-columns:78px minmax(0,1fr);gap:8px;padding:8px}.tt-agenda-row .tt-event{padding:12px}.tt-agenda-row .tt-event-title b{font-size:16px}
+.tt-reference .tt-filters label{min-width:110px}.tt-reference .tt-legend{padding:12px}.tt-chip{font-size:11px;padding:6px 9px}
+}
+@media print{.tt-reference .tt-banner,.tt-reference .tt-toolbar,.tt-reference .tt-datebar,.tt-reference .tt-filters,.tt-reference .tt-colors,.tt-repeat-note{display:none}
+.tt-reference .tt-grid-wrap{overflow:visible;box-shadow:none}.tt-reference .tt-grid{min-width:0;font-size:9px}.tt-reference .tt-grid td,.tt-reference .tt-grid th{padding:2px}.tt-reference .tt-event{font-size:9px;padding:4px;box-shadow:none;break-inside:avoid;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.tt-reference .tt-event b,.tt-reference .tt-event span,.tt-reference .tt-event small{font-size:9px}.tt-reference .tt-grid th:first-child{width:50px}.tt-agenda-row{break-inside:avoid;box-shadow:none}.tt-reference .tt-legend{box-shadow:none}}
 
 /* کارت ورود دانش‌آموز (چاپ) */
 .cred-sheet{display:grid;grid-template-columns:repeat(2,9.6cm);gap:.4cm;justify-content:center;direction:rtl;color:#0f172a}
@@ -42,3 +69,17 @@
 .cred-qr svg{width:2.5cm;height:2.5cm}.cred-qr{display:grid;justify-items:center;gap:.05cm;flex:none}.cred-qr small{font-size:8.5px;color:#475569}
 .cred-foot{font-size:9px;color:#475569;text-align:center;border-top:1px solid #e2e8f0;padding-top:.1cm}
 @media print{.cred-sheet{grid-template-columns:repeat(2,9.6cm)}}
+
+.tt-reference{grid-template-columns:minmax(0,1fr)}
+.tt-reference>*{min-width:0;max-width:100%}
+.tt-reference #ttContent{width:100%;min-width:0}
+
+/* Compact simultaneous sessions: class/subject on the right, venue on the left. */
+.tt-reference .tt-grid .tt-event{grid-template-columns:minmax(0,1fr) minmax(0,.85fr);gap:2px 5px;padding:6px;margin-bottom:5px;border-radius:10px}
+.tt-reference .tt-grid .tt-event-title{grid-column:1;grid-row:1;display:block}
+.tt-reference .tt-grid .tt-event-title b{font-size:11px}
+.tt-reference .tt-grid .tt-subject{grid-column:1;grid-row:2;font-size:10px}
+.tt-reference .tt-grid .tt-location{grid-column:2;grid-row:1/4;align-self:center;justify-content:center;font-size:10px;text-align:center;display:block}
+.tt-reference .tt-grid .tt-location .ic{display:none}
+.tt-reference .tt-grid .tt-teacher-name{grid-column:1;grid-row:3;font-size:9px;opacity:.85}
+.tt-reference .tt-grid .tt-event-time,.tt-reference .tt-grid .tt-overlap{display:none}
