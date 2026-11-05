@@ -148,7 +148,7 @@ server.headersTimeout = 70_000;
 server.requestTimeout = 600_000;
 server.on('clientError', (err, socket) => { if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); });
 
-server.listen(PORT, HOST, () => {
+server.listen(PORT, HOST, Number(process.env.ROSHD_BACKLOG || 1024), () => {
   console.log(`پلتفرم رشد نخبه روی http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT} اجرا شد (نخ‌های کمکی: ${process.env.UV_THREADPOOL_SIZE})`);
   if (!get('SELECT COUNT(*) n FROM users').n) console.warn('پایگاه داده خالی است؛ برای ساخت داده نمونه دستور «npm run seed» را اجرا کنید.');
 });

@@ -119,7 +119,7 @@ export async function importStudents(centerId, csvText, { dryRun = false } = {})
 
   // هش رمز (ناهمزمان و موازی با سقف) پیش از تراکنش
   const studentHash = new Map();
-  const jobs = good.map((g) => () => hashPasswordAsync(g.national_code).then((h) => studentHash.set(g.national_code, h)));
+  const jobs = good.map((g) => () => hashPasswordAsync(g.national_code, undefined, { bulk: true }).then((h) => studentHash.set(g.national_code, h)));
   for (let i = 0; i < jobs.length; i += 24) await Promise.all(jobs.slice(i, i + 24).map((j) => j()));
 
   const feeBy = new Map(all('SELECT grade, amount FROM fee_settings WHERE center_id=?', centerId).map((f) => [f.grade, f.amount]));

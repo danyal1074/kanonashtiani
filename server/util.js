@@ -1,6 +1,7 @@
 // ابزارهای مشترک: رمزنگاری، توکن، تاریخ شمسی، فایل
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { DATA_DIR, UPLOAD_DIR } from './db.js';
 
@@ -28,17 +29,20 @@ export const needsRehash = (stored) => Number(String(stored).split('$')[1]) < ST
 // نسخه ناهمزمان برای مسیرهای پرتردد (ورود): محاسبه در نخ‌های جداگانه انجام می‌شود تا حلقه رویداد قفل نشود.
 // تعداد محاسبه‌های هم‌زمان محدود است تا صف هش، خواندن فایل‌ها و سایر کارها را گرسنه نکند.
 const scryptAsync = (pw, salt, N) => new Promise((res, rej) => crypto.scrypt(pw, salt, 32, { N, r: 8, p: 1, maxmem: 128 * N * 8 * 2 }, (e, k) => (e ? rej(e) : res(k))));
-const SCRYPT_SLOTS = Math.max(2, Math.min(6, Number(process.env.UV_THREADPOOL_SIZE || 4) - 1));
+// تعداد هش هم‌زمان = تعداد هسته‌ها (حداقل ۲، حداکثر ۶)؛ آزمایش روی ۳ هسته: ۳ اسلات همان سرعت ۵ اسلات را می‌دهد و تأخیر بقیهٔ کاربران را کمتر می‌کند
+const SCRYPT_SLOTS = Number(process.env.ROSHD_SCRYPT_SLOTS) || Math.max(2, Math.min(6, os.availableParallelism?.() ?? 4));
 let scryptActive = 0;
-const scryptQueue = [];
-async function scryptLimited(pw, salt, N) {
-  if (scryptActive >= SCRYPT_SLOTS) await new Promise((r) => scryptQueue.push(r));
+// دو صف: ورود و تغییر رمز کاربر (اولویت بالا) جلوتر از هش‌های انبوه (ثبت‌نام گروهی) اجرا می‌شوند
+const scryptQueues = { high: [], low: [] };
+const nextWaiter = () => scryptQueues.high.shift() || scryptQueues.low.shift();
+async function scryptLimited(pw, salt, N, bulk = false) {
+  if (scryptActive >= SCRYPT_SLOTS) await new Promise((r) => scryptQueues[bulk ? 'low' : 'high'].push(r));
   scryptActive++;
-  try { return await scryptAsync(pw, salt, N); } finally { scryptActive--; scryptQueue.shift()?.(); }
+  try { return await scryptAsync(pw, salt, N); } finally { scryptActive--; nextWaiter()?.(); }
 }
-export async function hashPasswordAsync(pw, N = STRONG_N) {
+export async function hashPasswordAsync(pw, N = STRONG_N, { bulk = false } = {}) {
   const salt = crypto.randomBytes(16).toString('base64url');
-  const hash = (await scryptLimited(String(pw), salt, N)).toString('base64url');
+  const hash = (await scryptLimited(String(pw), salt, N, bulk)).toString('base64url');
   return `scrypt$${N}$${salt}$${hash}`;
 }
 export async function verifyPasswordAsync(pw, stored) {

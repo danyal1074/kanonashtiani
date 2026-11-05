@@ -224,10 +224,6 @@ async function ensurePasswordChanged(me) {
         </p>
         <form id="forcePwForm" class="stack" style="gap:14px" novalidate>
           <div class="field">
-            <label for="fCurrent">رمز عبور فعلی (کد ملی)</label>
-            <input class="input ltr" id="fCurrent" name="current" type="password" required autocomplete="current-password" placeholder="کد ملی ۱۰ رقمی">
-          </div>
-          <div class="field">
             <label for="fNext">رمز عبور جدید (حداقل ۶ کاراکتر)</label>
             <input class="input ltr" id="fNext" name="next" type="password" minlength="6" required autocomplete="new-password" placeholder="حداقل ۶ کاراکتر">
           </div>
@@ -262,19 +258,16 @@ async function ensurePasswordChanged(me) {
     form.onsubmit = async (e) => {
       e.preventDefault();
       errEl.style.display = 'none';
-      const cur = form.current.value.trim();
       const nxt = form.next.value;
       const conf = form.confirm.value;
-      if (!cur) { errEl.textContent = 'رمز عبور فعلی را وارد کنید'; errEl.style.display = 'block'; return; }
       if (nxt.length < 6) { errEl.textContent = 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد'; errEl.style.display = 'block'; return; }
-      if (nxt === cur) { errEl.textContent = 'رمز جدید نباید با رمز اولیه یکسان باشد'; errEl.style.display = 'block'; return; }
       if (nxt !== conf) { errEl.textContent = 'رمز جدید و تکرار آن مطابقت ندارند'; errEl.style.display = 'block'; return; }
 
       const oldText = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = 'در حال ذخیره…';
       try {
-        await post('/api/me/password', { current: cur, next: nxt });
+        await post('/api/me/password', { next: nxt });
         me.must_change_password = false;
         if (state.me) state.me.must_change_password = false;
         toast('رمز عبور با موفقیت تغییر کرد. خوش آمدی!', 'ok');
