@@ -108,14 +108,14 @@ check('ثبت‌نام دانش‌آموز', created.status === 200, JSON.string
 const li = await fetch(B + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'student', identifier: nc, password: nc }) });
 check('ورود دانش‌آموز تازه با رمز اولیه', li.status === 200);
 const fresh = { ck: li.headers.get('set-cookie').split(';')[0] };
-check('دانش‌آموز تازه قبل از تعویض رمز مسدود است (۴۲۸)', (await call(fresh.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 428);
+check('دانش‌آموز تازه تا تکمیل پروفایل مسدود است (۴۲۸)', (await call(fresh.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 428);
 const pwChange = await call(fresh.ck, 'POST', '/api/me/password', { current: nc, next: 'StudentNew#123' });
-check('تعویض اجباری رمز توسط دانش‌آموز تازه', pwChange.status === 200);
+check('دانش‌آموز تازه می‌تواند اختیاری رمز را عوض کند', pwChange.status === 200);
 const freshAfterPw = { ck: pwChange.ck || (await login('student', nc, 'StudentNew#123')).ck };
 await call(freshAfterPw.ck, 'POST', '/api/student/complete-profile', { school: 'دبستان نمونه', birth_date: '1392/05/12', gender: 'f', address: 'تهران، خیابان نمونه' });
 // پومودورو: ثبت و جلوگیری از ثبت پشت‌سرهم بی‌فاصله
 const p1 = await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 });
-check('ثبت پومودورو پس از تعویض رمز', p1.status === 200);
+check('ثبت پومودورو پس از تکمیل پروفایل', p1.status === 200);
 check('پومودورو بی‌فاصله رد می‌شود', (await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 429);
 
 check('کد ملی تکراری رد می‌شود', (await call(S.manager.ck, 'POST', '/api/manager/students', { full_name: 'تکراری', national_code: nc, grade: 7, parent_phone: '09350001122' })).status === 400);
@@ -153,15 +153,15 @@ check('شهریهٔ پرداخت‌شدهٔ فایل ثبت شد یا چون م�
 const meG = (await call(gs.ck, 'GET', '/api/me')).data;
 check('پروفایل ناقص و رمز اولیه در /api/me اعلام می‌شود', meG.student.profile_done === false && meG.must_change_password === true);
 check('تا تکمیل پروفایل بقیه مسیرها بسته است (۴۲۸)', [428].includes((await call(gs.ck, 'GET', '/api/student/dashboard')).status));
-check('تا تغییر رمز اولیه، تکمیل پروفایل هم بسته است (۴۲۸)', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'x' })).status === 428);
-check('تغییر اجباری رمز: رمز اولیه (کد ملی) به‌عنوان رمز جدید رد می‌شود', (await call(gs.ck, 'POST', '/api/me/password', { next: nc3 })).status === 400);
-const forcedPw = await call(gs.ck, 'POST', '/api/me/password', { next: 'رمز-جدید-123' });
-check('تغییر اجباری رمز بدون وارد کردن رمز فعلی انجام می‌شود', forcedPw.status === 200);
-gs.ck = (await login('student', nc3, 'رمز-جدید-123')).ck;
+check('تغییر رمز اجباری نیست: تکمیل پروفایل بدون تغییر رمز مجاز است (اعتبارسنجی ۴۰۰ نه ۴۲۸)', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'x' })).status === 400);
+check('رمز اولیه (کد ملی) به‌عنوان رمز جدید رد می‌شود', (await call(gs.ck, 'POST', '/api/me/password', { current: nc3, next: nc3 })).status === 400);
 check('تکمیل پروفایل بدون مدرسه رد می‌شود', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: '', birth_date: '1392/05/12', address: 'تهران، خیابان نمونه' })).status === 400);
 const cp = await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'دبستان نمونه', birth_date: '1392/05/12', father_name: 'پدر', address: 'تهران، خیابان نمونه ۱' });
 check('تکمیل پروفایل موفق', cp.status === 200, JSON.stringify(cp.data));
 check('پروفایل پس از تکمیل ثبت شده است', (await call(gs.ck, 'GET', '/api/me')).data.student.profile_done === true);
+check('پس از تکمیل پروفایل، بدون تغییر رمز هم پنل باز است', (await call(gs.ck, 'GET', '/api/student/dashboard')).status === 200);
+check('تغییر رمز با رمز فعلی اشتباه رد می‌شود', (await call(gs.ck, 'POST', '/api/me/password', { current: 'اشتباه-123', next: 'رمز-جدید-456' })).status === 400);
+check('تغییر رمز اختیاری با رمز فعلی درست انجام می‌شود', (await call(gs.ck, 'POST', '/api/me/password', { current: nc3, next: 'رمز-جدید-456' })).status === 200);
 check('جدول هفتگی مدیر برمی‌گردد', Array.isArray((await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data));
 check('جدول هفتگی معلم برمی‌گردد', Array.isArray((await call(S.teacher.ck, 'GET', '/api/teacher/schedule')).data?.sessions));
 

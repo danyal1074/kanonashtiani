@@ -155,7 +155,7 @@ export async function busy(btn, fn) {
   try { return await fn(); } catch (e) { toast(e.message, 'err'); } finally { if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = old; } }
 }
 
-export function toast(msg, type = '') {
+export function toast(msg, type = '', ms = 3200) {
   let box = $('.toasts');
   if (!box) { box = document.createElement('div'); box.className = 'toasts'; document.body.append(box); }
   const t = document.createElement('div');
@@ -163,7 +163,7 @@ export function toast(msg, type = '') {
   t.setAttribute('role', type === 'err' ? 'alert' : 'status');
   t.innerHTML = `${icon(type === 'ok' ? 'check-circle' : type === 'err' ? 'alert' : 'info', { size: 18 })} <span>${esc(String(msg).trim())}</span>`;
   box.append(t);
-  setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3200);
+  setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, ms);
 }
 
 export function modal({ title, body, wide = false, actions = [], onOpen }) {

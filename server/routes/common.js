@@ -1,3 +1,4 @@
+import { resolveBookPage } from '../book-pages.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CURATED_QUESTIONS } from '../self_exam.js';
@@ -97,11 +98,9 @@ export default function register(r) {
   r.post('/api/me/password', { allowLocked: true }, async (ctx) => {
     const { current, next } = ctx.body;
     const row = get('SELECT pass_hash, national_code FROM users WHERE id=?', ctx.user.id);
-    // تغییر اجباری رمز اولیه: نشست همین الان با رمز اولیه ساخته شده؛ تأیید دوبارهٔ رمز فعلی (یک هش سنگین) لازم نیست
-    const forced = !!ctx.user.must_change_password;
-    if (!forced && !(await verifyPasswordAsync(current || '', row.pass_hash))) fail(400, 'رمز فعلی اشتباه است');
+    if (!(await verifyPasswordAsync(current || '', row.pass_hash))) fail(400, 'رمز فعلی اشتباه است');
     if (!next || String(next).length < 6) fail(400, 'رمز جدید باید حداقل ۶ کاراکتر باشد');
-    if (forced && row.national_code && toEnDigits(String(next)) === row.national_code) fail(400, 'رمز جدید نباید با رمز اولیه یکسان باشد');
+    if (ctx.user.must_change_password && row.national_code && toEnDigits(String(next)) === row.national_code) fail(400, 'رمز جدید نباید با رمز اولیه یکسان باشد');
     const h = await hashPasswordAsync(next);
     run('UPDATE users SET pass_hash=?, must_change_password=0 WHERE id=?', h, ctx.user.id); if (ctx.user) ctx.user.must_change_password = 0;
     setSession(ctx, { id: ctx.user.id, pass_hash: h });
@@ -274,8 +273,8 @@ export default function register(r) {
       fail(400, 'شماره صفحه نامعتبر است');
     }
 
-    const pageFile = path.join(DATA_DIR, 'books', id, `page_${n}.jpg`);
-    if (!fs.existsSync(pageFile)) {
+    const pageFile = resolveBookPage(id, n);
+    if (!pageFile) {
       fail(404, 'صفحه مورد نظر یافت نشد');
     }
 
