@@ -58,7 +58,9 @@ body.manager-ui {
 @media(max-width:980px){
  .manager-ui .app{display:block;padding:0}.manager-ui .main{padding:12px 12px 110px}
  .manager-ui .mobile-head{display:flex;background:#eff8ff;border-bottom:1px solid #c6e1fa}
- .manager-ui .sidebar{top:0;height:100dvh;border-radius:26px 0 0 26px;width:240px;z-index:70}
+ .manager-ui .mobile-head #menuBtn{color:#073d8f;min-width:38px;min-height:38px}
+ .manager-ui .sidebar{position:fixed;top:0;bottom:0;right:0;left:auto;height:100dvh;max-height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-radius:26px 0 0 26px;width:min(280px,86vw);z-index:100;transform:translateX(110%);transition:transform var(--dur-3) var(--ease);box-shadow:var(--shadow-lg)}
+ .manager-ui .sidebar.open{transform:none!important}
  .manager-ui .bottom-nav{background:linear-gradient(#fff,#e2f0ff);border:1px solid #fff;box-shadow:0 -4px 15px #83b4e940;border-radius:24px 24px 0 0;color:#172653}
  .manager-ui .bottom-nav a.on{border-radius:18px;background:linear-gradient(#14a4ff,#0064fb);color:#fff;box-shadow:0 3px 9px #0075fb40}
  .manager-ui .topbar{padding:12px}.mp-brand{display:none}
@@ -67,7 +69,7 @@ body.manager-ui {
  .mp-hero h2,.mp-hero p,.mp-hero>span{max-width:85%}
  .mp-launcher b{font-size:11px}.mp-launcher a{min-height:100px}
 }
-@media(max-width:400px){.mp-launcher{gap:7px}.mp-launcher b{font-size:10px}.mp-hero h2{font-size:19px}.manager-ui .grid.c4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:400px){.mp-launcher{gap:7px}.mp-launcher b{font-size:11px}.mp-hero h2{font-size:19px}.manager-ui .grid.c4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.manager-ui *{scroll-behavior:auto;transition:none!important;animation:none!important}}
 @media print{body.manager-ui{background:#fff}.manager-ui .mp-intro,.manager-ui .mp-profile,.manager-ui .mp-brand{display:none}.manager-ui .card{box-shadow:none;background:#fff;color:#000}}
 

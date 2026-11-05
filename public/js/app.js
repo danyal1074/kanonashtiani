@@ -1,7 +1,7 @@
 import { decoratePageArt } from './artwork.js';
 import { decorateDashboard } from './reference-ui.js';
 // راه‌انداز برنامه: پوسته، منو، مسیر‌یابی نقش‌ها، اطلاعیه تمام‌صفحه، تبریک تولد و قفل پنل
-import { state, api, post, esc, fa, $, $$, on, toast, confetti, logoHtml, ROLE_NAMES, avatar, nameAvatar, jdate, loading, empty, gradeName, icon } from './core.js';
+import { state, api, post, esc, fa, $, $$, on, toast, confetti, logoHtml, ROLE_NAMES, avatar, nameAvatar, jdate, loading, empty, gradeName, icon, labelControls } from './core.js';
 import { loginView } from './login.js';
 import { publicRoutes } from './shop.js';
 import * as student from './student.js';
@@ -13,6 +13,10 @@ import * as parent from './parent.js';
 import * as admin from './admin.js';
 
 const PANELS = { student, teacher, manager, parent, admin };
+document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.contact, tr[data-href], tr.click, .feature-tile[onclick]')) { e.preventDefault(); e.target.click(); } });
+// خطای عملیات‌های پس‌زمینه بی‌صدا نماند
+window.addEventListener('unhandledrejection', (e) => { if (e.reason?.message) toast(e.reason.message, 'err'); });
+let labelTimer; new MutationObserver(() => { clearTimeout(labelTimer); labelTimer = setTimeout(() => labelControls(), 60); }).observe(document.body, { childList: true, subtree: true });
 const root = document.getElementById('root');
 
 async function loadMe() {
@@ -62,8 +66,10 @@ function shell(me) {
     if (open) { const s = document.createElement('div'); s.className = 'scrim'; s.onclick = () => toggle(false); document.body.append(s); }
   };
   $('#menuBtn').onclick = () => toggle(true);
+  // با بزرگ‌شدن پنجره منوی کشویی و پرده‌ی آن بسته می‌شوند
+  matchMedia('(min-width: 981px)').addEventListener('change', (e) => { if (e.matches) toggle(false); });
   $('#moreBtn')?.addEventListener('click', (e) => { e.preventDefault(); toggle(true); });
-  on(sb, 'click', '.nav-item', () => toggle(false));
+  on(sb, 'click', 'a', () => toggle(false));
   $('#logoutBtn').onclick = async () => { await post('/api/auth/logout'); state.me = null; location.hash = '#/login'; boot(); };
   const goMe = () => { location.hash = me.user.role === 'student' ? '#/profile' : '#/account'; };
   $('#meChip').onclick = goMe;
