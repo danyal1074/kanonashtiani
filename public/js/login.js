@@ -8,7 +8,6 @@ const ROLES = [
   { key: 'manager', icon: 'building', name: 'مدیر کانون', label: 'کد ملی یا نام کاربری', ph: 'manager' },
 ];
 const ADMIN = { key: 'admin', icon: 'shield', name: 'مدیر سامانه', label: 'نام کاربری پشتیبانی', ph: 'admin' };
-const DEMO = { student: 'student', teacher: 'teacher', manager: 'manager', admin: 'admin' };
 const FEATURES = [['book', 'مطالعه هدفمند'], ['clipboard', 'آزمون و کارنامه'], ['message', 'همراهی پشتیبان']];
 
 export async function loginView(root, onDone) {
@@ -38,11 +37,6 @@ export async function loginView(root, onDone) {
         </form>
         <nav class="lg-links" aria-label="پیوندهای ورود"><a id="shopLink" href="#/c/${esc(center.slug || '')}">صفحه کانون و فروشگاه</a><a href="#" id="adminLink">ورود پشتیبانی سامانه</a></nav>
         ${centers.length > 1 ? `<div class="lg-center-pick"><label for="centerSel">کانون</label><select class="input" id="centerSel">${centers.map((c) => `<option value="${esc(c.slug)}" ${c.slug === center.slug ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>` : ''}
-        <details class="lg-demo"><summary>حساب‌های نمایشی <span class="muted">(رمز همه: <code>123456</code>)</span></summary>
-          <div class="chips">
-            <button class="chip" data-demo="student">${icon('graduation', { size: 14 })} آرین</button><button class="chip" data-demo="student9">${icon('lock', { size: 14 })} کیان (قفل)</button>
-            <button class="chip" data-demo="teacher">${icon('book', { size: 14 })} معلم</button><button class="chip" data-demo="manager">${icon('building', { size: 14 })} مدیر</button>
-            <button class="chip" data-demo="admin">${icon('shield', { size: 14 })} مدیر سامانه</button></div></details>
       </div>
     </main>
     <section class="lg-art" aria-label="معرفی کانون">
@@ -81,13 +75,6 @@ export async function loginView(root, onDone) {
     e.currentTarget.setAttribute('aria-pressed', String(show));
     e.currentTarget.setAttribute('aria-label', show ? 'پنهان کردن رمز' : 'نمایش رمز');
   };
-  $$('[data-demo]', root).forEach((b) => (b.onclick = () => {
-    const k = b.dataset.demo;
-    setRole(k === 'admin' ? ADMIN : ROLES.find((r) => r.key === (k === 'student9' ? 'student' : k)));
-    $('#ident', root).value = k === 'student9' ? 'student9' : DEMO[k];
-    $('#pw', root).value = '123456';
-    $('#loginBtn', root).focus();
-  }));
   $('#centerSel', root)?.addEventListener('change', (e) => {
     center = centers.find((c) => c.slug === e.target.value);
     try { localStorage.setItem('roshd-center', center.slug); } catch { /* */ }

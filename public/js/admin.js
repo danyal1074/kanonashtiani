@@ -1,19 +1,32 @@
 // پنل مدیر سامانه (پشتیبانی): کانون‌ها، کاربران، ورود به‌جای کاربر، پشتیبان‌گیری
-import { api, post, put, esc, fa, num, $, on, toast, busy, modal, confirmBox, setHead, empty, jdate, logoHtml, formData, ROLE_NAMES, fileToData, nameAvatar, icon, kpiCard } from './core.js';
+import { api, post, put, esc, fa, num, $, on, toast, busy, modal, confirmBox, setHead, empty, jdate, logoHtml, formData, ROLE_NAMES, fileToData, nameAvatar, icon, kpiCard, money } from './core.js';
 import { accountView } from './common.js';
 
 export const nav = () => [
   { path: '/home', icon: 'building', label: 'کانون‌ها' },
+  { path: '/managers', icon: 'shield', label: 'مدیران کانون‌ها' },
   { path: '/users', icon: 'user', label: 'کاربران و پشتیبانی' },
   { path: '/backup', icon: 'database', label: 'پشتیبان‌گیری و بازیابی' },
   { path: '/account', icon: 'key', label: 'حساب کاربری' },
 ];
 const kb = (b) => (b > 1048576 ? `${fa((b / 1048576).toFixed(1))} مگابایت` : `${fa(Math.round(b / 1024))} کیلوبایت`);
 
+
+// آمار کلی واقعی یک کانون (همه اعداد از داده‌های ثبت‌شده در پایگاه داده‌اند)
+function statsBlock(c) {
+  const att = c.attendance.records ? `${fa(Math.round((c.attendance.present / c.attendance.records) * 100))}٪` : '—';
+  const grades = c.byGrade.map((g) => `<span class="badge">پایه ${fa(g.grade)}: ${fa(g.n)}</span>`).join('') || '<span class="tiny muted">هنوز دانش‌آموزی ثبت نشده</span>';
+  return `<div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('chart', { size: 18 })}</span>آمار کلی ${esc(c.name)}</div>
+    <div class="grid c4">${kpiCard('backpack', 'sun', num(c.students), 'دانش‌آموز فعال')}${kpiCard('board', '', num(c.teachers), 'معلم')}${kpiCard('users', 'slate', num(c.parents), 'والدین')}${kpiCard('shield', 'green', num(c.managers), 'مدیر کانون')}</div>
+    <div class="grid c4" style="margin-top:12px">${kpiCard('building', '', num(c.classes), 'کلاس')}${kpiCard('file-check', 'green', money(c.payments.approved.sum), 'حق عضویت تأییدشده', `${fa(c.payments.approved.n)} پرداخت • ${fa(c.payments.pending)} رسید در انتظار`)}${kpiCard('chart', 'slate', money(c.balance), 'مانده صندوق')}${kpiCard('check', '', att, 'حضور در کلاس‌ها', `${fa(c.attendance.records)} ثبت حضور • ${fa(c.exams)} آزمون`)}</div>
+    <div class="row wrap" style="margin-top:12px;gap:6px"><b class="small">دانش‌آموزان به تفکیک پایه:</b>${grades}</div></div>`;
+}
+
 async function home(el) {
-  const d = await api('/api/admin/overview');
+  const [d, stats] = await Promise.all([api('/api/admin/overview'), api('/api/admin/stats')]);
   setHead('کانون‌ها', 'هر کانون لوگو، نام، مدیر و داده‌های جداگانه دارد', '<button class="btn sm" id="newC"> کانون جدید</button>');
   el.innerHTML = `<div class="grid c4">${kpiCard('users', '', num(d.totals.users), 'کل کاربران')}${kpiCard('backpack', 'sun', num(d.totals.students), 'دانش‌آموزان')}${kpiCard('file-check', 'green', num(d.totals.results), 'نتایج آزمون')}${kpiCard('timer', 'slate', num(d.totals.pomodoros), 'پومودوروهای ثبت‌شده')}</div>
+    ${stats.map(statsBlock).join('')}
     <div class="grid c3" style="margin-top:18px">${d.centers.map((c) => `<div class="card"><div class="row"><div class="brand-logo" style="background:${esc(c.color)}">${logoHtml(c.logo)}</div><div class="grow"><b>${esc(c.name)}</b><div class="tiny muted">/${esc(c.slug)} • مدیر: ${esc(c.manager || '—')}</div></div></div>
       <div class="row wrap" style="margin-top:12px"><span class="badge">${icon('backpack', { size: 16 })} ${fa(c.students)}</span><span class="badge blue">${icon('board', { size: 16 })} ${fa(c.teachers)}</span><span class="grow"></span><a class="btn ghost sm" href="#/c/${esc(c.slug)}" target="_blank">صفحه عمومی</a><button class="btn soft sm" data-edit="${c.id}" aria-label="ویرایش کانون" title="ویرایش کانون">${icon('edit', { size: 16 })}</button></div></div>`).join('')}</div>`;
   $('#newC').onclick = () => modal({
@@ -28,6 +41,26 @@ async function home(el) {
     modal({ title: `${icon('edit', { size: 16 })} ${esc(c.name)}`, body: `<form class="stack" id="ef"><div class="field"><label>نام</label><input class="input" name="name" value="${esc(c.name)}"></div><div class="field"><label>رنگ</label><input class="input" type="color" name="color" aria-label="رنگ" value="${esc(c.color)}"></div></form>`,
       actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ذخیره', onClick: async (m) => { await put(`/api/admin/centers/${c.id}`, formData($('#ef', m))); home(el); } }] });
   });
+}
+
+
+async function managers(el) {
+  const [list, centers] = await Promise.all([api('/api/admin/managers'), api('/api/admin/overview').then((o) => o.centers)]);
+  setHead('مدیران کانون‌ها', 'برای هر کانون یک یا چند مدیر تعریف کنید؛ مدیر با نام کاربری و رمز خودش وارد پنل کانون می‌شود', '<button class="btn sm" id="newM">مدیر جدید</button>');
+  el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>نام</th><th>نام کاربری</th><th>موبایل</th><th>کانون</th><th>وضعیت</th><th></th></tr></thead><tbody>${list.map((m) => `<tr><td>${esc(m.full_name)}</td><td class="ltr">${esc(m.username)}</td><td class="num">${fa(m.mobile || '—')}</td><td class="small">${esc(m.center || '—')}</td>
+    <td>${m.active ? '<span class="badge green">فعال</span>' : '<span class="badge red">غیرفعال</span>'}</td><td><div class="row" style="gap:4px"><button class="btn sm soft" data-em="${m.id}" aria-label="ویرایش مدیر" title="ویرایش">${icon('edit', { size: 16 })}</button><button class="btn sm ghost" data-pw="${m.id}" aria-label="بازنشانی رمز" title="بازنشانی رمز">${icon('key', { size: 16 })}</button><button class="btn sm ghost" data-tg="${m.id}" aria-label="${m.active ? 'غیرفعال کردن' : 'فعال کردن'}" title="${m.active ? 'غیرفعال کردن' : 'فعال کردن'}">${icon(m.active ? 'lock' : 'check', { size: 16 })}</button><button class="btn sm" data-imp="${m.id}">${icon('eye', { size: 16 })} ورود به پنل</button></div></td></tr>`).join('') || `<tr><td colspan="6">${empty('shield', 'هنوز مدیری تعریف نشده؛ با «مدیر جدید» اولین مدیر را بسازید')}</td></tr>`}</tbody></table></div></div>`;
+  const form = (m = {}) => `<form class="form-grid" id="mf"><div class="field"><label>نام و نام خانوادگی</label><input class="input" name="full_name" value="${esc(m.full_name || '')}" required></div><div class="field"><label>نام کاربری (انگلیسی)</label><input class="input ltr" name="username" value="${esc(m.username || '')}" required></div>
+    <div class="field"><label>موبایل</label><input class="input ltr" name="mobile" inputmode="numeric" value="${esc(m.mobile || '')}"></div>
+    ${m.id ? '' : `<div class="field"><label>کانون</label><select class="input" name="center_id">${centers.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div><div class="field"><label>رمز عبور (حداقل ۶ کاراکتر)</label><input class="input ltr" type="password" name="password" minlength="6" required></div>`}</form>`;
+  $('#newM').onclick = () => modal({ title: 'مدیر جدید', wide: true, body: form(),
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ایجاد مدیر', onClick: async (m) => { await post('/api/admin/managers', formData($('#mf', m))); toast('مدیر ایجاد شد؛ می‌تواند وارد شود', 'ok'); managers(el); } }] });
+  on(el, 'click', '[data-em]', (e, b) => {
+    const m = list.find((x) => x.id === Number(b.dataset.em));
+    modal({ title: 'ویرایش مدیر', wide: true, body: form(m), actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ذخیره', onClick: async (md) => { await put(`/api/admin/managers/${m.id}`, formData($('#mf', md))); toast('ذخیره شد', 'ok'); managers(el); } }] });
+  });
+  on(el, 'click', '[data-pw]', (e, b) => modal({ title: 'بازنشانی رمز مدیر', body: '<input class="input ltr" id="npw" type="text" placeholder="رمز جدید (حداقل ۶ کاراکتر)">', actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ثبت', onClick: async (m) => { await post(`/api/admin/users/${b.dataset.pw}/reset-password`, { password: $('#npw', m).value }); toast('رمز تغییر کرد', 'ok'); } }] }));
+  on(el, 'click', '[data-tg]', (e, b) => busy(b, async () => { await post(`/api/admin/users/${b.dataset.tg}/toggle`); managers(el); }));
+  on(el, 'click', '[data-imp]', (e, b) => busy(b, async () => { await post(`/api/admin/impersonate/${b.dataset.imp}`); location.hash = '#/home'; location.reload(); }));
 }
 
 async function users(el) {
@@ -63,6 +96,7 @@ async function backup(el) {
 
 export const routes = [
   { path: '/home', view: home },
+  { path: '/managers', view: managers },
   { path: '/users', view: users },
   { path: '/backup', view: backup },
   { path: '/account', view: accountView },

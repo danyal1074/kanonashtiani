@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { all, get, run, tx, db, DB_PATH, DATA_DIR, closeDb, openDb } from '../db.js';
-import { fail, hashPassword, clampStr, toEnDigits } from '../util.js';
+import { fail, hashPassword, clampStr, toEnDigits, normalizeIranianMobile } from '../util.js';
 import { setSession } from './common.js';
 import { makeBackup, pruneBackups, BACKUP_DIR } from '../backup.js';
 import { snapshot } from '../metrics.js';
@@ -45,6 +45,56 @@ export default function register(r) {
     const b = ctx.body;
     run('UPDATE centers SET name=COALESCE(?,name), tagline=COALESCE(?,tagline), color=COALESCE(?,color), logo=COALESCE(?,logo) WHERE id=?',
       clampStr(b.name, 100) || null, b.tagline != null ? clampStr(b.tagline, 150) : null, /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color : null, b.logo ? clampStr(b.logo, 200000) : null, Number(ctx.params.id));
+    return { ok: true };
+  });
+
+  // آمار کلی واقعی هر کانون (فقط از داده‌های ثبت‌شده؛ هیچ عدد نمایشی ندارد)
+  r.get('/api/admin/stats', A, () => all('SELECT id, name, slug FROM centers ORDER BY id').map((c) => {
+    const n = (sql, ...p) => get(sql, c.id, ...p).n;
+    const byGrade = all(`SELECT s.grade, COUNT(*) n FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1 GROUP BY s.grade ORDER BY s.grade`, c.id);
+    const att = get(`SELECT COUNT(*) total, SUM(a.status='present') present FROM attendance a JOIN classes cl ON cl.id=a.class_id WHERE cl.center_id=?`, c.id);
+    return {
+      ...c,
+      students: n(`SELECT COUNT(*) n FROM users WHERE center_id=? AND role='student' AND active=1`),
+      teachers: n(`SELECT COUNT(*) n FROM users WHERE center_id=? AND role='teacher' AND active=1`),
+      parents: n(`SELECT COUNT(*) n FROM users WHERE center_id=? AND role='parent' AND active=1`),
+      managers: n(`SELECT COUNT(*) n FROM users WHERE center_id=? AND role='manager' AND active=1`),
+      classes: n('SELECT COUNT(*) n FROM classes WHERE center_id=?'),
+      byGrade,
+      payments: {
+        approved: get(`SELECT COUNT(*) n, COALESCE(SUM(p.amount),0) sum FROM payments p JOIN users u ON u.id=p.student_id WHERE u.center_id=? AND p.status='approved'`, c.id),
+        pending: n(`SELECT COUNT(*) n FROM payments p JOIN users u ON u.id=p.student_id WHERE u.center_id=? AND p.status='pending'`),
+      },
+      balance: n(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE -amount END),0) n FROM transactions WHERE center_id=?`),
+      exams: n('SELECT COUNT(*) n FROM exams WHERE center_id=?'),
+      attendance: { records: att.total, present: att.present || 0 },
+    };
+  }));
+
+  // مدیران کانون‌ها
+  const managerBody = (b, forCreate) => {
+    const username = toEnDigits(clampStr(b.username, 40)).toLowerCase(), full_name = clampStr(b.full_name, 80);
+    if (!full_name) fail(400, 'نام مدیر لازم است');
+    if (!/^[a-z0-9_.]{3,40}$/.test(username)) fail(400, 'نام کاربری: ۳ تا ۴۰ حرف انگلیسی کوچک، عدد، نقطه یا زیرخط');
+    if (forCreate && String(b.password || '').length < 6) fail(400, 'رمز حداقل ۶ کاراکتر باشد');
+    const mobile = b.mobile ? normalizeIranianMobile(b.mobile) : null;
+    if (b.mobile && !mobile) fail(400, 'شماره موبایل معتبر نیست');
+    return { username, full_name, mobile };
+  };
+  r.get('/api/admin/managers', A, () => all(`SELECT u.id, u.full_name, u.username, u.mobile, u.active, u.center_id, c.name center, u.created_at
+    FROM users u LEFT JOIN centers c ON c.id=u.center_id WHERE u.role='manager' ORDER BY u.center_id, u.id`));
+  r.post('/api/admin/managers', A, (ctx) => {
+    const b = ctx.body, m = managerBody(b, true), cid = Number(b.center_id);
+    if (!get('SELECT 1 FROM centers WHERE id=?', cid)) fail(400, 'کانون را انتخاب کنید');
+    if (get(`SELECT 1 FROM users WHERE role='manager' AND username=?`, m.username)) fail(400, 'این نام کاربری قبلاً برای مدیر دیگری ثبت شده');
+    run(`INSERT INTO users (center_id, role, username, mobile, pass_hash, full_name) VALUES (?,?,?,?,?,?)`, cid, 'manager', m.username, m.mobile, hashPassword(String(b.password)), m.full_name);
+    return { ok: true };
+  });
+  r.put('/api/admin/managers/:id', A, (ctx) => {
+    const id = Number(ctx.params.id), m = managerBody(ctx.body, false);
+    if (!get(`SELECT 1 FROM users WHERE id=? AND role='manager'`, id)) fail(404, 'مدیر یافت نشد');
+    if (get(`SELECT 1 FROM users WHERE role='manager' AND username=? AND id<>?`, m.username, id)) fail(400, 'این نام کاربری قبلاً ثبت شده');
+    run('UPDATE users SET full_name=?, username=?, mobile=? WHERE id=?', m.full_name, m.username, m.mobile, id);
     return { ok: true };
   });
 
