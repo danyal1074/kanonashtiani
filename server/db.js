@@ -585,6 +585,12 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
       CREATE INDEX IF NOT EXISTS ix_barpa_unmatched_exam ON barpa_unmatched(exam_id, center_id);
     `);
   },
+  // نسخه ۶: نوع جلسه در برنامه هفتگی (درسی، تربیتی، شطرنج، رباتیک، زبان، ورزش، ...)
+  (database) => {
+    const cols = database.prepare('PRAGMA table_info(schedule)').all().map((c) => c.name);
+    if (!cols.includes('kind')) database.exec("ALTER TABLE schedule ADD COLUMN kind TEXT NOT NULL DEFAULT 'academic'");
+    database.exec('CREATE INDEX IF NOT EXISTS ix_schedule_teacher ON schedule(teacher_id, weekday)');
+  },
 ];
 
 export function migrate(database = db) {

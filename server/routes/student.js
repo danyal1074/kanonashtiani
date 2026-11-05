@@ -179,7 +179,7 @@ export default function register(r) {
   r.get('/api/student/profile', S, (ctx) => {
     const u = ctx.user, s = studentInfo(u.id);
     const ledger = all('SELECT amount, category, reason, created_at FROM points WHERE student_id=? ORDER BY id DESC', u.id);
-    const schedule = all(`SELECT sc.weekday, sc.start, sc.end, sc.subject, sc.room, t.full_name teacher FROM schedule sc LEFT JOIN users t ON t.id=sc.teacher_id WHERE sc.class_id=? ORDER BY sc.weekday, sc.start`, s.class_id);
+    const schedule = all(`SELECT sc.weekday, sc.start, sc.end, sc.subject, sc.room, sc.kind, t.full_name teacher FROM schedule sc LEFT JOIN users t ON t.id=sc.teacher_id WHERE sc.class_id=? ORDER BY sc.weekday, sc.start`, s.class_id);
     const materials = all('SELECT id, title, kind, subject, url, size_kb, created_at FROM materials WHERE center_id=? AND (grade IS NULL OR grade=?) ORDER BY id DESC', u.center_id, s.grade);
     const purchased = all('SELECT items, created_at, tracking_code FROM orders WHERE user_id=? ORDER BY id DESC', u.id).flatMap((o) => JSON.parse(o.items).map((i) => ({ ...i, tracking_code: o.tracking_code })));
     const sum = (f) => ledger.filter(f).reduce((a, x) => a + x.amount, 0);

@@ -4,12 +4,14 @@ import { api, post, put, del, esc, fa, num, money, pct, $, $$, on, toast, busy, 
   subjIcon, gradeName, dateField, readDate, fileToData, barChart, lineChart, donut, WEEKDAYS, addDays, formData, state, en, logoHtml, timeAgo, printOverlay, icon, hasIcon } from './core.js';
 import { messagesView, accountView } from './common.js';
 import { studentDetailHtml } from './teacher.js';
+import { managerTimetable, KINDS, kindOf } from './timetable.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
 
 export const nav = (me) => [
   { path: '/home', icon: 'chart', label: 'داشبورد' },
   { path: '/students', icon: 'users', label: 'مدیریت دانش‌آموزان' },
   { path: '/staff', icon: 'board', label: 'معلمان، کلاس‌ها و برنامه' },
+  { path: '/timetable', icon: 'calendar', label: 'برنامه هفتگی کانون' },
   { path: '/fees', icon: 'card', label: 'حق عضویت و رسیدها' },
   { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌رسانی' },
   { path: '/accounting', icon: 'wallet', label: 'حسابداری' },
@@ -212,9 +214,9 @@ async function staff(el) {
     <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('calendar', { size: 18 })}</span>برنامه هفتگی کلاس<select class="input more" id="schedSel" style="width:auto">${md.classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div><div id="sched"></div></div>`;
   const drawSched = async () => {
     const list = await api(`/api/manager/schedule?class_id=${schedClass}`);
-    $('#sched', el).innerHTML = `<div class="week-cal">${WEEKDAYS.map((w, i) => `<div class="day"><div class="dn">${w}</div>${list.filter((s) => s.weekday === i).map((s) => `<div class="ses"><b>${subjIcon(s.subject)} ${esc(s.subject)}</b>${fa(s.start)} تا ${fa(s.end)}<div class="tiny muted">${esc(s.teacher || '')}</div><button class="btn ghost sm" data-ds="${s.id}" style="padding:0 6px;margin-top:2px">حذف</button></div>`).join('')}</div>`).join('')}</div>
+    $('#sched', el).innerHTML = `<div class="week-cal">${WEEKDAYS.map((w, i) => `<div class="day"><div class="dn">${w}</div>${list.filter((s) => s.weekday === i).map((s) => `<div class="ses"><b>${subjIcon(s.subject)} ${esc(s.subject)}</b>${fa(s.start)} تا ${fa(s.end)}<div class="tiny muted">${esc(s.teacher || '')}${s.room ? ' · ' + esc(s.room) : ''} · ${kindOf(s.kind).label}</div><button class="btn ghost sm" data-ds="${s.id}" style="padding:0 6px;margin-top:2px">حذف</button></div>`).join('')}</div>`).join('')}</div>
       <form class="row wrap" id="schedForm" style="margin-top:12px"><select class="input" name="weekday" style="width:auto">${WEEKDAYS.map((w, i) => `<option value="${i}">${w}</option>`).join('')}</select><input class="input ltr" type="time" name="start" value="16:00" style="width:auto"><input class="input ltr" type="time" name="end" value="17:30" style="width:auto">
-      <input class="input" name="subject" placeholder="درس" style="width:140px"><select class="input" name="teacher_id" style="width:auto"><option value="">معلم</option>${md.teachers.map((t) => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select><button class="btn sm">${icon('plus', { size: 16 })} افزودن جلسه</button></form>`;
+      <input class="input" name="subject" placeholder="درس" style="width:140px"><input class="input" name="room" placeholder="مکان" style="width:140px"><select class="input" name="kind" style="width:auto" aria-label="نوع جلسه">${Object.entries(KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select><select class="input" name="teacher_id" style="width:auto"><option value="">معلم</option>${md.teachers.map((t) => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select><button class="btn sm">${icon('plus', { size: 16 })} افزودن جلسه</button></form>`;
     $('#schedForm', el).onsubmit = (e) => { e.preventDefault(); busy(e.submitter, async () => { await post('/api/manager/schedule', { ...formData(e.target), class_id: schedClass }); drawSched(); }); };
   };
   $('#schedSel', el).onchange = (e) => { schedClass = Number(e.target.value); drawSched(); };
@@ -477,6 +479,7 @@ export const routes = [
   { path: '/home', view: home },
   { path: '/students', view: students },
   { path: '/staff', view: staff },
+  { path: '/timetable', view: managerTimetable },
   { path: '/fees', view: fees },
   { path: '/announcements', view: announcements },
   { path: '/accounting', view: accounting },

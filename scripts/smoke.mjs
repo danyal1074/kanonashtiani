@@ -397,7 +397,7 @@ sDb7.close();
 // بررسی سامانه مهاجرت و نسخه ۵ پایگاه داده
 const sDbEnd = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
 const ver5 = sDbEnd.prepare('PRAGMA user_version').get()?.user_version;
-check('مهاجرت نسخه ۵: PRAGMA user_version دقیقاً برابر ۵ است', ver5 === 5, `نسخه فعلی: ${ver5}`);
+check('مهاجرت: PRAGMA user_version دقیقاً برابر ۶ است', ver5 === 6, `نسخه فعلی: ${ver5}`);
 const defaultBooks = sDbEnd.prepare("SELECT COUNT(*) n FROM exam_books WHERE center_id IS NULL").get()?.n;
 check('مهاجرت نسخه ۵: کتاب‌های پیش‌فرض دارای center_id NULL هستند (عمومی)', defaultBooks >= 2);
 sDbEnd.close();

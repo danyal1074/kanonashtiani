@@ -1,4 +1,5 @@
 // پنل معلم
+import { teacherTimetable } from './timetable.js';
 import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, progress, ring, empty, cdHtml, jdate, jtime, jshort,
   timeAgo, subjIcon, gradeName, dateField, readDate, tehranIso, fileToData, barChart, lineChart, WEEKDAYS, addDays, formData, state, en, icon, kpiCard, nameAvatar, JMONTHS, jparts } from './core.js';
@@ -282,6 +283,7 @@ async function materials(el) {
 
 export const routes = [
   { path: '/home', view: UI.home },
+  { path: '/timetable', view: teacherTimetable },
   { path: '/classes', view: UI.classes },
   { path: '/reports', view: UI.reports },
   { path: '/more', view: UI.more },

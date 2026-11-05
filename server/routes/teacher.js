@@ -109,6 +109,13 @@ export default function register(r) {
     };
   });
 
+  // برنامه هفتگی معلم: همهٔ جلسات او در هفته
+  r.get('/api/teacher/schedule', T, (ctx) => ({
+    today: faWeekday(ymd()),
+    sessions: all(`SELECT sc.id, sc.weekday, sc.start, sc.end, sc.subject, sc.room, sc.kind, c.id class_id, c.grade, c.name class_name
+      FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.teacher_id=? ORDER BY sc.weekday, sc.start`, ctx.user.id),
+  }));
+
   // ---------- حضور و غیاب ----------
   r.get('/api/teacher/attendance', T, (ctx) => {
     const c = ownClass(ctx.user.id, ctx.query.class_id);

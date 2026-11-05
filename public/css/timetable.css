@@ -1,0 +1,31 @@
+/* جدول هفتگی (معلم: شبکه، مدیر: خطی) */
+.tt{--k-academic:#e3eeff;--k-academic-t:#0b3f9e;--k-tarbiati:#fbe9a0;--k-tarbiati-t:#6b4e00;--k-chess:#cdf0d6;--k-chess-t:#0d5a2a;--k-robotics:#e4e7ec;--k-robotics-t:#3b4455;--k-language:#c9f0ee;--k-language-t:#0b5953;--k-sport:#e1f2bd;--k-sport-t:#3f5a07;--k-other:#ecdcf8;--k-other-t:#59237e;display:grid;gap:12px}
+.tt .k-academic{--kb:var(--k-academic);--kt:var(--k-academic-t)}.tt .k-tarbiati{--kb:var(--k-tarbiati);--kt:var(--k-tarbiati-t)}.tt .k-chess{--kb:var(--k-chess);--kt:var(--k-chess-t)}
+.tt .k-robotics{--kb:var(--k-robotics);--kt:var(--k-robotics-t)}.tt .k-language{--kb:var(--k-language);--kt:var(--k-language-t)}.tt .k-sport{--kb:var(--k-sport);--kt:var(--k-sport-t)}.tt .k-other{--kb:var(--k-other);--kt:var(--k-other-t)}
+.tt-chip{display:inline-block;padding:2px 10px;border-radius:99px;background:var(--kb);color:var(--kt);font-size:12px;font-weight:700;font-style:normal;white-space:nowrap}
+.tt-legend{display:flex;flex-wrap:wrap;gap:6px}
+.tt-time{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tt-sum{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.tt-pill{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:14px;background:#fff;border:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:12px;min-height:44px}
+.tt-pill b{font-size:18px}.tt-pill.today{background:var(--primary);color:#fff;border-color:var(--primary)}.tt-pill.off{opacity:.6}
+.tt-grid-wrap{display:none;overflow:auto;border-radius:18px;border:1px solid var(--line);background:#fff}
+.tt-grid{width:100%;border-collapse:separate;border-spacing:0;min-width:760px}
+.tt-grid th,.tt-grid td{padding:8px;border-bottom:1px solid var(--line);border-inline-start:1px solid var(--line);vertical-align:top;text-align:center}
+.tt-grid thead th{background:#f0f6ff;font-size:14px}.tt-grid tbody th{background:#f7faff;font-size:13px;white-space:nowrap}
+.tt-grid .today{background:#f2f7ff}.tt-grid thead th.today{background:var(--primary);color:#fff}
+.tt-cell{display:grid;gap:1px;padding:6px 8px;border-radius:12px;background:var(--kb);color:var(--kt);text-align:start;margin-bottom:4px;font-size:13px}.tt-cell b{font-size:14px}.tt-cell small{opacity:.85}
+.tt-days{display:grid;gap:10px}
+.tt-day{background:#fff;border:1px solid var(--line);border-radius:18px;padding:10px 12px;scroll-margin-top:70px}.tt-day.today{border-color:var(--primary);box-shadow:0 0 0 2px #1266e622}
+.tt-day h3{margin:0 0 6px;font-size:16px}.tt-day h3 small{font-size:12px;color:var(--primary);margin-inline-start:6px}
+.tt-line{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px;border-radius:12px;background:var(--kb);color:var(--kt);margin-top:6px;min-height:48px}
+.tt-line div{display:grid;gap:1px}.tt-line span{font-size:13px}.tt-line .tt-chip{background:#ffffffb0}
+@media(min-width:900px){.tt-grid-wrap{display:block}.tt-days{display:none}.tt-sum{max-width:520px}}
+.tt-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:640px}.tt-filters label{display:grid;gap:4px;font-size:13px;color:var(--muted)}.tt-filters select{min-height:44px}
+.tt-mday{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-bottom:6px}
+.tt-mday h2{margin:0;padding:10px 14px;background:#eaf2ff;font-size:17px;color:var(--ink)}.tt-mday h2 small{font-size:12px;color:var(--muted);margin-inline-start:8px;font-weight:500}
+.tt-mrow{display:grid;grid-template-columns:130px 1.3fr 1fr 1.6fr 1fr;gap:8px;padding:9px 14px;align-items:center;border-top:1px solid var(--line);border-inline-start:5px solid var(--kt,transparent)}
+.tt-mrow.head{background:#f7faff;font-size:12px;color:var(--muted);font-weight:700;border-inline-start-color:transparent}
+.tt-mrow .room{font-weight:600}.tt-mrow .tch{color:var(--muted);font-size:13px}
+@media(max-width:720px){.tt-mrow{grid-template-columns:1fr 1fr;row-gap:2px}.tt-mrow.head{display:none}.tt-mrow span:nth-child(1){grid-column:1}.tt-mrow span:nth-child(2){grid-column:2;text-align:end}.tt-mrow span:nth-child(3){grid-column:1}.tt-mrow span:nth-child(4),.tt-mrow span:nth-child(5){grid-column:1/-1}}
+.tt-print .tt-mday{break-inside:avoid;border-radius:0}
+@media(prefers-reduced-motion:no-preference){.tt-pill{transition:transform .15s}.tt-pill:active{transform:scale(.96)}}

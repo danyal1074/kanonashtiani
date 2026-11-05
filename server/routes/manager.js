@@ -12,6 +12,7 @@ import { parseQuestions, examWithResults, performanceList, studentDetail } from 
 
 const M = { roles: ['manager'] };
 const GRADES = [4, 5, 6, 7, 8, 9];
+const SESSION_KINDS = ['academic', 'tarbiati', 'chess', 'robotics', 'language', 'sport', 'other'];
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
 
 function ownClass(ctx, id) {
@@ -252,9 +253,15 @@ export default function register(r) {
     if (!(wd >= 0 && wd <= 6) || !/^\d{2}:\d{2}$/.test(b.start) || !/^\d{2}:\d{2}$/.test(b.end) || b.end <= b.start) fail(400, 'روز و ساعت شروع/پایان را درست وارد کنید');
     if (!clampStr(b.subject, 40)) fail(400, 'نام درس را وارد کنید');
     const tid = b.teacher_id ? get(`SELECT id FROM users WHERE id=? AND center_id=? AND role='teacher'`, Number(b.teacher_id), ctx.user.center_id)?.id : null;
-    run('INSERT INTO schedule (class_id, weekday, start, end, subject, teacher_id, room) VALUES (?,?,?,?,?,?,?)', c.id, wd, b.start, b.end, clampStr(b.subject, 40), tid ?? null, clampStr(b.room, 30));
+    const kind = SESSION_KINDS.includes(b.kind) ? b.kind : 'academic';
+    const clash = get('SELECT 1 FROM schedule WHERE class_id=? AND weekday=? AND start<? AND end>?', c.id, wd, b.end, b.start);
+    if (clash) fail(400, 'در این روز و ساعت برای این کلاس جلسهٔ دیگری ثبت شده است');
+    run('INSERT INTO schedule (class_id, weekday, start, end, subject, teacher_id, room, kind) VALUES (?,?,?,?,?,?,?,?)', c.id, wd, b.start, b.end, clampStr(b.subject, 40), tid ?? null, clampStr(b.room, 30), kind);
     return { ok: true };
   });
+  // نمای کلی همهٔ جلسات کانون برای جدول خطی مدیر (هر روز: ساعت، مکان، کلاس)
+  r.get('/api/manager/schedule/overview', M, (ctx) => all(`SELECT sc.id, sc.weekday, sc.start, sc.end, sc.subject, sc.room, sc.kind, sc.class_id, c.grade, c.name class_name, sc.teacher_id, u.full_name teacher
+    FROM schedule sc JOIN classes c ON c.id=sc.class_id LEFT JOIN users u ON u.id=sc.teacher_id WHERE c.center_id=? ORDER BY sc.weekday, sc.start, sc.room, c.grade, c.name`, ctx.user.center_id));
   r.del('/api/manager/schedule/:id', M, (ctx) => {
     run('DELETE FROM schedule WHERE id=? AND class_id IN (SELECT id FROM classes WHERE center_id=?)', Number(ctx.params.id), ctx.user.center_id);
     return { ok: true };

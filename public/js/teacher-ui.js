@@ -41,6 +41,7 @@ export const nav = (me) => [
   { path: '/reports', icon: 'chart', label: 'گزارش‌ها' },
   { path: '/messages', icon: 'message', label: 'ارتباطات', badge: me.unread },
   { path: '/materials', icon: 'video', label: 'محتوای آموزشی' },
+  { path: '/timetable', icon: 'calendar', label: 'برنامه هفتگی من' },
   { path: '/plans', icon: 'calendar', label: 'تقویم و برنامه' },
   { path: '/more', icon: 'more', label: 'موارد بیشتر' },
 ];
