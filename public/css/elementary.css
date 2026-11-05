@@ -1,0 +1,290 @@
+/* Elementary shell: the provided ZIP design, isolated from the secondary-school panel. */
+body.student-elementary { --primary:#14a05a; --primary-hover:#087d42; --primary-soft:#e3f7ed; --teal-700:#14875b; --teal-800:#106b4a; --teal-600:#1da66f; --teal-50:#edf9f2; --surface:#fff; --line:#d5e2f0; --muted:#64748b; --ep-header:72px; --ep-dock:96px; background:var(--page); color:var(--ink); padding:0; }
+body.student-elementary .app { display:block; max-width:540px; margin:0 auto; padding:0; min-height:0; background:linear-gradient(var(--bg-top),var(--page) 340px); }
+body.student-elementary .main { padding:0 0 100px; max-width:none; }
+body.student-elementary .elementary-shell-header { max-width:540px; height:var(--ep-header); margin:auto; background:var(--bg-top); }
+body.student-elementary .elementary-shell-header .hdr { padding:6px 11px; height:100%; gap:7px; }
+body.student-elementary .elementary-shell-header .brand { padding:0; margin:0; border:0; background:none; border-radius:0; box-shadow:none; flex:1; justify-content:center; min-width:0; gap:4px; }
+body.student-elementary .elementary-shell-header .brand img { width:52px; height:52px; object-fit:contain; }
+body.student-elementary .elementary-shell-header .brand .t { font-size:11px; line-height:1.5; }
+body.student-elementary .elementary-shell-header .brand .t span { font-size:9px; }
+body.student-elementary .elementary-shell-header .coins { direction:rtl; font-size:16px; padding:0 5px 0 9px; gap:4px; }
+body.student-elementary .elementary-shell-header .coins img { height:26px; width:26px; }
+body.student-elementary.elementary-native-page .topbar { display:none; }
+body.student-elementary:not(.elementary-native-page) .topbar { padding:13px 12px; }
+body.student-elementary .elementary-native a { color:inherit; text-decoration:none; }
+body.student-elementary .elementary-native button { background:none; border:0; cursor:pointer; color:inherit; font:inherit; }
+body.student-elementary .elementary-native svg { flex:none; vertical-align:middle; }
+body.student-elementary .elementary-native .row { min-width:0; }
+body.student-elementary .elementary-native .card { padding:0; }
+body.student-elementary .elementary-native .grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+body.student-elementary .elementary-first-screen { height:calc(100svh - var(--ep-header)); padding-bottom:var(--ep-dock); display:grid; grid-template-rows:minmax(0,1.3fr) minmax(0,1fr) minmax(0,.6fr) minmax(0,.85fr); gap:9px; }
+body.student-elementary .elementary-first-screen > * { min-height:0; }
+body.student-elementary .elementary-native .scene { height:auto; }
+body.student-elementary .elementary-native .school { width:100%; height:85%; --img-school:url('/img/elementary/school.jpg'); }
+body.student-elementary .elementary-native .avwrap { height:110%; width:39%; max-height:270px; top:-3%; left:0; mask-image:none; -webkit-mask-image:none; }
+body.student-elementary .elementary-native .avatar { width:100%; height:100%; padding:0; border:0; border-radius:0; background:none; display:block; object-fit:contain; object-position:left bottom; mask-image:none; -webkit-mask-image:none; }
+body.student-elementary .elementary-native .avatar.own-photo { object-fit:cover; object-position:center top; border:3px solid white; border-radius:22px; height:88%; margin-top:12px; }
+body.student-elementary .elementary-native .greet { top:15%; right:14px; max-width:59%; }
+body.student-elementary .elementary-native .greet h1 { font-size:clamp(21px,5.5vw,30px); white-space:normal; text-wrap:balance; }
+body.student-elementary .elementary-native .greet p { font-size:13px; line-height:1.7; }
+body.student-elementary .elementary-native .level { top:auto; bottom:8%; left:40%; right:10px; height:69px; padding:9px 12px 0; display:block; }
+body.student-elementary .elementary-native .level .ttl { font-size:15px; padding-right:16px; }
+body.student-elementary .elementary-native .level .badge { left:15px; width:34px; height:34px; top:-5px; background:none; padding:0; border:0; border-radius:0; min-width:0; box-shadow:none; }
+body.student-elementary .elementary-native .level .score { font-size:11px; }
+body.student-elementary .elementary-native .grid { height:auto; padding:0 10px; grid-template-rows:repeat(2,minmax(0,1fr)); }
+body.student-elementary .elementary-native .tile { height:100%; min-height:0; padding-bottom:7px; }
+body.student-elementary .elementary-native .tile > span:last-child { font-size:14px; }
+body.student-elementary .elementary-native .tile .ai { height:44px; max-height:60%; margin-bottom:4px; }
+body.student-elementary .elementary-native .tile .ai img { height:100%; max-height:44px; width:auto; }
+body.student-elementary .elementary-native .banner { width:calc(100% - 20px); height:auto; margin:0 10px; --img-path:url('/img/elementary/path.jpg'); }
+body.student-elementary .elementary-native .banner .txt { top:8px; right:14px; width:47%; }
+body.student-elementary .elementary-native .banner h3 { font-size:18px; }
+body.student-elementary .elementary-native .banner p { font-size:11px; }
+body.student-elementary .elementary-native .banner .cta { height:24px; font-size:13px; width:120px; margin-top:4px; }
+body.student-elementary .elementary-native .today { margin:0 10px; height:auto; min-height:0; }
+body.student-elementary .elementary-native .today h2 { top:7px; right:12px; font-size:15px; }
+body.student-elementary .elementary-native .today .planner { width:26%; height:83%; object-fit:contain; bottom:0; left:0; }
+body.student-elementary .elementary-native .tasks { top:37px; right:10px; width:72%; gap:3px; }
+body.student-elementary .elementary-native .task { min-height:0; height:25px; gap:6px; }
+body.student-elementary .elementary-native .task span:last-child { font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+body.student-elementary .elementary-native .sec { margin:18px 18px 9px; font-size:18px; }
+body.student-elementary .elementary-native .phero { padding:12px 18px 8px 12px; }
+body.student-elementary .elementary-native .phero h1 { white-space:normal; font-size:27px; }
+body.student-elementary .elementary-native .phero img { flex:none; max-width:40%; }
+body.student-elementary .elementary-native .row small { color:var(--muted); }
+body.student-elementary .elementary-native .tabs { overflow-x:auto; }
+body.student-elementary .elementary-native .tabs button { min-width:0; padding:0 8px; font-size:12px; }
+body.student-elementary .elementary-native .row .play { color:white; }
+body.student-elementary .elementary-native .row .chk { border:2px solid #b9c8dc; background:var(--card); }
+body.student-elementary .elementary-native .row .chk.on { background:var(--green); border-color:var(--green); }
+body.student-elementary .elementary-native .ep-ring { display:grid;place-items:center;width:115px;height:115px;flex:none;border-radius:50%;background:conic-gradient(#25b866 calc(var(--p)*1%),var(--track) 0);position:relative;isolation:isolate; }
+body.student-elementary .elementary-native .ep-ring::before { content:'';position:absolute;inset:12px;border-radius:50%;background:var(--card);z-index:-1; }
+body.student-elementary .elementary-native .ep-ring div { text-align:center; }
+body.student-elementary .elementary-native .ep-ring b { display:block;font-size:26px;font-weight:900;color:var(--green); }
+body.student-elementary .elementary-native .ep-ring small { font-size:10px; }
+body.student-elementary .elementary-native .ringbox { padding:16px; }
+body.student-elementary .elementary-native .pcard { padding:14px; margin:8px 12px 0; }
+body.student-elementary .elementary-native .pcard h2 { font-size:23px; }
+body.student-elementary .elementary-native .pcard .own-photo { border-radius:20px;object-fit:cover;width:125px;height:160px; }
+body.student-elementary .elementary-native .ep-photo-button { flex:none; }
+body.student-elementary .elementary-native .ch { display:flex;padding:13px; }
+body.student-elementary .elementary-native .mrow svg { width:26px; height:26px; flex:none; }
+body.student-elementary .elementary-native .stat b { font-size:24px; }
+body.student-elementary .elementary-native .stat img { width:40px;height:40px;object-fit:contain; }
+body.student-elementary .elementary-native .mtile { min-height:105px; }
+body.student-elementary .elementary-native .mtile img { width:54px;height:54px;object-fit:contain; }
+body.student-elementary .elementary-native .w3 { position:relative; height:calc(100svh - var(--ep-header) - 90px); min-height:270px; border-radius:20px; }
+body.student-elementary .elementary-native .w3-fail { padding:20px 12px 80px; }
+body.student-elementary .elementary-native .w3-fail .row { margin-bottom:9px; }
+body.student-elementary .elementary-native .w3-fail[hidden] { display:none; }
+body.student-elementary .elementary-native .chip2 { font-size:12px; }
+body.student-elementary .elementary-native .ep-map-actions { margin-top:12px; }
+body.student-elementary .elementary-core { padding:0 12px; }
+body.student-elementary .elementary-core .card { background:var(--card);border-radius:22px;box-shadow:var(--shadow);border:1px solid var(--edge); }
+body.student-elementary .btn:not(.ghost):not(.soft):not(.red):not(.accent) { background:linear-gradient(#2bc07a,#14a05a); }
+body.student-elementary .btn.ghost,body.student-elementary .btn.soft { background:var(--card);color:var(--ink); }
+body.student-elementary .bottom-nav { display:grid;grid-template-columns:1fr 1fr 84px 1fr 1fr;align-items:center;max-width:540px;width:100%;height:calc(74px + env(safe-area-inset-bottom,0px));padding:0 4px env(safe-area-inset-bottom,0px);bottom:0;border:0;border-radius:28px 28px 0 0;background:var(--nav);box-shadow:0 -6px 20px #3c73b923; }
+body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { width:auto;height:62px;flex:none;border-radius:0;background:none;box-shadow:none;gap:2px;font-size:12px;font-weight:800;color:var(--ink2);padding:4px 0; }
+body.student-elementary .bottom-nav a.on { color:var(--green); }
+body.student-elementary .bottom-nav .bi { width:28px;height:28px;display:grid;place-items:center; }
+body.student-elementary .bottom-nav svg { width:27px;height:27px; }
+body.student-elementary .bottom-nav a[data-path='/home'],body.student-elementary .bottom-nav a[data-path='/home'].on { width:62px;height:62px;margin:-28px auto 0;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2bc07a,#0f8f55 70%);color:white;border:0;box-shadow:0 8px 16px #0f8f5573,inset 0 2px 0 #ffffff59;font-size:13px;flex:none; }
+body.student-elementary .bottom-nav a[data-path='/home'] .bi { width:27px;height:27px;background:none;box-shadow:none;border-radius:0; }
+body.student-elementary .bottom-nav .cnt { top:0;right:calc(50% - 26px); }
+body.student-elementary .elementary-native a:focus-visible,body.student-elementary .elementary-native button:focus-visible { outline:3px solid #159662;outline-offset:3px; }
+@media(max-width:380px) {
+ body.student-elementary .elementary-shell-header .brand .t { font-size:10px; }
+ body.student-elementary .elementary-shell-header .brand .t span { font-size:8px; }
+ body.student-elementary .elementary-shell-header .brand img { width:44px;height:44px; }
+ body.student-elementary .elementary-native .tile > span:last-child { font-size:12px; }
+ body.student-elementary .elementary-native .greet h1 { font-size:23px; }
+ body.student-elementary .elementary-native .greet p { font-size:11px; }
+ body.student-elementary .elementary-native .level .ttl { font-size:13px; }
+ body.student-elementary .elementary-native .tabs button { font-size:10px;padding:0 7px; }
+ body.student-elementary .elementary-native .rng { font-size:12px; }
+ body.student-elementary .elementary-native .row h4 { font-size:14px; }
+ body.student-elementary .elementary-native .phero h1 { font-size:24px; }
+ body.student-elementary .elementary-native .tasks { top:34px; }
+ body.student-elementary .elementary-native .task { height:23px; }
+ body.student-elementary .elementary-native .task span:last-child { font-size:10px; }
+ body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { font-size:10px; }
+}
+@media(max-height:700px) and (max-width:640px) {
+ body.student-elementary { --ep-header:58px;--ep-dock:82px; }
+ body.student-elementary .elementary-shell-header .brand img { height:36px;width:36px; }
+ body.student-elementary .elementary-shell-header .brand .t span { display:none; }
+ body.student-elementary .elementary-first-screen { gap:6px;grid-template-rows:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.6fr) minmax(0,1fr); }
+ body.student-elementary .elementary-native .greet { top:5%; }
+ body.student-elementary .elementary-native .greet h1 { font-size:18px; }
+ body.student-elementary .elementary-native .greet p { font-size:10px; }
+ body.student-elementary .elementary-native .greet .wave { font-size:18px; }
+ body.student-elementary .elementary-native .level { height:48px;bottom:0;left:40%;padding-top:4px; }
+ body.student-elementary .elementary-native .level .ttl { font-size:11px; }
+ body.student-elementary .elementary-native .level .track { top:23px;height:7px; }
+ body.student-elementary .elementary-native .level .score { top:33px;font-size:9px; }
+ body.student-elementary .elementary-native .level .badge { width:25px;height:25px; }
+ body.student-elementary .elementary-native .level .go { top:16px; }
+ body.student-elementary .elementary-native .tile { padding-bottom:3px;border-radius:14px; }
+ body.student-elementary .elementary-native .tile .ai { height:27px;margin-bottom:2px; }
+ body.student-elementary .elementary-native .tile > span:last-child { font-size:10px; }
+ body.student-elementary .elementary-native .banner .txt { top:4px; }
+ body.student-elementary .elementary-native .banner h3 { font-size:12px; }
+ body.student-elementary .elementary-native .banner p { display:none; }
+ body.student-elementary .elementary-native .banner .cta { font-size:10px;height:18px;width:90px;margin-top:2px; }
+ body.student-elementary .elementary-native .today h2 { top:4px;font-size:12px; }
+ body.student-elementary .elementary-native .today h2 i { width:16px;height:16px; }
+ body.student-elementary .elementary-native .tasks { top:25px;gap:2px; }
+ body.student-elementary .elementary-native .task { height:19px;gap:4px; }
+ body.student-elementary .elementary-native .task span:last-child { font-size:9px; }
+ body.student-elementary .elementary-native .task img { width:16px;height:16px; }
+ body.student-elementary .elementary-native .box { width:14px;height:14px;border-width:1px;border-radius:4px; }
+ body.student-elementary .bottom-nav { height:62px; }
+ body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { height:52px;font-size:9px; }
+ body.student-elementary .bottom-nav a[data-path='/home'],body.student-elementary .bottom-nav a[data-path='/home'].on { width:54px;height:54px;margin-top:-24px; }
+}
+@media(prefers-reduced-motion:reduce) { body.student-elementary *,body.student-elementary *::after,body.student-elementary *::before { animation:none!important;transition:none!important;scroll-behavior:auto!important; } }
+@media print { body.student-elementary .elementary-shell-header,body.student-elementary .bottom-nav { display:none; } body.student-elementary .elementary-first-screen { height:auto;padding:0;display:block; } body.student-elementary .elementary-first-screen>* { margin-bottom:12px;height:auto;min-height:120px; } }
+body.student-elementary .elementary-shell-header .brand { order:1; }
+body.student-elementary.student-home .elementary-shell-header .coins { order:0; }
+body.student-elementary.student-home .elementary-shell-header .bell { order:2; }
+body.student-elementary.student-home .elementary-shell-header .ep-shell-back { display:none; }
+body.student-elementary:not(.student-home) .elementary-shell-header .coins { display:none; }
+body.student-elementary:not(.student-home) .elementary-shell-header .bell { order:0; }
+body.student-elementary:not(.student-home) .elementary-shell-header .ep-shell-back { order:2; }
+@media(max-height:700px) and (max-width:640px) {
+ body.student-elementary .elementary-first-screen { grid-template-rows:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.6fr) minmax(0,1.2fr); }
+ body.student-elementary .elementary-native .tile .ai { height:18px;max-height:45%;margin-bottom:1px; }
+ body.student-elementary .elementary-native .tile .ai img { max-height:18px; }
+ body.student-elementary .elementary-native .tile > span:last-child { font-size:9px;line-height:1.35; }
+}
+/* Short landscape windows use both columns so the original scenes stay readable. */
+@media(min-width:641px) and (max-height:700px) {
+ body.student-elementary { --ep-header:58px;--ep-dock:84px; }
+ body.student-elementary .app,body.student-elementary .elementary-shell-header { max-width:960px; }
+ body.student-elementary .elementary-shell-header .brand img { width:42px;height:42px; }
+ body.student-elementary .elementary-first-screen { grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1.05fr) minmax(0,1fr);gap:8px; }
+ body.student-elementary .elementary-first-screen .scene { grid-column:1;grid-row:1; }
+ body.student-elementary .elementary-first-screen .grid { grid-column:2;grid-row:1;gap:6px;padding-inline-start:0; }
+ body.student-elementary .elementary-first-screen .banner { grid-column:1;grid-row:2; }
+ body.student-elementary .elementary-first-screen .today { grid-column:2;grid-row:2;margin-inline-start:0; }
+ body.student-elementary .elementary-native .avwrap { width:37%;height:105%; }
+ body.student-elementary .elementary-native .greet { top:3%;right:12px; }
+ body.student-elementary .elementary-native .greet h1 { font-size:19px; }
+ body.student-elementary .elementary-native .greet p { font-size:10px; }
+ body.student-elementary .elementary-native .greet .wave { font-size:17px; }
+ body.student-elementary .elementary-native .level { height:48px;bottom:3px;left:39%;padding-top:4px; }
+ body.student-elementary .elementary-native .level .ttl { font-size:11px; }
+ body.student-elementary .elementary-native .level .track { top:22px;height:7px; }
+ body.student-elementary .elementary-native .level .score { top:32px;font-size:9px; }
+ body.student-elementary .elementary-native .level .badge { width:25px;height:25px; }
+ body.student-elementary .elementary-native .level .go { top:16px; }
+ body.student-elementary .elementary-native .tile { padding-bottom:3px;border-radius:14px; }
+ body.student-elementary .elementary-native .tile .ai { height:23px;max-height:55%;margin-bottom:1px; }
+ body.student-elementary .elementary-native .tile .ai img { max-height:23px; }
+ body.student-elementary .elementary-native .tile > span:last-child { font-size:10px;line-height:1.4; }
+ body.student-elementary .elementary-native .banner h3 { font-size:16px; }
+ body.student-elementary .elementary-native .banner p { font-size:10px; }
+ body.student-elementary .elementary-native .banner .cta { font-size:11px;width:100px;height:21px; }
+ body.student-elementary .elementary-native .today h2 { top:5px;font-size:13px; }
+ body.student-elementary .elementary-native .tasks { top:30px;gap:2px; }
+ body.student-elementary .elementary-native .task { height:20px; }
+ body.student-elementary .elementary-native .task span:last-child { font-size:10px; }
+ body.student-elementary .elementary-native .task img { width:16px;height:16px; }
+ body.student-elementary .elementary-native .box { width:15px;height:15px;border-radius:4px;border-width:1px; }
+ body.student-elementary .bottom-nav { height:62px; }
+ body.student-elementary .bottom-nav a,body.student-elementary .bottom-nav a.on { height:52px;font-size:10px; }
+ body.student-elementary .bottom-nav a[data-path='/home'],body.student-elementary .bottom-nav a[data-path='/home'].on { width:54px;height:54px;margin-top:-24px; }
+}
+/* Home standings and larger, readable daily action cards. */
+body.student-elementary .elementary-first-screen { grid-template-rows:minmax(0,1fr) minmax(0,.5fr) minmax(0,1fr) minmax(0,1.35fr); }
+body.student-elementary .elementary-native .greet { top:10%; }
+body.student-elementary .ep-rankings { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:0 10px;min-height:0; }
+body.student-elementary .ep-rank-card { position:relative;display:flex;align-items:center;gap:10px;min-width:0;min-height:0;padding:9px 12px;border-radius:19px;border:1px solid #fff;box-shadow:0 5px 12px #5278ac20,inset 0 2px 2px #fff;background:linear-gradient(125deg,#fffdf5,#ffedbc);overflow:hidden; }
+body.student-elementary .ep-rank-card::after { content:'';position:absolute;left:-18px;bottom:-25px;width:76px;height:76px;border:1px solid #ffffffb3;border-radius:50%;pointer-events:none; }
+body.student-elementary .ep-rank-center { background:linear-gradient(125deg,#fff,#e4ddff); }
+body.student-elementary .ep-rank-icon { width:46px;height:46px;object-fit:contain;flex:none;filter:drop-shadow(0 3px 3px #a7813328); }
+body.student-elementary .ep-rank-copy { position:relative;z-index:1;min-width:0;flex:1; }
+body.student-elementary .ep-rank-copy h2 { position:static;font-size:13px;font-weight:850;line-height:1.5;white-space:nowrap;margin:0; }
+body.student-elementary .ep-rank-number { display:flex;align-items:baseline;gap:5px; }
+body.student-elementary .ep-rank-number strong { font-size:30px;font-weight:900;line-height:1.15;color:#b77409; }
+body.student-elementary .ep-rank-center strong { color:#7642c0; }
+body.student-elementary .ep-rank-number small { font-size:10px;font-weight:650;color:#4c5871;white-space:nowrap; }
+body.student-elementary .elementary-native > .banner { height:110px;min-height:110px;margin:16px 10px 0; }
+body.student-elementary .elementary-native .ep-today { display:flex;flex-direction:column;padding:11px 12px;gap:9px;border-radius:23px;background:radial-gradient(ellipse at left bottom,#dcf5e7,transparent 66%),linear-gradient(135deg,#fff,#f8faff); }
+body.student-elementary .ep-today-header { display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none; }
+body.student-elementary .elementary-native .ep-today h2 { position:static;display:block;font-size:17px;line-height:1.5;font-weight:900;margin:0; }
+body.student-elementary .ep-today-count { padding:3px 7px;border-radius:12px;background:#e1f5e9;color:#147348;font-size:10px;line-height:1.6;font-weight:750;white-space:nowrap; }
+body.student-elementary .ep-today-content { display:grid;grid-template-columns:minmax(0,1fr) 74px;gap:9px;flex:1;min-height:0;align-items:stretch; }
+body.student-elementary .elementary-native .ep-today .tasks { position:static;display:flex;flex-direction:column;justify-content:center;width:auto;min-width:0;min-height:0;gap:7px; }
+body.student-elementary .elementary-native .ep-today .task { flex:0 1 54px;width:100%;height:auto;min-height:44px;padding:6px 8px;gap:7px;border:1px solid #dce7f4;border-radius:15px;background:linear-gradient(110deg,#f2f7ff,#fff);box-shadow:0 2px 3px #356e9e08; }
+body.student-elementary .elementary-native .ep-today .task.on { background:linear-gradient(100deg,#e0f8e9,#f4fff7);border-color:#bee6cd; }
+body.student-elementary .elementary-native .ep-today .task .box { width:23px;height:23px;border-radius:7px;border-width:2px; }
+body.student-elementary .elementary-native .ep-today .task img { width:27px;height:27px;object-fit:contain; }
+body.student-elementary .ep-task-copy { display:flex;flex:1;min-width:0;flex-direction:column;gap:1px; }
+body.student-elementary .ep-task-title { font-size:14px;font-weight:800;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+body.student-elementary .ep-task-copy small { font-size:10px;font-weight:600;line-height:1.4;color:#65728c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+body.student-elementary .ep-task-go { display:grid;place-items:center;flex:none;color:#19855a; }
+body.student-elementary .ep-task-go svg { width:13px;height:13px; }
+body.student-elementary .ep-today-art { position:relative;min-width:0;min-height:0; }
+body.student-elementary .elementary-native .ep-today .planner { position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 5px 5px #4c74a61a); }
+body.student-elementary .elementary-native .ep-today .task:hover { border-color:#8ecfae; }
+@media(max-width:380px) {
+ body.student-elementary .ep-rank-card { padding:7px 9px;gap:6px; }
+ body.student-elementary .ep-rank-icon { width:37px;height:37px; }
+ body.student-elementary .ep-rank-copy h2 { font-size:12px; }
+ body.student-elementary .ep-rank-number strong { font-size:28px; }
+ body.student-elementary .ep-rank-number small { font-size:9px; }
+ body.student-elementary .ep-today-content { grid-template-columns:minmax(0,1fr) 62px;gap:6px; }
+ body.student-elementary .elementary-native .ep-today { padding:10px;gap:7px; }
+ body.student-elementary .elementary-native .ep-today h2 { font-size:15px; }
+ body.student-elementary .ep-today-count { font-size:9px;padding:3px 6px; }
+ body.student-elementary .elementary-native .ep-today .task { padding:5px 6px;gap:5px; }
+ body.student-elementary .elementary-native .ep-today .task .box { width:21px;height:21px; }
+ body.student-elementary .elementary-native .ep-today .task img { width:24px;height:24px; }
+ body.student-elementary .ep-task-title { font-size:13px; }
+}
+@media(max-height:700px) and (max-width:640px) {
+ body.student-elementary .elementary-first-screen { grid-template-rows:minmax(0,.7fr) minmax(0,.55fr) minmax(0,1fr) minmax(0,1.65fr); }
+ body.student-elementary .ep-rankings { gap:7px; }
+ body.student-elementary .ep-rank-card { padding:4px 8px;border-radius:14px;gap:5px; }
+ body.student-elementary .ep-rank-icon { width:29px;height:29px; }
+ body.student-elementary .ep-rank-copy h2 { font-size:10px;line-height:1.3; }
+ body.student-elementary .ep-rank-number strong { font-size:21px;line-height:1.1; }
+ body.student-elementary .ep-rank-number small { font-size:8px; }
+ body.student-elementary .elementary-native .ep-today { padding:6px 8px;gap:5px; }
+ body.student-elementary .elementary-native .ep-today h2 { font-size:13px;line-height:1.4; }
+ body.student-elementary .ep-today-count { font-size:8px;padding:2px 5px; }
+ body.student-elementary .ep-today-content { grid-template-columns:minmax(0,1fr) 52px;gap:5px; }
+ body.student-elementary .elementary-native .ep-today .tasks { gap:4px; }
+ body.student-elementary .elementary-native .ep-today .task { flex:1 1 32px;min-height:26px;max-height:45px;padding:3px 5px;gap:5px;border-radius:11px; }
+ body.student-elementary .elementary-native .ep-today .task .box { width:19px;height:19px;border-radius:6px; }
+ body.student-elementary .elementary-native .ep-today .task img { width:21px;height:21px; }
+ body.student-elementary .ep-task-title { font-size:11px;line-height:1.35; }
+ body.student-elementary .ep-task-copy small { display:none; }
+ body.student-elementary .ep-task-go svg { width:11px;height:11px; }
+ body.student-elementary .elementary-native .greet { top:1%; }
+ body.student-elementary .elementary-native .greet h1 { font-size:17px; }
+ body.student-elementary .elementary-native .greet p { display:none; }
+ body.student-elementary .elementary-native .level { height:33px;bottom:0;padding-top:3px; }
+ body.student-elementary .elementary-native .level .ttl { font-size:10px;line-height:1.3; }
+ body.student-elementary .elementary-native .level .track { top:15px;height:5px; }
+ body.student-elementary .elementary-native .level .score { top:21px;font-size:7px; }
+ body.student-elementary .elementary-native .level .badge { width:22px;height:22px; }
+ body.student-elementary .elementary-native .level .go { top:9px; }
+}
+@media(min-width:641px) and (max-height:700px) {
+ body.student-elementary .elementary-first-screen { grid-template-rows:minmax(0,.8fr) minmax(0,1.25fr); }
+ body.student-elementary .ep-rankings { grid-column:1;grid-row:2; }
+ body.student-elementary .elementary-native .ep-today { padding:7px 10px;gap:5px; }
+ body.student-elementary .elementary-native .ep-today h2 { font-size:14px;line-height:1.4; }
+ body.student-elementary .ep-today-count { font-size:9px; }
+ body.student-elementary .ep-today-content { grid-template-columns:minmax(0,1fr) 55px;gap:5px; }
+ body.student-elementary .elementary-native .ep-today .tasks { gap:4px; }
+ body.student-elementary .elementary-native .ep-today .task { flex:1 1 32px;max-height:42px;min-height:28px;padding:3px 5px;gap:5px; }
+ body.student-elementary .elementary-native .ep-today .task .box { width:19px;height:19px; }
+ body.student-elementary .elementary-native .ep-today .task img { width:21px;height:21px; }
+ body.student-elementary .ep-task-title { font-size:11px;line-height:1.35; }
+ body.student-elementary .ep-task-copy small { display:none; }
+}
+@media print { body.student-elementary .elementary-native > .banner { display:none; } }

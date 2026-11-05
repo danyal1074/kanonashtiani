@@ -710,7 +710,7 @@ export async function hooshStudio(el) {
                         </button>
                       </div>
                       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;height:380px;display:flex;align-items:center;justify-content:center;cursor:pointer" data-zoom-img="${imgUrl}">
-                        <img src="${imgUrl}" alt="صفحه ${pageNum}" loading="lazy" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.src='/img/placeholder.png';this.alt='تصویر در دسترس نیست';" />
+                        <img src="${imgUrl}" alt="صفحه ${pageNum}" loading="lazy" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.onerror=null;this.style.visibility='hidden'" />
                       </div>
                       <div class="row between tiny muted" style="margin-top:8px">
                         <span>کیفیت اسکن: استاندارد ۳۰۰DPI</span>

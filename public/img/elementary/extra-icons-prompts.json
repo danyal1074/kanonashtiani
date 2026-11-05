@@ -1,0 +1,29 @@
+{
+  "mode": "Built-in image_gen",
+  "icons": {
+    "study": {
+      "file": "extra-study.webp",
+      "prompt": "Use case: stylized-concept. Create exactly ONE original standalone UI icon: a cheerful cyan blue study stopwatch with a small golden star. Match a premium elementary-school app's friendly 3D glossy rounded plastic educational icon style, cyan blue and violet with golden green accents, soft top-left studio highlight, clear simple silhouette. Isolated product cutout, centered, fully visible, generous 15% clear margin. CRITICAL: the entire canvas outside the object must be genuinely TRANSPARENT ALPHA (RGBA PNG). No gradients or color or glow anywhere behind the object. NO backdrop, NO colored background, NO scenery, NO tile, NO text, NO watermark, no floor plane. Retain only the actual physical object on full transparency. Square image."
+    },
+    "counselor": {
+      "file": "extra-counselor.webp",
+      "prompt": "Use case: stylized-concept. Create exactly ONE original standalone UI icon: a friendly school counselor bust wearing teal beside one cyan speech bubble. Match a premium elementary-school app's friendly 3D glossy rounded plastic educational icon style, cyan blue and violet with golden green accents, soft top-left studio highlight, clear simple silhouette. Isolated product cutout, centered, fully visible, generous 15% clear margin. CRITICAL: the entire canvas outside the object must be genuinely TRANSPARENT ALPHA (RGBA PNG). No gradients or color or glow anywhere behind the object. NO backdrop, NO colored background, NO scenery, NO tile, NO text, NO watermark, no floor plane. Retain only the actual physical object on full transparency. Square image."
+    },
+    "self-exams": {
+      "file": "extra-self-exams.webp",
+      "prompt": "Use case: stylized-concept. Create exactly ONE original standalone UI icon: a purple school quiz paper with a green tick and a gold question mark. Match a premium elementary-school app's friendly 3D glossy rounded plastic educational icon style, cyan blue and violet with golden green accents, soft top-left studio highlight, clear simple silhouette. Isolated product cutout, centered, fully visible, generous 15% clear margin. CRITICAL: the entire canvas outside the object must be genuinely TRANSPARENT ALPHA (RGBA PNG). No gradients or color or glow anywhere behind the object. NO backdrop, NO colored background, NO scenery, NO tile, NO text, NO watermark, no floor plane. Retain only the actual physical object on full transparency. Square image."
+    },
+    "learning-path": {
+      "file": "extra-learning-path.webp",
+      "prompt": "Use case: stylized-concept. Create exactly ONE original standalone UI icon: a turquoise compass beside a short violet winding learning trail and a tiny golden flag. Match a premium elementary-school app's friendly 3D glossy rounded plastic educational icon style, cyan blue and violet with golden green accents, soft top-left studio highlight, clear simple silhouette. Isolated product cutout, centered, fully visible, generous 15% clear margin. CRITICAL: the entire canvas outside the object must be genuinely TRANSPARENT ALPHA (RGBA PNG). No gradients or color or glow anywhere behind the object. NO backdrop, NO colored background, NO scenery, NO tile, NO text, NO watermark, no floor plane. Retain only the actual physical object on full transparency. Square image."
+    },
+    "shop": {
+      "file": "extra-shop.webp",
+      "prompt": "Use case: stylized-concept. Create exactly ONE original standalone UI icon: a bright blue shopping bag containing three colorful school books. Match a premium elementary-school app's friendly 3D glossy rounded plastic educational icon style, cyan blue and violet with golden green accents, soft top-left studio highlight, clear simple silhouette. Isolated product cutout, centered, fully visible, generous 15% clear margin. CRITICAL: the entire canvas outside the object must be genuinely TRANSPARENT ALPHA (RGBA PNG). No gradients or color or glow anywhere behind the object. NO backdrop, NO colored background, NO scenery, NO tile, NO text, NO watermark, no floor plane. Retain only the actual physical object on full transparency. Square image."
+    },
+    "library": {
+      "file": "extra-library.webp",
+      "prompt": "Use case: stylized-concept. Create exactly ONE original standalone UI icon: a small violet bookcase containing three colorful books. Match a premium elementary-school app's friendly 3D glossy rounded plastic educational icon style, cyan blue and violet with golden green accents, soft top-left studio highlight, clear simple silhouette. Isolated product cutout, centered, fully visible, generous 15% clear margin. CRITICAL: the entire canvas outside the object must be genuinely TRANSPARENT ALPHA (RGBA PNG). No gradients or color or glow anywhere behind the object. NO backdrop, NO colored background, NO scenery, NO tile, NO text, NO watermark, no floor plane. Retain only the actual physical object on full transparency. Square image."
+    }
+  }
+}

@@ -46,6 +46,39 @@ for (const [role, s] of Object.entries(S)) {
 }
 for (const [area, p] of Object.entries(AREAS)) check(`بدون ورود → ${area}`, (await call(null, 'GET', p)).status === 401);
 
+// Student layouts use the authenticated grade, and attendance is always student-scoped.
+const { isElementary } = await import('../public/js/student-variant.js');
+check('انتخاب پنل دبستان فقط برای پایه‌های ۱ تا ۶', [1,2,3,4,5,6].every(grade => isElementary({user:{role:'student'},student:{grade}})) && [0,7,8,9,10,11,12,null,'bad'].every(grade => !isElementary({user:{role:'student'},student:{grade}})) && !isElementary({user:{role:'teacher'},student:{grade:5}}));
+const elementarySession = await login('student', 'student5');
+// Verify class/center standings against independently counted points ahead of this student.
+const rankProbe = new DatabaseSync(path.join(env.ROSHD_DATA_DIR, 'roshd.db'), { readOnly: true });
+const rankUser = rankProbe.prepare("SELECT u.id, u.center_id, u.full_name, s.class_id, s.grade FROM users u JOIN students s ON s.user_id=u.id WHERE u.username='student5'").get();
+const rankCohort = rankProbe.prepare(`SELECT u.id, u.full_name, s.class_id, s.grade,
+  (SELECT COALESCE(SUM(p.amount),0) FROM points p WHERE p.student_id=u.id) total
+  FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.active=1`).all(rankUser.center_id);
+rankProbe.close();
+const rankSelf = rankCohort.find(r => r.id === rankUser.id);
+const aheadOfSelf = r => r.total > rankSelf.total || (r.total === rankSelf.total && (r.full_name < rankSelf.full_name || (r.full_name === rankSelf.full_name && r.id < rankSelf.id)));
+const classCohort = rankCohort.filter(r => r.class_id === rankUser.class_id);
+const rankedDashboard = await call(elementarySession.ck, 'GET', '/api/student/dashboard');
+check('رتبه کلاس بر اساس امتیاز هم‌کلاسی‌های فعال است', rankedDashboard.status === 200 && rankedDashboard.data.rankings.class.of === classCohort.length && rankedDashboard.data.rankings.class.rank === classCohort.filter(aheadOfSelf).length + 1);
+check('رتبه کانون بین همه پایه‌های همان کانون است', rankedDashboard.data.rankings.center.of === rankCohort.length && rankedDashboard.data.rankings.center.rank === rankCohort.filter(aheadOfSelf).length + 1);
+check('رتبه پایه قبلی همچنان حفظ شده است', rankedDashboard.data.rank.of === rankCohort.filter(r => r.grade === rankUser.grade).length);
+check('رتبه‌ها اطلاعات دانش‌آموزان دیگر را افشا نمی‌کنند', ['class','center'].every(scope => Object.keys(rankedDashboard.data.rankings[scope]).sort().join(',') === 'of,rank'));
+const ownAttendance = await call(elementarySession.ck, 'GET', '/api/student/attendance');
+check('حضور و غیاب دانش‌آموز به داده واقعی متصل است', ownAttendance.status === 200 && Array.isArray(ownAttendance.data.rows) && ownAttendance.data.total === ownAttendance.data.present + ownAttendance.data.absent + ownAttendance.data.excused);
+const ignoredStudentId = await call(elementarySession.ck, 'GET', '/api/student/attendance?student_id=1');
+check('شناسه ارسالی نمی‌تواند صاحب سوابق حضور را عوض کند', JSON.stringify(ignoredStudentId.data) === JSON.stringify(ownAttendance.data));
+check('معلم نمی‌تواند از API حضور دانش‌آموز استفاده کند', (await call(S.teacher.ck, 'GET', '/api/student/attendance')).status === 403);
+check('حضور بدون ورود باز نیست', (await call(null, 'GET', '/api/student/attendance')).status === 401);
+check('حضور در پنل قفل‌شده بسته است', (await call(S.locked.ck, 'GET', '/api/student/attendance')).status === 423);
+const elementaryAssignment = (await call(elementarySession.ck, 'GET', '/api/student/assignments')).data.find(a => !a.sub_id);
+const noteSubmission = await call(elementarySession.ck, 'POST', `/api/student/assignments/${elementaryAssignment.id}/submit`, { note: 'پاسخ متنی تکلیف، بدون پیوست' });
+check('ارسال تکلیف فقط با یادداشت بدون پیوست', noteSubmission.status === 200);
+const submittedNote = (await call(elementarySession.ck, 'GET', '/api/student/assignments')).data.find(a => a.id === elementaryAssignment.id);
+check('یادداشت تکلیف بدون فایل در پایگاه داده ذخیره می‌شود', !!submittedNote.sub_id && submittedNote.note === 'پاسخ متنی تکلیف، بدون پیوست' && submittedNote.file_path === null && submittedNote.file_name === null);
+
+
 // قفل پنل دانش‌آموز بدهکار: داشبورد قفل، پرداخت باز
 check('پنل قفل‌شده: داشبورد ۴۲۳', (await call(S.locked.ck, 'GET', '/api/student/dashboard')).status === 423);
 check('پنل قفل‌شده: صفحه پرداخت باز است', (await call(S.locked.ck, 'GET', '/api/student/payment')).status === 200);

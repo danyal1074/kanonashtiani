@@ -44,6 +44,21 @@ export function rankOf(centerId, grade, sid) {
   return { rank: idx + 1, of: list.length };
 }
 
+// Class and center standings follow the same points/name ordering as grade rankings.
+export function studentRankings(centerId, classId, studentId) {
+  const students = all(`SELECT u.id, s.class_id, COALESCE(SUM(p.amount), 0) total
+    FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN points p ON p.student_id=u.id
+    WHERE u.center_id=? AND u.active=1 GROUP BY u.id ORDER BY total DESC, u.full_name, u.id`, centerId);
+  const standing = rows => {
+    const index = rows.findIndex(row => row.id === studentId);
+    return { rank: index < 0 ? null : index + 1, of: rows.length };
+  };
+  return {
+    class: standing(classId == null ? [] : students.filter(row => row.class_id === classId)),
+    center: standing(students),
+  };
+}
+
 // ---------- حق عضویت و قفل ----------
 export function feeStatus(sid) {
   const st = get('SELECT s.grade, u.center_id FROM students s JOIN users u ON u.id=s.user_id WHERE s.user_id=?', sid);

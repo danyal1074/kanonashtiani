@@ -6,6 +6,8 @@ import { loginView } from './login.js';
 import { publicRoutes } from './shop.js';
 import * as student from './student.js';
 import * as teacher from './teacher.js';
+import { prepareManager, decorateManager } from './manager-ui.js';
+import { prepareTeacher } from './teacher-ui.js';
 import * as manager from './manager.js';
 import * as parent from './parent.js';
 import * as admin from './admin.js';
@@ -26,16 +28,17 @@ function shell(me) {
     const isLocked = locked && !n.open;
     return `<a class="nav-item ${isLocked ? 'locked' : ''}" href="#${n.path}" data-path="${n.path}"><span class="ni">${icon(isLocked ? 'lock' : n.icon)}</span><span>${n.label}</span>${n.badge ? `<span class="cnt">${fa(n.badge)}</span>` : ''}</a>`;
   }).join('');
-  const bottom = (panel.bottomNav?.(me) || []).map((n) => `<a href="#${n.path}" data-path="${n.path}"><span class="bi">${icon(locked && !n.open ? 'lock' : n.icon, { size: 22 })}</span>${n.label}${n.badge ? `<span class="cnt">${fa(n.badge)}</span>` : ''}</a>`).join('');
+  const bottom = (panel.bottomNav?.(me) || []).map((n) => `<a href="#${n.path}" data-path="${n.path}"><span class="bi">${me.user.role === 'student' ? student.navIcon(locked && !n.open ? 'more' : n.icon) : icon(locked && !n.open ? 'lock' : n.icon, { size: 22 })}</span>${n.label}${n.badge ? `<span class="cnt">${fa(n.badge)}</span>` : ''}</a>`).join('');
   const who = me.student ? avatar(me.student.avatar) : nameAvatar(me.user.full_name);
   const brandName = c ? esc(c.name) : 'مدیریت سامانه';
   root.innerHTML = `
     ${me.impersonator ? `<div class="imp-bar" role="status">${icon('eye', { size: 18 })} در حال مشاهده پنل «${esc(me.user.full_name)}» (${ROLE_NAMES[me.user.role]}) به‌جای ${esc(me.impersonator.full_name)} <button class="btn sm ghost" id="stopImp">بازگشت به پنل مدیر سامانه</button></div>` : ''}
-    <div class="mobile-head no-print"><a class="sr-only" href="#view" onclick="event.preventDefault();document.getElementById('view').focus()">پرش به محتوا</a><button class="icon-btn" id="menuBtn" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">${icon('menu', { size: 22 })}</button><div class="brand-logo">${logoHtml(c?.logo)}</div>
+    <div class="mobile-head no-print"><a class="sr-only" href="#view" onclick="event.preventDefault();document.getElementById('view').focus()">پرش به محتوا</a><button class="icon-btn" id="menuBtn" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">${icon('menu', { size: 22 })}</button><div class="brand-logo">${me.user.role === 'student' ? student.studentLogo(c) : logoHtml(c?.logo)}</div>
       <div class="grow"><div class="t1 ellipsis">${brandName}</div><div class="t2">پلتفرم رشد نخبه</div></div>${who}</div>
+    ${me.user.role === 'student' ? student.shellHeader(me) : ''}
     <div class="app ${me.user.role === 'student' ? 'theme-student' : 'theme-staff'}">
       <aside class="sidebar no-print" id="sidebar">
-        <div class="brand"><div class="brand-logo">${logoHtml(c?.logo)}</div><div class="grow"><div class="t1">${brandName}</div><div class="t2">${icon('sprout', { size: 14 })} پلتفرم رشد نخبه</div></div></div>
+        <div class="brand"><div class="brand-logo">${me.user.role === 'student' ? student.studentLogo(c) : logoHtml(c?.logo)}</div><div class="grow"><div class="t1">${brandName}</div><div class="t2">${icon('sprout', { size: 14 })} پلتفرم رشد نخبه</div></div></div>
         <nav class="stack" style="gap:2px" aria-label="منوی اصلی">${navHtml}</nav>
         <div class="foot">
           <div class="row" style="padding:6px">${who}<div class="grow"><div class="bold small ellipsis">${esc(me.user.full_name)}</div><div class="tiny muted">${ROLE_NAMES[me.user.role]}${me.student ? ` • پایه ${gradeName(me.student.grade)}` : ''}</div></div>
@@ -48,11 +51,12 @@ function shell(me) {
         <div id="view" tabindex="-1" style="outline:none"></div>
       </main>
     </div>
-    ${bottom ? `<nav class="bottom-nav no-print" aria-label="منوی پایین">${bottom}<a href="#" id="moreBtn" role="button" aria-controls="sidebar"><span class="bi">${icon('more', { size: 22 })}</span>بیشتر</a></nav>` : ''}`;
+    ${bottom ? `<nav class="bottom-nav no-print" aria-label="منوی پایین">${bottom}${me.user.role === 'student' ? '' : `<a href="#" id="moreBtn" role="button" aria-controls="sidebar"><span class="bi">${icon('more', { size: 22 })}</span>بیشتر</a>`}</nav>` : ''}`;
   const sb = $('#sidebar');
   const toggle = (open) => {
     sb.classList.toggle('open', open);
-    $('#menuBtn')?.setAttribute('aria-expanded', String(open));
+    $$('button[aria-controls="sidebar"]').forEach((button) => button.setAttribute('aria-expanded', String(open)));
+    if (!open && me.user.role === 'teacher' && sb.contains(document.activeElement)) $('.tp-menu')?.focus();
     if (open) sb.querySelector('.nav-item')?.focus();
     $('.scrim')?.remove();
     if (open) { const s = document.createElement('div'); s.className = 'scrim'; s.onclick = () => toggle(false); document.body.append(s); }
@@ -90,11 +94,20 @@ function matchPanel(routes, path) {
 let rendering = 0;
 async function render() {
   const token = ++rendering;
+  student.leavePage();
   const path = (location.hash.replace(/^#/, '') || '/home').split('?')[0];
   $('.scrim')?.remove();
 
   // صفحات عمومی (بدون ورود هم در دسترس)
   const pub = matchPanel(publicRoutes, path);
+  document.body.classList.toggle('student-ui', !pub && path !== '/login' && state.me?.user.role === 'student');
+  const elementary = !pub && path !== '/login' && student.isElementary(state.me);
+  document.body.classList.toggle('student-elementary', elementary);
+  document.body.classList.toggle('student-secondary', !elementary && !pub && path !== '/login' && state.me?.user.role === 'student');
+  if (!elementary) document.body.classList.remove('elementary-native-page','elementary-map-page');
+  document.body.classList.toggle('student-home', !pub && path === '/home' && state.me?.user.role === 'student');
+  document.body.classList.toggle('manager-ui', !pub && path !== '/login' && state.me?.user.role === 'manager');
+  document.body.classList.toggle('teacher-ui', !pub && path !== '/login' && state.me?.user.role === 'teacher');
   if (pub) { const box = document.createElement('div'); root.replaceChildren(box); return pub.r.view(box, pub.params); }
   if (path === '/login' || !state.me) {
     if (state.me) { location.hash = '#/home'; return; }
@@ -110,6 +123,9 @@ async function render() {
   if (me.user?.role === 'student' && me.must_change_password) { ensurePasswordChanged(me); }
   if (me.fee?.locked && !found.r.open) { location.hash = '#/payment'; return; }
   markActive(path);
+  if (me.user.role === 'student') student.prepareStudentPage(path);
+  if (me.user.role === 'teacher') prepareTeacher(me, path);
+  if (me.user.role === 'manager') prepareManager(me);
   // عنصر تازه برای هر نما تا شنونده‌های نمای قبلی باقی نمانند
   const view = $('#view').cloneNode(false);
   $('#view').replaceWith(view);
@@ -119,8 +135,9 @@ async function render() {
   try {
     await found.r.view(view, found.params, me);
     if (token === rendering) {
-      if (path === '/home') decorateDashboard(view, me, panel.nav(me));
-      decoratePageArt(view, me, path);
+      if (path === '/home' && !['student', 'teacher', 'manager'].includes(me.user.role)) decorateDashboard(view, me, panel.nav(me));
+      if (me.user.role === 'manager') decorateManager(view, me, path, panel.nav(me));
+      else if (!student.isElementary(me)) decoratePageArt(view, me, path);
     }
   } catch (e) {
     if (token !== rendering) return;

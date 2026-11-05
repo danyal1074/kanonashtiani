@@ -4,28 +4,9 @@ import { api, post, put, del, esc, fa, num, pct, $, $$, on, toast, busy, modal, 
   timeAgo, subjIcon, gradeName, dateField, readDate, tehranIso, fileToData, barChart, lineChart, WEEKDAYS, addDays, formData, state, en, icon, kpiCard, nameAvatar, JMONTHS, jparts } from './core.js';
 import { messagesView, announcementsView, accountView } from './common.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
+import * as UI from './teacher-ui.js';
 
-export const nav = (me) => [
-  { path: '/home', icon: 'home', label: 'داشبورد' },
-  { path: '/attendance', icon: 'user-check', label: 'حضور و غیاب' },
-  { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
-  { path: '/exams', icon: 'file-check', label: 'آزمون و اسکن پاسخ‌برگ' },
-  { path: '/hoosh-studio', icon: 'sparkles', label: 'استودیوی هوش کمپلکس' },
-  { path: '/students', icon: 'users', label: 'عملکرد دانش‌آموزان' },
-  { path: '/plans', icon: 'timer', label: 'برنامه پومودوروی هفتگی' },
-  { path: '/materials', icon: 'video', label: 'ویدیو و جزوه' },
-  { path: '/manual-scores', icon: 'clipboard', label: 'نمرات مستمر کلاسی' },
-  { path: '/att-log', icon: 'user-check', label: 'لاگ تغییر حضور' },
-  { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
-  { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌ها' },
-  { path: '/account', icon: 'sliders', label: 'حساب کاربری' },
-];
-export const bottomNav = (me) => [
-  { path: '/home', icon: 'home', label: 'خانه' },
-  { path: '/attendance', icon: 'user-check', label: 'حضور' },
-  { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
-  { path: '/messages', icon: 'message', label: 'پیام', badge: me.unread },
-];
+export const { nav, bottomNav } = UI;
 
 let classesCache = null;
 const myClasses = async () => (classesCache ??= (await api('/api/teacher/overview')).classes);
@@ -38,63 +19,11 @@ const bindFilter = (el, q, redraw) => {
 };
 const qs = (q) => new URLSearchParams(Object.entries(q).filter(([, v]) => v)).toString();
 
-// ================= داشبورد =================
-async function home(el, _p, me) {
-  const d = await api('/api/teacher/overview');
-  classesCache = d.classes;
-  setHead(`سلام، ${esc(me.user.full_name)}`, `${jdate(me.today, { weekday: true })} · ${fa(d.classes.length)} کلاس`,
-    `<a class="btn ghost sm" href="#/assignments">${icon('plus', { size: 16 })} تکلیف جدید</a><a class="btn sm" href="#/attendance">${icon('user-check', { size: 16 })} حضور و غیاب</a>`);
-  el.innerHTML = `<div class="grid c4">${kpiCard('users', '', fa(d.stats.students), 'دانش‌آموز در کلاس‌های من', '', '#/students')}${kpiCard('clipboard', 'sun', fa(d.stats.openAssignments), 'تکلیف با مهلت باز', '', '#/assignments')}
-    ${kpiCard('inbox', 'green', fa(d.stats.newSubmissions), 'ارسال جدید', 'دو روز اخیر', '#/assignments')}${kpiCard('user-x', 'red', fa(d.stats.absentToday), 'غایب امروز', '', '#/attendance')}</div>
-  <div class="grid c3" style="margin-top:var(--s-5)">
-    <section class="card"><div class="card-title"><span class="ib slate">${icon('calendar', { size: 18 })}</span>کلاس‌های امروز</div>
-      ${d.today.length ? d.today.map((s) => `<div class="class-slot" style="flex-wrap:wrap"><div class="tm">${fa(s.start)} تا ${fa(s.end)}</div><div class="grow" style="min-width:120px"><b class="row" style="gap:6px">${subjIcon(s.subject, 16)} ${esc(s.subject)}</b><div class="tiny muted">کلاس ${gradeName(s.grade)} ${esc(s.class_name)}</div></div><a class="btn sm soft" href="#/attendance/${s.class_id}">${icon('user-check', { size: 16 })} حضور</a></div>`).join('') : empty('calendar', '<b>امروز کلاسی ندارید</b>برنامه هفتگی را مدیر کانون تنظیم می‌کند.')}</section>
-    <section class="card"><div class="card-title"><span class="ib">${icon('building', { size: 18 })}</span>کلاس‌های من</div><div class="list">${d.classes.map((c) => `<a class="list-item click" href="#/students?class=${c.id}" style="color:inherit;font-weight:inherit"><div class="avatar sm txt">${fa(c.grade)}</div><div class="grow"><b class="small">کلاس ${clsLabel(c)}</b><div class="tiny muted">${esc(c.subjects)}</div></div><span class="badge gray">${fa(c.students)} نفر</span></a>`).join('')}</div></section>
-    <section class="card"><div class="card-title"><span class="ib sun">${icon('trophy', { size: 18 })}</span>برترین‌های امتیاز</div><div class="list">${d.top.map((s, i) => `<a class="list-item click" href="#/students/${s.id}" style="color:inherit;font-weight:inherit"><span class="badge ${i < 3 ? 'yellow' : 'gray'}" style="min-width:28px;justify-content:center">${fa(i + 1)}</span>${nameAvatar(s.full_name, 'sm')}<div class="grow"><b class="small">${esc(s.full_name)}</b><div class="tiny muted">کلاس ${gradeName(s.grade)} ${esc(s.class_name)}</div></div><b class="num">${fa(s.points)}</b></a>`).join('')}</div></section>
-  </div>
-  <div class="quick" style="margin-top:var(--s-5);grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">${[['/attendance', 'user-check', 'حضور و غیاب', 'ثبت با یک لمس', ''], ['/assignments', 'clipboard', 'تکلیف جدید', 'پایه، کلاس و مهلت', 'sun'], ['/exams', 'camera', 'اسکن پاسخ‌برگ', 'نمره‌دهی خودکار', 'green'], ['/plans', 'timer', 'برنامه مطالعه', 'پومودوروی هفتگی', 'slate']].map(([h, i, t, d_, c]) => `<a class="qa" href="#${h}"><span class="ib ${c}">${icon(i, { size: 22 })}</span><span class="grow"><b>${t}</b><span class="d">${d_}</span></span><span class="go">${icon('chevron-left')}</span></a>`).join('')}</div>`;
-}
-
-// ================= حضور و غیاب =================
-async function attendance(el, params) {
-  const classes = await myClasses();
-  let classId = Number(params.id) || classes[0]?.id;
-  let date = state.me.today;
-  setHead('حضور و غیاب', 'با هر لمس وضعیت عوض می‌شود: حاضر ← غایب ← غایب با اطلاع');
-  const NEXT = { present: 'absent', absent: 'excused', excused: 'present' };
-  const LBL = { present: 'حاضر', absent: 'غایب', excused: 'با اطلاع' };
-  let rows = [];
-  const load = async () => {
-    const d = await api(`/api/teacher/attendance?class_id=${classId}&date=${date}`);
-    rows = d.students.map((s) => ({ ...s, status: s.status || 'present' }));
-    draw(d.saved);
-  };
-  const draw = (saved) => {
-    const c = (st) => rows.filter((r) => r.status === st).length;
-    $('#attBody', el).innerHTML = `<div class="row wrap" style="margin-bottom:14px"><span class="badge green">${icon('check-circle', { size: 16 })} حاضر: ${fa(c('present'))}</span><span class="badge red">${icon('user-x', { size: 16 })} غایب: ${fa(c('absent'))}</span><span class="badge yellow">${icon('message', { size: 16 })} با اطلاع: ${fa(c('excused'))}</span>${saved ? '<span class="badge blue">قبلاً ثبت شده — ویرایش</span>' : ''}
-      <span class="grow"></span><button class="btn soft sm" id="allPresent">${icon('user-check', { size: 16 })} همه حاضر</button></div>
-      <div class="att-grid">${rows.map((r) => `<div class="att-card ${r.status}" data-sid="${r.id}" role="button" tabindex="0">${nameAvatar(r.full_name, 'sm')}<b class="small grow ellipsis">${esc(r.full_name)}</b><span class="st">${LBL[r.status]}</span></div>`).join('')}</div>
-      <div class="row" style="justify-content:flex-end;margin-top:16px"><button class="btn lg green" id="saveAtt">${icon('check', { size: 16 })} ثبت حضور و غیاب</button></div>`;
-  };
-  el.innerHTML = `<div class="card" style="margin-bottom:16px"><div class="row wrap"><div class="chips" id="clsChips">${classes.map((c) => `<button class="chip ${c.id === classId ? 'on' : ''}" data-cls="${c.id}">کلاس ${clsLabel(c)}</button>`).join('')}</div><span class="grow"></span>
-    <div style="width:270px">${dateField('attDate', date, { minYear: 1404, maxYear: 1406 })}</div></div></div><div class="card" id="attBody">${empty('clock', 'در حال بارگذاری…')}</div>`;
-  on(el, 'click', '[data-cls]', (e, b) => { classId = Number(b.dataset.cls); $$('[data-cls]', el).forEach((x) => x.classList.toggle('on', x === b)); load(); });
-  on(el, 'change', '[data-date] select', () => { const d = readDate(el, 'attDate'); if (d) { date = d; load(); } });
-  on(el, 'click', '.att-card', (e, card) => { const r = rows.find((x) => x.id === Number(card.dataset.sid)); r.status = NEXT[r.status]; card.className = `att-card ${r.status}`; card.querySelector('.st').textContent = LBL[r.status]; const c = (st) => rows.filter((x) => x.status === st).length; const b = $$('#attBody .badge', el); b[0].innerHTML = `${icon('check-circle', { size: 16 })} حاضر: ${fa(c('present'))}`; b[1].innerHTML = `${icon('user-x', { size: 16 })} غایب: ${fa(c('absent'))}`; b[2].innerHTML = `${icon('message', { size: 16 })} با اطلاع: ${fa(c('excused'))}`; });
-  on(el, 'click', '#allPresent', () => { rows.forEach((r) => { r.status = 'present'; }); draw(); });
-  on(el, 'click', '#saveAtt', (e, b) => busy(b, async () => {
-    const r = await post('/api/teacher/attendance', { class_id: classId, date, records: rows.map((x) => ({ student_id: x.id, status: x.status })) });
-    await modal({ title: ' حضور و غیاب ثبت شد', body: `<div class="grid c3 center"><div class="card flat"><div class="pos" style="font-size:26px">${fa(r.present)}</div><div class="small">حاضر</div></div><div class="card flat"><div class="neg" style="font-size:26px">${fa(r.absent)}</div><div class="small">غایب</div></div><div class="card flat"><div style="font-size:26px;color:#a16207;font-weight:800">${fa(r.excused)}</div><div class="small">غایب با اطلاع</div></div></div>
-      <div class="card tint-orange" style="margin-top:14px"><div class="row"><span class="ib">${icon('phone', { size: 18 })}</span><div><b>تعداد پیامک غیبت برای ارسال به والدین: ${fa(r.sms)}</b><div class="small muted">ارسال پیامک از داشبورد مدیر کانون انجام می‌شود. غیبت بدون اطلاع ۵ امتیاز منفی دارد.</div></div></div></div>`, actions: [{ label: 'باشه', value: true }] });
-    load();
-  }));
-  load();
-}
-
 // ================= تکالیف =================
 async function assignments(el) {
   const classes = await myClasses();
   const q = {};
+  const cm = /[?&]class=(\d+)/.exec(location.hash); if (cm) q.class_id = cm[1];
   setHead('تکالیف', 'ساخت تکلیف و پیگیری ارسال‌ها', '<a class="btn ghost sm" href="#/assignments/report"> گزارش تکالیف</a> <button class="btn sm" id="newAsg"> تکلیف جدید</button>');
   const draw = async () => {
     const list = await api(`/api/teacher/assignments?${qs(q)}`);
@@ -145,6 +74,7 @@ async function assignments(el) {
       }],
     });
   };
+  if (/[?&]new=1/.test(location.hash)) $('#newAsg').click();
 }
 
 async function asgReport(el) {
@@ -350,9 +280,12 @@ async function materials(el) {
 }
 
 export const routes = [
-  { path: '/home', view: home },
-  { path: '/attendance', view: attendance },
-  { path: '/attendance/:id', view: attendance },
+  { path: '/home', view: UI.home },
+  { path: '/classes', view: UI.classes },
+  { path: '/reports', view: UI.reports },
+  { path: '/more', view: UI.more },
+  { path: '/attendance', view: UI.attendance },
+  { path: '/attendance/:id', view: UI.attendance },
   { path: '/assignments', view: assignments },
   { path: '/assignments/report', view: asgReport },
   { path: '/exams', view: exams },

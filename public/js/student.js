@@ -1,15 +1,27 @@
+import * as elementary from './elementary.js';
+import { isElementary } from './student-variant.js';
+export { isElementary };
+import * as studentDesign from './student-design.js';
+export { studentLogo } from './student-design.js';
+export const shellHeader = me => isElementary(me) ? elementary.shellHeader(me) : studentDesign.shellHeader(me);
+export const navIcon = (name,size=24) => isElementary(state.me) ? elementary.navIcon(name) : studentDesign.navIcon(name,size);
+export const leavePage = () => elementary.leave();
+export function prepareStudentPage(path) { if (isElementary(state.me)) elementary.preparePage(path); else { document.body.classList.remove('elementary-native-page','elementary-map-page'); studentDesign.prepareStudentPage(path); } }
 import { openPhotoPicker } from './profile-photo.js';
 // پنل دانش‌آموز
 import { api, post, put, esc, fa, hasIcon, AVATAR_ICONS, sgn, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, progress, ring, empty, cdHtml, countdown,
-  jdate, jtime, jshort, timeAgo, subjIcon, subjTint, SOFT, SUBJ_COLOR, gradeName, icon, nameAvatar, fileToData, beep, confetti, WEEKDAYS, faWeekday, ymdOf, lineChart, barChart, state } from './core.js';
+  jdate, jtime, jshort, subjIcon, subjTint, SOFT, SUBJ_COLOR, gradeName, icon, fileToData, beep, confetti, WEEKDAYS, faWeekday, ymdOf, lineChart, barChart, state } from './core.js';
 import { messagesView, announcementsView, passwordCard, bindPassword } from './common.js';
 import { gamesHub, mathRush, storyView } from './games.js';
 import { panelShop } from './shop.js';
-import { sproutArt } from './icons.js';
 import * as L from './legacy.js';
 
 export const nav = (me) => [
   { path: '/home', icon: 'home', label: 'خانه' },
+  { path: '/lessons', icon: 'book', label: 'درس‌ها' },
+  { path: '/schedule', icon: 'calendar', label: 'برنامه هفتگی' },
+  { path: '/library', icon: 'book', label: 'کتابخانه' },
+  { path: '/classes', icon: 'video', label: 'کلاس آنلاین' },
   { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
   { path: '/exams', icon: 'file-check', label: 'آزمون‌ها' },
   { path: '/results', icon: 'award', label: 'کارنامه و نتایج' },
@@ -26,80 +38,15 @@ export const nav = (me) => [
   { path: '/payment', icon: 'card', label: 'حق عضویت', open: true },
   { path: '/shop', icon: 'bag', label: 'فروشگاه کانون' },
 ];
-export const bottomNav = () => [
+export const bottomNav = (me) => [
+  { path: '/more', icon: 'more', label: 'موارد بیشتر', open: true },
+  { path: '/roadmap', icon: 'chart', label: 'مسیر پیشرفت' },
   { path: '/home', icon: 'home', label: 'خانه' },
-  { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
-  { path: '/study', icon: 'timer', label: 'مطالعه' },
-  { path: '/exams', icon: 'file-check', label: 'آزمون' },
+  { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
+  { path: '/profile', icon: 'user', label: 'پروفایل من' },
 ];
 
-const greeting = () => { const h = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tehran', hour: 'numeric', hour12: false }).format(new Date())); return h < 12 ? 'صبح بخیر' : h < 17 ? 'روز بخیر' : 'عصر بخیر'; };
 const subjBubble = (s) => `<div class="sub-ico" style="background:${SOFT[subjTint(s)]};color:${SUBJ_COLOR[subjTint(s)]}">${subjIcon(s, 20)}</div>`;
-
-// ================= خانه =================
-async function home(el, _p, me) {
-  const d = await api('/api/student/dashboard');
-  const first = esc(me.user.full_name.split(' ')[0]);
-  setHead(`${greeting()}، ${first}`, `${jdate(me.today, { weekday: true })} · پایه ${gradeName(d.grade)} · کلاس ${esc(me.student.class_name || '')}`);
-  const lv = d.level;
-  const now = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tehran', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
-  const goalPct = Math.min(100, Math.round((d.study.today / d.study.goal) * 100));
-  const planTotal = d.week.plan.reduce((a, p) => a + p.target, 0), planDone = d.week.plan.reduce((a, p) => a + Math.min(p.done, p.target), 0);
-  const need = Math.max(0, Math.ceil((d.study.goal - d.study.today) / 25));
-  const unit = (t) => `<span style="font-size:var(--fs-sm);font-weight:600;color:var(--teal-100)"> ${t}</span>`;
-
-  el.innerHTML = `
-  ${d.study.today < d.study.goal ? `<div class="reminder" role="note"><span class="ib sun">${icon('bell', { size: 18 })}</span><div class="txt"><b>یادآوری مطالعه:</b> امروز ${fa(d.study.today)} از ${fa(d.study.goal)} دقیقه. ${fa(need)} پومودوروی دیگر تا هدف روزانه.</div><a class="btn accent sm" href="#/study">${icon('play', { size: 16 })} شروع پومودورو</a></div>` : ''}
-  <section class="hero" aria-label="وضعیت رشد من">
-    <div class="row wrap" style="gap:var(--s-6);align-items:center">
-      <div class="sprout-wrap">${sproutArt(lv.index, 110)}</div>
-      <div class="grow" style="min-width:240px">
-        <div class="row wrap" style="gap:var(--s-2)"><span class="eyebrow">${icon('sprout', { size: 14 })} سطح ${fa(lv.index)} · ${lv.name}</span>${me.student.birthday ? `<span class="eyebrow sun">${icon('cake', { size: 14 })} ستاره تولد</span>` : ''}</div>
-        <h2 style="margin:var(--s-3) 0">${lv.next ? `${fa(lv.next.need)} امتیاز تا سطح «${lv.next.name}»` : 'به بالاترین سطح رسیدی'}</h2>
-        <div class="level-bar" role="progressbar" aria-label="پیشرفت تا سطح بعد" aria-valuenow="${lv.progress}" aria-valuemin="0" aria-valuemax="100"><i style="width:${lv.progress}%"></i></div>
-        <div class="row between tiny" style="margin-top:6px;color:var(--teal-100)"><span>${lv.name}</span><span>${lv.next ? lv.next.name : ''}</span></div>
-      </div>
-    </div>
-    <div class="hero-stats" style="margin-top:var(--s-5)">
-      <div class="hero-stat"><div class="l">${icon('star', { size: 14 })} امتیاز کل</div><div class="v">${fa(d.points)}</div></div>
-      <div class="hero-stat"><div class="l">${icon('trophy', { size: 14 })} رتبه در پایه</div><div class="v">${fa(d.rank.rank)}${unit(`از ${fa(d.rank.of)}`)}</div></div>
-      <div class="hero-stat"><div class="l">${icon('timer', { size: 14 })} مطالعه امروز</div><div class="v">${fa(d.study.today)}${unit('دقیقه')}</div></div>
-    </div>
-  </section>
-
-  <div class="quick" style="margin:var(--s-5) 0">
-    <a class="qa" href="#/path"><span class="ib">${icon('sparkles', { size: 22 })}</span><span class="grow"><b>مسیر یادگیری</b><span class="d">${d.path.total ? `${fa(d.path.done)} از ${fa(d.path.total)} گام${d.path.next ? ` · بعدی: ${esc(d.path.next.title)}` : ''}` : 'مسیر شخصی تو'}</span></span><span class="go">${icon('chevron-left')}</span></a>
-    <a class="qa" href="#/games/math"><span class="ib sun">${icon('zap', { size: 22 })}</span><span class="grow"><b>ذهن سریع</b><span class="d">مسابقه ۶۰ ثانیه‌ای محاسبه</span></span><span class="go">${icon('chevron-left')}</span></a>
-    <a class="qa" href="#/games/story"><span class="ib slate">${icon('compass', { size: 22 })}</span><span class="grow"><b>راز رصدخانه</b><span class="d">داستان تعاملی با معماهای علمی</span></span><span class="go">${icon('chevron-left')}</span></a>
-  </div>
-
-  <div class="grid c3">
-    <section class="card span2" aria-labelledby="hT1"><div class="card-title"><span class="ib sun">${icon('clipboard', { size: 18 })}</span><span id="hT1">تکالیف نزدیک به مهلت</span><a class="more" href="#/assignments">همه ${icon('chevron-left', { size: 16 })}</a></div>
-      ${d.upcoming.length ? d.upcoming.map((a) => `<div class="task">${subjBubble(a.subject)}<div class="grow"><div class="bold ellipsis">${esc(a.title)}</div><div class="tiny muted">${esc(a.subject || '')} · ${fa(a.reward_points)} امتیاز تشویقی</div></div>${cdHtml(a.deadline)}</div>`).join('') : empty('check-circle', '<b>همه تکالیف انجام شده</b>تکلیف عقب‌افتاده‌ای نداری.')}
-    </section>
-    <section class="card" aria-labelledby="hT2"><div class="card-title"><span class="ib green">${icon('target', { size: 18 })}</span><span id="hT2">هدف امروز</span></div>
-      <div class="row" style="gap:var(--s-4)">${ring(goalPct, { label: pct(goalPct), sub: 'از هدف' })}<div class="grow"><div class="bold">${goalPct >= 100 ? 'هدف امروز کامل شد' : `${fa(d.study.today)} از ${fa(d.study.goal)} دقیقه`}</div>
-      <div class="small muted">حداقل مطالعه روزانه</div><a class="btn soft sm" style="margin-top:var(--s-3)" href="#/study">${icon('timer', { size: 16 })} مطالعه</a></div></div>
-      <div style="margin-top:var(--s-5)"><div class="row between small" style="margin-bottom:6px"><b>برنامه این هفته</b><span class="muted">${fa(planDone)} از ${fa(planTotal)} پومودورو</span></div>${progress(planTotal ? (planDone / planTotal) * 100 : 0, 'green')}</div>
-    </section>
-
-    <section class="card" aria-labelledby="hT3"><div class="card-title"><span class="ib slate">${icon('calendar', { size: 18 })}</span><span id="hT3">کلاس‌های امروز</span></div>
-      ${d.todayClasses.length ? d.todayClasses.map((c) => { const live = now >= c.start && now <= c.end; return `<div class="class-slot ${live ? 'now' : ''}"><div class="tm">${fa(c.start)} تا ${fa(c.end)}</div><div class="grow"><div class="bold row" style="gap:6px">${subjIcon(c.subject, 16)} ${esc(c.subject)}</div><div class="tiny muted">${esc(c.teacher || '')}</div></div>${live ? '<span class="badge green">در حال برگزاری</span>' : ''}</div>`; }).join('') : empty('inbox', '<b>امروز کلاس نداری</b>وقت خوبی برای مطالعه است.')}
-    </section>
-    <section class="card" aria-labelledby="hT4"><div class="card-title"><span class="ib sun">${icon('trophy', { size: 18 })}</span><span id="hT4">برترین‌های مطالعه</span><div class="seg" style="margin-inline-start:auto" role="tablist"><button class="on" data-top="today" role="tab" aria-selected="true">امروز</button><button data-top="week" role="tab" aria-selected="false">هفته</button></div></div>
-      <div id="podium" aria-live="polite"></div></section>
-    <section class="card" aria-labelledby="hT5"><div class="card-title"><span class="ib coral">${icon('star', { size: 18 })}</span><span id="hT5">آخرین امتیازها</span><a class="more" href="#/profile">جزئیات ${icon('chevron-left', { size: 16 })}</a></div>
-      <div class="list">${d.recentPoints.map((p) => `<div class="list-item"><span class="badge ${p.amount > 0 ? 'green' : 'red'}" style="min-width:48px;justify-content:center">${sgn(p.amount)}</span><div class="grow"><div class="small bold ellipsis">${fa(esc(p.reason))}</div><div class="tiny muted">${esc(p.category)} · ${timeAgo(p.created_at)}</div></div></div>`).join('') || empty('inbox', 'هنوز امتیازی نگرفته‌ای')}</div></section>
-  </div>`;
-
-  const drawPodium = (k) => {
-    const top = d.top[k];
-    const order = [top[1], top[0], top[2]];
-    $('#podium', el).innerHTML = top.length ? `<div class="podium">${order.map((t, i) => t ? `<div class="p p${[2, 1, 3][i]}">${nameAvatar(t.full_name, 'sm')}<div class="nm ellipsis">${esc(t.full_name)}${t.id === me.user.id ? ' (تو)' : ''}</div><div class="mn">${fa(t.minutes)} دقیقه</div><div class="bar">${fa([2, 1, 3][i])}</div></div>` : '<div class="p"></div>').join('')}</div>` : empty('inbox', '<b>هنوز کسی مطالعه ثبت نکرده</b>اولین نفر باش.');
-  };
-  drawPodium('today');
-  on(el, 'click', '[data-top]', (e, b) => { $$('[data-top]', el).forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); }); drawPodium(b.dataset.top); });
-}
 
 // ================= تکالیف =================
 async function assignments(el) {
@@ -229,32 +176,25 @@ async function takeExam(el, { id }) {
 
 // ================= نتایج و کارنامه =================
 async function results(el) {
-  setHead('نتایج آزمون‌ها', 'آزمون‌های آنلاین، کاغذی و کارنامه جامع برپا');
-  const [list, barpaList] = await Promise.all([
-    api('/api/student/results'),
-    api('/api/barpa-exams/reports').catch(() => [])
-  ]);
-  const kindName = { online: ['آنلاین', 'blue'], paper: ['حضوری', 'orange'], comprehensive: ['جامع کانون', ''] };
+  setHead('پیشرفت من', 'نتیجه هر تلاش، یک قدم رو به جلو');
+  const [list, reports] = await Promise.all([api('/api/student/results'), api('/api/barpa-exams/reports').catch(() => [])]);
   const chrono = [...list].reverse();
-  el.innerHTML = `
-    ${barpaList.length ? `
-      <div class="card" style="margin-bottom:18px;background:linear-gradient(135deg, #f0f7ff 0%, #e6efff 100%);border:1px solid #bfdbfe">
-        <div class="row between" style="align-items:center;margin-bottom:12px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="ib blue">${icon('trophy', { size: 20 })}</span>
-            <b style="color:#1e40af;font-size:15px">کارنامه‌های آزمون جامع برپا (همراه با پاسخ‌برگ ۱۲۰ تایی)</b>
-          </div>
-          <span class="badge blue">${fa(barpaList.length)} کارنامه</span>
-        </div>
-        ${L.barpaList(barpaList)}
-      </div>
-    ` : ''}
-    ${chrono.length > 1 ? `<div class="card" style="margin-bottom:18px"><div class="card-title"><span class="ib">${icon('trend', { size: 18 })}</span>روند درصد آزمون‌ها</div>${lineChart(chrono.map((r) => jdate(r.created_at, { year: false })), [{ name: 'درصد', color: '#0B5F66', values: chrono.map((r) => r.percent) }], { max: 100, height: 200 })}</div>` : ''}
-    <div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>آزمون</th><th>نوع</th><th>تاریخ</th><th>درست/غلط/نزده</th><th>درصد</th><th>رتبه</th><th></th></tr></thead><tbody>
-    ${list.map((r) => `<tr class="click" data-href="#/results/${r.id}"><td class="bold">${subjIcon(r.subject)} ${esc(r.title)}</td><td><span class="badge ${kindName[r.kind][1]}">${kindName[r.kind][0]}</span></td><td>${jdate(r.created_at)}</td>
-      <td class="num"><span class="pos">${fa(r.correct)}</span> / <span class="neg">${fa(r.wrong)}</span> / ${fa(r.blank)}</td><td><b>${pct(r.percent)}</b></td><td>${icon('award', { size: 16 })} ${fa(r.rank)} از ${fa(r.of)}</td><td><a class="btn ghost sm" href="#/results/${r.id}">کارنامه</a></td></tr>`).join('') || `<tr><td colspan="7">${empty('inbox', 'هنوز نتیجه‌ای نداری')}</td></tr>`}
-    </tbody></table></div></div>`;
-  on(el, 'click', 'tr[data-href]', (e, tr) => { if (!e.target.closest('a')) location.hash = tr.dataset.href; });
+  const mean = list.length ? list.reduce((sum,r)=>sum+Number(r.percent),0)/list.length : null;
+  const kinds = {online:'آنلاین',paper:'حضوری',comprehensive:'جامع کانون'};
+  let tab = 'all';
+  el.innerHTML = `<div class="student-results">
+    <section class="student-exam-summary student-panel"><div><h2>میانگین آزمون‌های من</h2><strong>${mean == null ? '—' : pct(mean)}</strong><small>${fa(list.length)} آزمون ثبت‌شده</small></div>${studentDesign.art('trophy')}</section>
+    ${chrono.length > 1 ? `<section class="student-panel"><h2>${studentDesign.art('chart')}روند پیشرفت تحصیلی</h2>${lineChart(chrono.map(r=>jdate(r.created_at,{year:false})),[{name:'درصد آزمون',color:'#08bb61',values:chrono.map(r=>r.percent)}],{max:100,height:180})}</section>` : ''}
+    <section class="student-panel"><h2>${studentDesign.art('books')}میانگین درس‌ها</h2>${studentDesign.averagesHtml(studentDesign.lessonAverages(list))}</section>
+    ${reports.length ? `<section class="student-panel"><h2>${studentDesign.art('exam')}کارنامه‌های جامع برپا</h2>${L.barpaList(reports)}</section>` : ''}
+    <div class="seg" role="tablist" aria-label="نوع آزمون">${[['all','همه آزمون‌ها'],['online','آزمون‌های آنلاین'],['kanoon','آزمون‌های کانون']].map(([key,label])=>`<button role="tab" aria-selected="${key===tab}" class="${key===tab?'on':''}" data-result-tab="${key}">${label}</button>`).join('')}</div>
+    <div class="student-exam-results" id="studentExamResults"></div></div>`;
+  const draw = () => {
+    const rows = list.filter(r=>tab==='all'||(tab==='online'?r.kind==='online':r.kind!=='online'));
+    $('#studentExamResults',el).innerHTML = rows.length ? rows.map(r=>`<a class="student-result-card student-panel" href="#/results/${r.id}">${studentDesign.art('exam')}<div><b>${esc(r.title)}</b><small>${esc(r.subject || '')} · ${kinds[r.kind] || 'آزمون'} · ${jdate(r.created_at)}</small><small>رتبه ${fa(r.rank)} از ${fa(r.of)} · درست ${fa(r.correct)} / غلط ${fa(r.wrong)} / نزده ${fa(r.blank)}</small></div><strong>${pct(r.percent)}</strong>${studentDesign.navIcon('back',18)}</a>`).join('') : `<div class="student-panel">${empty('exam','هنوز نتیجه‌ای برای این بخش نداری')}</div>`;
+  };
+  draw();
+  on(el,'click','[data-result-tab]',(_e,b)=>{tab=b.dataset.resultTab; $$('[data-result-tab]',el).forEach(x=>{x.classList.toggle('on',x===b);x.setAttribute('aria-selected',String(x===b));});draw();});
 }
 
 async function resultDetail(el, { id }) {
@@ -461,8 +401,17 @@ async function payment(el, _p, me) {
   if (f) f.onsubmit = (e) => { e.preventDefault(); busy(e.submitter, async () => { await post('/api/student/payment', { file: await fileToData(f.file.files[0], 6) }); toast('رسید ثبت شد و در انتظار تأیید است', 'ok'); payment(el, _p, me); }); };
 }
 
-export const routes = [
-  { path: '/home', view: home },
+const baseRoutes = [
+  { path: '/challenges', view: studentDesign.roadmap },
+  { path: '/my-class', view: studentDesign.classes },
+  { path: '/teachers', view: studentDesign.classes },
+  { path: '/attendance', view: studentDesign.attendance },
+  { path: '/home', view: studentDesign.home },
+  { path: '/lessons', view: studentDesign.lessons },
+  { path: '/schedule', view: studentDesign.schedule },
+  { path: '/classes', view: studentDesign.classes },
+  { path: '/library', view: studentDesign.library },
+  { path: '/more', view: studentDesign.more, open: true },
   { path: '/assignments', view: assignments },
   { path: '/exams', view: exams },
   { path: '/exam/:id', view: takeExam },
@@ -482,8 +431,14 @@ export const routes = [
   { path: '/shop', view: panelShop },
   { path: '/self-exams', view: L.selfExams },
   { path: '/self-exam/:id', view: L.selfExam },
-  { path: '/roadmap', view: L.roadmap },
+  { path: '/roadmap', view: studentDesign.roadmap },
   { path: '/counselor', view: L.counselor },
   { path: '/records', view: L.records },
   { path: '/barpa/:id', view: L.barpaView },
 ];
+
+export const routes = baseRoutes.map(r => ({ ...r, view: async (el, params, me) => {
+  if (isElementary(me) && elementary.views[r.path]) return elementary.views[r.path](el, params, me);
+  await r.view(el, params, me);
+  if (isElementary(me)) elementary.decorateCore(el, r.path);
+} }));

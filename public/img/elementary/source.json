@@ -1,0 +1,10 @@
+{
+  "source": "User supplied roshd-student-panel.zip",
+  "reused": [
+    "Original asset files",
+    "Scoped original CSS",
+    "Original SVG and animated icon components",
+    "Original WebGL engine adapted to actual student levels"
+  ],
+  "data": "All sample accounts, results, assignments and demo actions are replaced by authenticated platform data."
+}

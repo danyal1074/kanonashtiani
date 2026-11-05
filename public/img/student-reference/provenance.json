@@ -1,0 +1,123 @@
+{
+  "source": "داشبورد آموزشی کانون نخبه_پروری.png",
+  "purpose": "Artwork extracted from the user supplied student panel reference; UI text and data remain live.",
+  "crops": {
+    "books": [
+      75,
+      680,
+      205,
+      770
+    ],
+    "clipboard": [
+      324,
+      678,
+      435,
+      768
+    ],
+    "exam": [
+      535,
+      676,
+      634,
+      768
+    ],
+    "online": [
+      742,
+      680,
+      869,
+      767
+    ],
+    "calendar": [
+      89,
+      838,
+      198,
+      926
+    ],
+    "chart": [
+      311,
+      842,
+      418,
+      926
+    ],
+    "trophy": [
+      523,
+      837,
+      640,
+      927
+    ],
+    "gamepad": [
+      746,
+      839,
+      867,
+      926
+    ],
+    "target": [
+      820,
+      996,
+      887,
+      1054
+    ],
+    "crown": [
+      793,
+      433,
+      864,
+      505
+    ],
+    "coin": [
+      741,
+      38,
+      803,
+      103
+    ],
+    "tasks": [
+      55,
+      1022,
+      316,
+      1251
+    ],
+    "podium": [
+      45,
+      480,
+      235,
+      617
+    ]
+  },
+  "additional_source": "Persian Student App UI Showcase.png",
+  "additional_crops": {
+    "flask": [
+      143,
+      821,
+      184,
+      866
+    ],
+    "calculator": [
+      241,
+      823,
+      281,
+      865
+    ],
+    "languages": [
+      39,
+      913,
+      91,
+      957
+    ],
+    "globe": [
+      141,
+      911,
+      185,
+      961
+    ],
+    "quran": [
+      242,
+      911,
+      291,
+      959
+    ],
+    "open-book": [
+      39,
+      824,
+      93,
+      864
+    ]
+  }
+}

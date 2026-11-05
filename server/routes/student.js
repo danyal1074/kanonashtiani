@@ -3,7 +3,7 @@ import { LEVELS } from '../logic.js';
 // پنل دانش‌آموز
 import { all, get, run, tx } from '../db.js';
 import { fail, saveUpload, ymd, addDays, weekStart, faWeekday, nowIso, clampStr } from '../util.js';
-import { totalPoints, levelOf, rankOf, addPoints, feeStatus, ensureLearningPath, saveExamResult, gradeExam } from '../logic.js';
+import { totalPoints, levelOf, rankOf, studentRankings, addPoints, feeStatus, ensureLearningPath, saveExamResult, gradeExam } from '../logic.js';
 import { studentInfo, centerOf } from './common.js';
 
 const S = { roles: ['student'] };
@@ -47,7 +47,7 @@ export default function register(r) {
     const studyToday = get('SELECT COALESCE(SUM(minutes),0) m FROM pomodoros WHERE student_id=? AND date=?', u.id, today).m;
     const lp = ensureLearningPath(u.id);
     return {
-      points: total, level: levelOf(total), rank: rankOf(u.center_id, s.grade, u.id), grade: s.grade,
+      points: total, level: levelOf(total), rank: rankOf(u.center_id, s.grade, u.id), rankings: studentRankings(u.center_id, s.class_id, u.id), grade: s.grade,
       upcoming, todayClasses,
       top: { today: topStudiers(u.center_id, s.grade, today, today), week: topStudiers(u.center_id, s.grade, weekStart(today), today) },
       study: { today: studyToday, goal: center.min_daily_study },
@@ -56,6 +56,16 @@ export default function register(r) {
       recentPoints: all('SELECT amount, category, reason, created_at FROM points WHERE student_id=? ORDER BY id DESC LIMIT 5', u.id),
       games: get(`SELECT COUNT(*) n FROM game_scores WHERE student_id=?`, u.id).n,
     };
+  });
+
+  // Every record is scoped to the signed-in student; caller-supplied student IDs are ignored.
+  r.get('/api/student/attendance', S, (ctx) => {
+    const from = addDays(ymd(), -90);
+    const rows = all(`SELECT a.date, a.status, c.name class_name FROM attendance a
+      JOIN classes c ON c.id=a.class_id WHERE a.student_id=? AND a.date>=? ORDER BY a.date DESC, a.id DESC`, ctx.user.id, from);
+    const counts = { present: 0, absent: 0, excused: 0 };
+    for (const row of rows) counts[row.status]++;
+    return { ...counts, total: rows.length, from, rows };
   });
 
   // ---------- تکالیف ----------
@@ -69,8 +79,8 @@ export default function register(r) {
     const late = nowIso() > a.deadline ? 1 : 0;
     const prev = get('SELECT * FROM submissions WHERE assignment_id=? AND student_id=?', a.id, ctx.user.id);
     if (prev && prev.late === 0 && late) fail(400, 'مهلت ویرایش این تکلیف تمام شده است');
-    const file = ctx.body.file ? saveUpload(ctx.body.file) : prev?.file_path;
-    const fileName = ctx.body.file ? clampStr(ctx.body.file.name, 120) : prev?.file_name;
+    const file = ctx.body.file ? saveUpload(ctx.body.file) : (prev?.file_path ?? null);
+    const fileName = ctx.body.file ? clampStr(ctx.body.file.name, 120) : (prev?.file_name ?? null);
     tx(() => {
       run(`INSERT INTO submissions (assignment_id, student_id, note, file_path, file_name, late) VALUES (?,?,?,?,?,?)
         ON CONFLICT(assignment_id, student_id) DO UPDATE SET note=excluded.note, file_path=excluded.file_path, file_name=excluded.file_name, late=excluded.late, submitted_at=datetime('now')`,
