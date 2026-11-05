@@ -1,7 +1,7 @@
 import { decoratePageArt } from './artwork.js';
 import { decorateDashboard } from './reference-ui.js';
 // راه‌انداز برنامه: پوسته، منو، مسیر‌یابی نقش‌ها، اطلاعیه تمام‌صفحه، تبریک تولد و قفل پنل
-import { state, api, post, esc, fa, $, $$, on, toast, confetti, logoHtml, ROLE_NAMES, avatar, nameAvatar, jdate, loading, empty, gradeName, icon, labelControls } from './core.js';
+import { state, api, post, esc, fa, $, $$, on, toast, confetti, logoHtml, ROLE_NAMES, avatar, nameAvatar, jdate, loading, empty, gradeName, icon, labelControls, dateField, readDate } from './core.js';
 import { loginView } from './login.js';
 import { publicRoutes } from './shop.js';
 import * as student from './student.js';
@@ -125,7 +125,8 @@ async function render() {
   const panel = PANELS[me.user.role];
   let found = matchPanel(panel.routes, path);
   if (!found) { location.hash = '#/home'; return; }
-  if (me.user?.role === 'student' && me.must_change_password) { ensurePasswordChanged(me); }
+  if (me.user?.role === 'student' && me.must_change_password) { ensurePasswordChanged(me).then(() => ensureProfileComplete(me)); }
+  else if (me.user?.role === 'student') { ensureProfileComplete(me); }
   if (me.fee?.locked && !found.r.open) { location.hash = '#/payment'; return; }
   markActive(path);
   if (me.user.role === 'student') student.prepareStudentPage(path);
@@ -159,6 +160,53 @@ function fullscreen(html, onReady) {
     document.body.append(fs);
     fs.querySelector('[data-ok]')?.focus();
     onReady(fs, () => { fs.remove(); resolve(); });
+  });
+}
+
+// تکمیل اجباری پروفایل در اولین ورود (دانش‌آموزانی که با کد ملی، نام و شماره تماس ثبت شده‌اند)
+async function ensureProfileComplete(me) {
+  if (me.user.role !== 'student' || !me.student || me.student.profile_done !== false) return;
+  if (document.querySelector('.force-profile-fullscreen')) return;
+  await new Promise((resolve) => {
+    const fs = document.createElement('div');
+    fs.className = 'fullscreen force-pw-fullscreen force-profile-fullscreen';
+    fs.innerHTML = `
+      <div class="fs-card" role="dialog" aria-modal="true" aria-labelledby="fpTitle" style="max-width:480px;text-align:right;max-height:92dvh;overflow:auto">
+        <div class="big-emoji sun" style="text-align:center">${icon('user', { size: 40 })}</div>
+        <h2 id="fpTitle" style="text-align:center;margin:12px 0 6px">تکمیل اطلاعات شما</h2>
+        <p class="muted small" style="text-align:center;margin-bottom:16px;line-height:1.8">سلام <b>${esc(me.user.full_name)}</b> عزیز! برای استفاده از پنل، این اطلاعات را یک بار کامل کن.</p>
+        <form id="fpForm" class="stack" style="gap:12px" novalidate>
+          <div class="field"><label for="fpSchool">نام مدرسه *</label><input class="input" id="fpSchool" name="school" maxlength="100" required autocomplete="organization"></div>
+          <div class="field"><label>تاریخ تولد *</label>${dateField('fpBirth', null, { minYear: 1385, maxYear: 1400 })}</div>
+          <div class="field"><label for="fpGender">جنسیت *</label><select class="input" id="fpGender" name="gender" required><option value="">انتخاب کنید</option><option value="f">دختر</option><option value="m">پسر</option></select></div>
+          <div class="field"><label for="fpAddress">نشانی منزل *</label><textarea class="input" id="fpAddress" name="address" maxlength="300" style="min-height:64px" required autocomplete="street-address"></textarea></div>
+          <div class="field"><label for="fpPhone">شماره تماس (در صورت تغییر)</label><input class="input ltr" id="fpPhone" name="phone" inputmode="tel" maxlength="11" placeholder="09xxxxxxxxx" autocomplete="tel"></div>
+          <div class="field-error" id="fpErr" role="alert" style="display:none;color:var(--red-600);background:var(--red-soft);padding:8px 12px;border-radius:8px;font-size:13px"></div>
+          <button class="btn lg block accent" type="submit" id="fpBtn">${icon('check', { size: 18 })} ذخیره و ورود به پنل</button>
+        </form>
+        <div style="margin-top:14px;text-align:center"><button type="button" class="btn sm ghost" id="fpLogout">${icon('logout', { size: 14 })} خروج از حساب</button></div>
+      </div>`;
+    document.body.append(fs);
+    const form = fs.querySelector('#fpForm'), errEl = fs.querySelector('#fpErr'), btn = fs.querySelector('#fpBtn');
+    fs.querySelector('#fpSchool').focus();
+    fs.querySelector('#fpLogout').onclick = async () => { await post('/api/auth/logout'); state.me = null; location.hash = '#/login'; fs.remove(); boot(); };
+    const showErr = (m) => { errEl.textContent = m; errEl.style.display = 'block'; };
+    form.onsubmit = async (e) => {
+      e.preventDefault(); errEl.style.display = 'none';
+      const birth = readDate(fs, 'fpBirth');
+      if (!form.school.value.trim()) return showErr('نام مدرسه را وارد کن');
+      if (!birth) return showErr('تاریخ تولد را کامل انتخاب کن');
+      if (!form.gender.value) return showErr('جنسیت را انتخاب کن');
+      if (form.address.value.trim().length < 5) return showErr('نشانی منزل را وارد کن');
+      const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = 'در حال ذخیره…';
+      try {
+        await post('/api/student/complete-profile', { school: form.school.value, birth_date: birth, gender: form.gender.value, address: form.address.value, phone: form.phone.value });
+        if (state.me?.student) state.me.student.profile_done = true;
+        toast('اطلاعات ذخیره شد. خوش آمدی!', 'ok');
+        fs.remove(); resolve();
+        await loadMe(); render();
+      } catch (err) { showErr(err.message || 'خطا در ذخیره اطلاعات'); } finally { btn.disabled = false; btn.innerHTML = old; }
+    };
   });
 }
 async function ensurePasswordChanged(me) {

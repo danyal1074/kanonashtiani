@@ -112,6 +112,7 @@ check('دانش‌آموز تازه قبل از تعویض رمز مسدود ا�
 const pwChange = await call(fresh.ck, 'POST', '/api/me/password', { current: nc, next: 'StudentNew#123' });
 check('تعویض اجباری رمز توسط دانش‌آموز تازه', pwChange.status === 200);
 const freshAfterPw = { ck: pwChange.ck || (await login('student', nc, 'StudentNew#123')).ck };
+await call(freshAfterPw.ck, 'POST', '/api/student/complete-profile', { school: 'دبستان نمونه', birth_date: '1392/05/12', gender: 'f', address: 'تهران، خیابان نمونه' });
 // پومودورو: ثبت و جلوگیری از ثبت پشت‌سرهم بی‌فاصله
 const p1 = await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 });
 check('ثبت پومودورو پس از تعویض رمز', p1.status === 200);
@@ -131,6 +132,28 @@ check('مدیر اشتراک سامانه را تغییر می‌دهد', (await
 check('اشتراک سامانه عددی نامعتبر صفر می‌شود', (await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 'abc', settings: [] })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/fees')).data.system_fee === 0);
 await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 100000, settings: [] });
 check('نقش ناشناخته (والدین) در ورود رد می‌شود', (await call('', 'POST', '/api/auth/login', { role: 'parent', identifier: '09120000000', password: 'x' })).status === 400);
+// ثبت‌نام گروهی فقط با نام، کد ملی و شماره تماس + تکمیل اجباری پروفایل در اولین ورود
+const nc3 = (() => { const d = [1, 6, 1, 8, 0, 3, 3, 9, 8]; const s = d.reduce((a, x, i) => a + x * (10 - i), 0) % 11; return d.join('') + (s < 2 ? s : 11 - s); })();
+const imp = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس
+تست گروهی,${nc3},09121112233
+`, grade: 4, class_name: 'تست‌گروهی' });
+check('ثبت‌نام گروهی با سه ستون و پایهٔ انتخابی', imp.status === 200 && imp.data.created === 1, JSON.stringify(imp.data).slice(0, 120));
+const impNoGrade = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس
+بی‌پایه,${nc2},09121112234
+`, dry_run: true });
+check('بدون پایه (نه ستون و نه فرم) خطای واضح می‌دهد', impNoGrade.status === 200 && impNoGrade.data.errors.some((e) => /پایه/.test(e.message)));
+const gs = await login('student', nc3, nc3);
+check('ورود دانش‌آموز واردشده گروهی', gs.status === 200);
+const meG = (await call(gs.ck, 'GET', '/api/me')).data;
+check('پروفایل ناقص و رمز اولیه در /api/me اعلام می‌شود', meG.student.profile_done === false && meG.must_change_password === true);
+check('تا تکمیل پروفایل بقیه مسیرها بسته است (۴۲۸)', [428].includes((await call(gs.ck, 'GET', '/api/student/dashboard')).status));
+check('تا تغییر رمز اولیه، تکمیل پروفایل هم بسته است (۴۲۸)', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'x' })).status === 428);
+await call(gs.ck, 'POST', '/api/me/password', { current: nc3, next: 'رمز-جدید-123' });
+gs.ck = (await login('student', nc3, 'رمز-جدید-123')).ck;
+check('تکمیل پروفایل بدون مدرسه رد می‌شود', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: '', birth_date: '1392/05/12', gender: 'f', address: 'تهران، خیابان نمونه' })).status === 400);
+const cp = await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'دبستان نمونه', birth_date: '1392/05/12', gender: 'f', address: 'تهران، خیابان نمونه ۱' });
+check('تکمیل پروفایل موفق', cp.status === 200, JSON.stringify(cp.data));
+check('پروفایل پس از تکمیل ثبت شده است', (await call(gs.ck, 'GET', '/api/me')).data.student.profile_done === true);
 check('جدول هفتگی مدیر برمی‌گردد', Array.isArray((await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data));
 check('جدول هفتگی معلم برمی‌گردد', Array.isArray((await call(S.teacher.ck, 'GET', '/api/teacher/schedule')).data?.sessions));
 
@@ -406,7 +429,7 @@ sDb7.close();
 // بررسی سامانه مهاجرت و نسخه ۵ پایگاه داده
 const sDbEnd = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'), { readOnly: true });
 const ver5 = sDbEnd.prepare('PRAGMA user_version').get()?.user_version;
-check('مهاجرت: PRAGMA user_version دقیقاً برابر ۷ است', ver5 === 7, `نسخه فعلی: ${ver5}`);
+check('مهاجرت: PRAGMA user_version حداقل ۸ است', ver5 >= 8, `نسخه فعلی: ${ver5}`);
 const defaultBooks = sDbEnd.prepare("SELECT COUNT(*) n FROM exam_books WHERE center_id IS NULL").get()?.n;
 check('مهاجرت نسخه ۵: کتاب‌های پیش‌فرض دارای center_id NULL هستند (عمومی)', defaultBooks >= 2);
 sDbEnd.close();

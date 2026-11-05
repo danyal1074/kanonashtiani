@@ -159,7 +159,7 @@ export default function register(r) {
     const id = tx(() => {
       const res = run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`, ctx.user.center_id, 'student', d.national_code, hashPassword(d.national_code), d.full_name, d.gender);
       const uid = Number(res.lastInsertRowid);
-      run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar) VALUES (?,?,?,?,?,?,?,?)', uid, d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, 'sprout');
+      run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar, profile_done) VALUES (?,?,?,?,?,?,?,?,?)', uid, d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, 'sprout', d.school && d.birth_date && d.address ? 1 : 0);
       return uid;
     });
     return { ok: true, id, credentials: { student: `نام کاربری و رمز اولیه دانش‌آموز: کد ملی (${d.national_code})` } };
@@ -168,7 +168,7 @@ export default function register(r) {
   r.post('/api/manager/students/import', M, async (ctx) => {
     const csv = String(ctx.body.csv || '');
     if (!csv.trim()) fail(400, 'فایل CSV خالی است');
-    try { return await importStudents(ctx.user.center_id, csv, { dryRun: !!ctx.body.dry_run }); } catch (e) { fail(400, e.message); }
+    try { return await importStudents(ctx.user.center_id, csv, { dryRun: !!ctx.body.dry_run, grade: Number(ctx.body.grade) || null, className: ctx.body.class_name }); } catch (e) { fail(400, e.message); }
   });
   r.put('/api/manager/students/:id', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);

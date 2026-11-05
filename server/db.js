@@ -598,6 +598,15 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     const pc = database.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
     if (!pc.includes('system_fee')) database.exec('ALTER TABLE payments ADD COLUMN system_fee INTEGER NOT NULL DEFAULT 0');
   },
+  // Per-center timetable colors; existing schedules are preserved.
+  (database) => {
+    database.exec("CREATE TABLE IF NOT EXISTS schedule_colors (center_id INTEGER PRIMARY KEY REFERENCES centers(id) ON DELETE CASCADE, config TEXT NOT NULL DEFAULT '{}')");
+  },
+  // نسخه ۸: تکمیل اجباری پروفایل در اولین ورود (دانش‌آموزان موجود «تکمیل‌شده» هستند)
+  (database) => {
+    const cols = database.prepare('PRAGMA table_info(students)').all().map((c) => c.name);
+    if (!cols.includes('profile_done')) database.exec('ALTER TABLE students ADD COLUMN profile_done INTEGER NOT NULL DEFAULT 1');
+  },
 ];
 
 export function migrate(database = db) {

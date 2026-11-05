@@ -85,7 +85,7 @@ export default function register(r) {
     if (u.role === 'student') {
       const s = studentInfo(u.id);
       const total = totalPoints(u.id);
-      out.student = s ? { grade: s.grade, class_id: s.class_id, class_name: s.class_name, school: s.school, avatar: s.avatar, birthday: isBirthday(s.birth_date), points: total, level: levelOf(total) } : { grade: 7, class_id: null, class_name: null, school: '', avatar: 'sprout', birthday: false, points: total, level: levelOf(total) };
+      out.student = s ? { grade: s.grade, class_id: s.class_id, class_name: s.class_name, school: s.school, profile_done: !!s.profile_done, avatar: s.avatar, birthday: isBirthday(s.birth_date), points: total, level: levelOf(total) } : { grade: 7, class_id: null, class_name: null, school: '', avatar: 'sprout', birthday: false, points: total, level: levelOf(total) };
       out.fee = feeStatus(u.id);
     }
     if (u.role === 'parent') out.children = all(`SELECT u.id, u.full_name, s.grade, s.avatar, c.name class_name FROM parent_children pc JOIN users u ON u.id=pc.student_id JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE pc.parent_id=? ORDER BY s.grade`, u.id);

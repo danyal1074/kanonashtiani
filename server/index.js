@@ -40,7 +40,7 @@ function loadUser(req) {
   const tok = parseCookies(req.headers.cookie)[COOKIE];
   const p = readToken(tok);
   if (!p) return {};
-  const user = get('SELECT id, center_id, role, username, national_code, mobile, full_name, gender, active, pass_hash, must_change_password FROM users WHERE id=?', p.uid);
+  const user = get('SELECT id, center_id, role, username, national_code, mobile, full_name, gender, active, pass_hash, must_change_password, (SELECT profile_done FROM students WHERE user_id=users.id) profile_done FROM users WHERE id=?', p.uid);
   if (!user || !user.active || user.role === 'parent') return {};
   // اعتبار توکن پس از تغییر رمز از بین می‌رود
   if (p.pv && p.pv !== user.pass_hash.slice(-8)) return {};
@@ -103,6 +103,9 @@ async function handle(req, res) {
       if (route.roles && !route.roles.includes(user.role)) throw new HttpError(403, 'به این بخش دسترسی ندارید');
       if (user?.role === 'student' && user.must_change_password && route.auth !== false && pathname !== '/api/me' && pathname !== '/api/me/password') {
         throw new HttpError(428, 'لطفاً ابتدا رمز عبور خود را تغییر دهید');
+      }
+      if (user?.role === 'student' && user.profile_done === 0 && route.auth !== false && !['/api/me', '/api/me/password', '/api/student/complete-profile'].includes(pathname)) {
+        throw new HttpError(428, 'لطفاً ابتدا اطلاعات پروفایل خود را تکمیل کنید');
       }
       if (user?.role === 'student' && route.auth !== false && !route.allowLocked && feeStatus(user.id)?.locked) {
         throw new HttpError(423, 'پنل شما به دلیل پرداخت نشدن حق عضویت قفل است');
