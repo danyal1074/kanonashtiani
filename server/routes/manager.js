@@ -168,7 +168,7 @@ export default function register(r) {
   r.post('/api/manager/students/import', M, async (ctx) => {
     const csv = String(ctx.body.csv || '');
     if (!csv.trim()) fail(400, 'فایل CSV خالی است');
-    try { return await importStudents(ctx.user.center_id, csv, { dryRun: !!ctx.body.dry_run, grade: Number(ctx.body.grade) || null, className: ctx.body.class_name }); } catch (e) { fail(400, e.message); }
+    try { return await importStudents(ctx.user.center_id, csv, { dryRun: !!ctx.body.dry_run }); } catch (e) { fail(400, e.message); }
   });
   r.put('/api/manager/students/:id', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);

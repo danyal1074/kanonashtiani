@@ -142,9 +142,8 @@ async function students(el) {
   };
   $('#importSt').onclick = () => modal({
     title: 'ثبت‌نام گروهی از فایل CSV', wide: true,
-    body: `<div class="stack"><p class="small muted" style="margin:0;line-height:2">فایل اکسل را با «Save As ← CSV UTF-8» ذخیره کنید. فقط سه ستون کافی است: نام و نام خانوادگی، کد ملی، شماره تماس. پایه و کلاس را از همین فرم انتخاب کنید. بقیهٔ اطلاعات (مدرسه، تاریخ تولد، جنسیت، نشانی) را خود دانش‌آموز در اولین ورود تکمیل می‌کند.
+    body: `<div class="stack"><p class="small muted" style="margin:0;line-height:2">فایل اکسل را با «Save As ← CSV UTF-8» ذخیره کنید. ستون‌های لازم: نام و نام خانوادگی، کد ملی، پایه (مثلاً چهارم)، جنسیت (دختر یا پسر). ستون‌های اختیاری: شماره تماس، کلاس (مثلاً «دختر ۱»؛ پیش‌فرض «الف»)، نام پدر، مدرسه، تاریخ تولد (شمسی)، نشانی، شهریه این ماه («پرداخت شده» یعنی شهریهٔ این ماه تسویه است). هر اطلاعاتی که در فایل نباشد، دانش‌آموز در اولین ورود تکمیل می‌کند.
       <a href="/samples/students-template.csv" download>دانلود فایل نمونه</a></p>
-      <div class="row wrap" style="gap:var(--s-3)"><div class="field"><label for="impGrade">پایهٔ این فهرست</label><select class="input" id="impGrade"><option value="">انتخاب پایه</option>${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div><div class="field grow"><label for="impClass">نام کلاس (مثلاً «پسر» یا «دختر ۱»)</label><input class="input" id="impClass" list="impClassList" maxlength="30" placeholder="الف"><datalist id="impClassList">${md.classes.map((c) => `<option value="${esc(c.name)}">`).join('')}</datalist></div></div>
       <div class="field"><label for="csvFile">فایل CSV</label><input class="input" type="file" id="csvFile" accept=".csv,text/csv,.txt"></div><div id="csvOut" aria-live="polite"></div></div>`,
     actions: [{ label: 'بستن', cls: 'ghost', value: false },
       { label: 'بررسی بدون ثبت', cls: 'soft', onClick: (m) => runImport(m, true) },
@@ -153,8 +152,7 @@ async function students(el) {
   async function runImport(m, dry) {
     const f = $('#csvFile', m).files[0];
     if (!f) throw new Error('ابتدا فایل CSV را انتخاب کنید');
-    const grade = Number($('#impGrade', m).value) || null;
-    const r = await post('/api/manager/students/import', { csv: await f.text(), dry_run: dry, grade, class_name: $('#impClass', m).value.trim() });
+    const r = await post('/api/manager/students/import', { csv: await f.text(), dry_run: dry });
     const bad = r.errors.filter((e) => !e.message.includes('قبلاً ثبت'));
     $('#csvOut', m).innerHTML = `<div class="row wrap" style="gap:var(--s-2)"><span class="badge">${fa(r.total)} سطر</span><span class="badge green">${dry ? 'قابل ثبت' : 'ثبت‌شده'}: ${fa(dry ? r.valid : r.created)}</span>${r.skipped_existing ? `<span class="badge gray">تکراری: ${fa(r.skipped_existing)}</span>` : ''}${bad.length ? `<span class="badge red">خطا: ${fa(bad.length)}</span>` : ''}</div>
       ${r.errors.length ? `<div class="table-wrap" style="max-height:240px;margin-top:var(--s-3)"><table class="table"><thead><tr><th>سطر</th><th>نام</th><th>مشکل</th></tr></thead><tbody>${r.errors.slice(0, 100).map((e) => `<tr><td>${fa(e.line)}</td><td>${esc(e.name || '')}</td><td class="small">${esc(e.message)}</td></tr>`).join('')}</tbody></table></div>` : ''}

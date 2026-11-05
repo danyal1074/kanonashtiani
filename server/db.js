@@ -607,6 +607,11 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     const cols = database.prepare('PRAGMA table_info(students)').all().map((c) => c.name);
     if (!cols.includes('profile_done')) database.exec('ALTER TABLE students ADD COLUMN profile_done INTEGER NOT NULL DEFAULT 1');
   },
+  // نسخه ۱۰: نام پدر دانش‌آموز (از فایل ثبت‌نام گروهی یا فرم اولین ورود)
+  (database) => {
+    const cols = database.prepare('PRAGMA table_info(students)').all().map((c) => c.name);
+    if (!cols.includes('father_name')) database.exec('ALTER TABLE students ADD COLUMN father_name TEXT');
+  },
 ];
 
 export function migrate(database = db) {

@@ -188,13 +188,12 @@ export default function register(r) {
       ledger, positive: sum((x) => x.amount > 0), negative: sum((x) => x.amount < 0), schedule, materials, purchased,
     };
   });
-  // تکمیل اجباری پروفایل در اولین ورود (مدرسه، تاریخ تولد، جنسیت، نشانی؛ شمارهٔ تماس اختیاری برای اصلاح)
+  // تکمیل اجباری پروفایل در اولین ورود (مدرسه، تاریخ تولد، نشانی؛ شمارهٔ تماس اختیاری برای اصلاح)
   r.post('/api/student/complete-profile', { ...S, allowLocked: true }, (ctx) => {
     const b = ctx.body;
     const school = clampStr(b.school, 100), address = clampStr(b.address, 300);
     if (!school) fail(400, 'نام مدرسه را وارد کنید');
     if (!address || address.length < 5) fail(400, 'نشانی منزل را وارد کنید');
-    if (!['m', 'f'].includes(b.gender)) fail(400, 'جنسیت را انتخاب کنید');
     let birth;
     try { birth = parseBirthDate(b.birth_date); } catch (e) { fail(400, e.message); }
     if (!birth) fail(400, 'تاریخ تولد را وارد کنید');
@@ -202,8 +201,7 @@ export default function register(r) {
     const phone = hasPhone ? normalizeIranianMobile(b.phone) : null;
     if (hasPhone && !phone) fail(400, 'شمارهٔ تماس باید ۱۱ رقم و با ۰۹ شروع شود');
     tx(() => {
-      run('UPDATE users SET gender=? WHERE id=?', b.gender, ctx.user.id);
-      run('UPDATE students SET school=?, birth_date=?, address=?, parent_phone=COALESCE(?, parent_phone), profile_done=1 WHERE user_id=?', school, birth, address, phone, ctx.user.id);
+      run('UPDATE students SET school=?, birth_date=?, address=?, parent_phone=COALESCE(?, parent_phone), father_name=COALESCE(?, father_name), profile_done=1 WHERE user_id=?', school, birth, address, phone, clampStr(b.father_name, 80) || null, ctx.user.id);
     });
     return { ok: true };
   });

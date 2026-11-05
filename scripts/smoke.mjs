@@ -134,24 +134,30 @@ await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 100000, setti
 check('نقش ناشناخته (والدین) در ورود رد می‌شود', (await call('', 'POST', '/api/auth/login', { role: 'parent', identifier: '09120000000', password: 'x' })).status === 400);
 // ثبت‌نام گروهی فقط با نام، کد ملی و شماره تماس + تکمیل اجباری پروفایل در اولین ورود
 const nc3 = (() => { const d = [1, 6, 1, 8, 0, 3, 3, 9, 8]; const s = d.reduce((a, x, i) => a + x * (10 - i), 0) % 11; return d.join('') + (s < 2 ? s : 11 - s); })();
-const imp = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس
-تست گروهی,${nc3},09121112233
-`, grade: 4, class_name: 'تست‌گروهی' });
-check('ثبت‌نام گروهی با سه ستون و پایهٔ انتخابی', imp.status === 200 && imp.data.created === 1, JSON.stringify(imp.data).slice(0, 120));
-const impNoGrade = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس
-بی‌پایه,${nc2},09121112234
+const imp = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت,کلاس,نام پدر,شهریه این ماه
+تست گروهی,${nc3},09121112233,چهارم,دختر,تست‌گروهی,پدر تست,پرداخت شده
+` });
+check('ثبت‌نام گروهی با ستون‌های پایه و جنسیت و اختیاری‌ها', imp.status === 200 && imp.data.created === 1, JSON.stringify(imp.data).slice(0, 120));
+const impNoGrade = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت
+بی‌جنسیت,${nc2},09121112234,چهارم,
 `, dry_run: true });
-check('بدون پایه (نه ستون و نه فرم) خطای واضح می‌دهد', impNoGrade.status === 200 && impNoGrade.data.errors.some((e) => /پایه/.test(e.message)));
+check('جنسیت خالی خطای واضح می‌دهد', impNoGrade.status === 200 && impNoGrade.data.errors.some((e) => /جنسیت/.test(e.message)));
+const impNoCols = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس
+x,${nc2},0912
+`, dry_run: true });
+check('نبودن ستون پایه و جنسیت در فایل رد می‌شود', impNoCols.status === 400 && /پایه/.test(impNoCols.data.error));
 const gs = await login('student', nc3, nc3);
 check('ورود دانش‌آموز واردشده گروهی', gs.status === 200);
+const feeG = (await call(S.manager.ck, 'GET', '/api/manager/fees')).data;
+check('شهریهٔ پرداخت‌شدهٔ فایل ثبت شد یا چون مبلغ پایه تعیین نشده کنار گذاشته شد', imp.data.fee_paid_recorded + imp.data.fee_paid_unset === 1, JSON.stringify([imp.data.fee_paid_recorded, imp.data.fee_paid_unset]));
 const meG = (await call(gs.ck, 'GET', '/api/me')).data;
 check('پروفایل ناقص و رمز اولیه در /api/me اعلام می‌شود', meG.student.profile_done === false && meG.must_change_password === true);
 check('تا تکمیل پروفایل بقیه مسیرها بسته است (۴۲۸)', [428].includes((await call(gs.ck, 'GET', '/api/student/dashboard')).status));
 check('تا تغییر رمز اولیه، تکمیل پروفایل هم بسته است (۴۲۸)', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'x' })).status === 428);
 await call(gs.ck, 'POST', '/api/me/password', { current: nc3, next: 'رمز-جدید-123' });
 gs.ck = (await login('student', nc3, 'رمز-جدید-123')).ck;
-check('تکمیل پروفایل بدون مدرسه رد می‌شود', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: '', birth_date: '1392/05/12', gender: 'f', address: 'تهران، خیابان نمونه' })).status === 400);
-const cp = await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'دبستان نمونه', birth_date: '1392/05/12', gender: 'f', address: 'تهران، خیابان نمونه ۱' });
+check('تکمیل پروفایل بدون مدرسه رد می‌شود', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: '', birth_date: '1392/05/12', address: 'تهران، خیابان نمونه' })).status === 400);
+const cp = await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'دبستان نمونه', birth_date: '1392/05/12', father_name: 'پدر', address: 'تهران، خیابان نمونه ۱' });
 check('تکمیل پروفایل موفق', cp.status === 200, JSON.stringify(cp.data));
 check('پروفایل پس از تکمیل ثبت شده است', (await call(gs.ck, 'GET', '/api/me')).data.student.profile_done === true);
 check('جدول هفتگی مدیر برمی‌گردد', Array.isArray((await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data));

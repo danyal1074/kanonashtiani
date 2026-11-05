@@ -178,7 +178,7 @@ async function ensureProfileComplete(me) {
         <form id="fpForm" class="stack" style="gap:12px" novalidate>
           <div class="field"><label for="fpSchool">نام مدرسه *</label><input class="input" id="fpSchool" name="school" maxlength="100" required autocomplete="organization"></div>
           <div class="field"><label>تاریخ تولد *</label>${dateField('fpBirth', null, { minYear: 1385, maxYear: 1400 })}</div>
-          <div class="field"><label for="fpGender">جنسیت *</label><select class="input" id="fpGender" name="gender" required><option value="">انتخاب کنید</option><option value="f">دختر</option><option value="m">پسر</option></select></div>
+          <div class="field"><label for="fpFather">نام پدر</label><input class="input" id="fpFather" name="father_name" maxlength="80" autocomplete="off"></div>
           <div class="field"><label for="fpAddress">نشانی منزل *</label><textarea class="input" id="fpAddress" name="address" maxlength="300" style="min-height:64px" required autocomplete="street-address"></textarea></div>
           <div class="field"><label for="fpPhone">شماره تماس (در صورت تغییر)</label><input class="input ltr" id="fpPhone" name="phone" inputmode="tel" maxlength="11" placeholder="09xxxxxxxxx" autocomplete="tel"></div>
           <div class="field-error" id="fpErr" role="alert" style="display:none;color:var(--red-600);background:var(--red-soft);padding:8px 12px;border-radius:8px;font-size:13px"></div>
@@ -196,11 +196,10 @@ async function ensureProfileComplete(me) {
       const birth = readDate(fs, 'fpBirth');
       if (!form.school.value.trim()) return showErr('نام مدرسه را وارد کن');
       if (!birth) return showErr('تاریخ تولد را کامل انتخاب کن');
-      if (!form.gender.value) return showErr('جنسیت را انتخاب کن');
       if (form.address.value.trim().length < 5) return showErr('نشانی منزل را وارد کن');
       const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = 'در حال ذخیره…';
       try {
-        await post('/api/student/complete-profile', { school: form.school.value, birth_date: birth, gender: form.gender.value, address: form.address.value, phone: form.phone.value });
+        await post('/api/student/complete-profile', { school: form.school.value, birth_date: birth, father_name: form.father_name.value, address: form.address.value, phone: form.phone.value });
         if (state.me?.student) state.me.student.profile_done = true;
         toast('اطلاعات ذخیره شد. خوش آمدی!', 'ok');
         fs.remove(); resolve();
