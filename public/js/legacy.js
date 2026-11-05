@@ -198,7 +198,7 @@ export async function barpaDetail(el, p) {
   `;
 
   const doPrint = () => window.print();
-  $('#printReportBtn', el)?.addEventListener('click', doPrint);
+  $('#printReportBtn')?.addEventListener('click', doPrint); // این دکمه در سربرگ و بیرون از el است
   $('#printReportInnerBtn', el)?.addEventListener('click', doPrint);
 
   // Bubble filter interactivity
@@ -371,6 +371,24 @@ export async function mgrInvoices(el) {
 }
 const SMS = { sent: ['ارسال شد', 'green'], failed: ['ناموفق', 'red'], pending: ['در صف', 'orange'] };
 
+// انتخاب دانش‌آموز با جست‌وجوی سرور؛ نتیجه { id, name } یا null
+const pickStudent = (title, hint = '') => modal({
+  title,
+  body: `${hint ? `<p class="small" style="margin-top:0">${hint}</p>` : ''}<div class="field"><label for="psQ">نام یا کد ملی دانش‌آموز</label><input class="input" id="psQ" autocomplete="off" placeholder="حداقل ۲ حرف"></div><div id="psList" class="list" style="margin-top:10px;max-height:46vh;overflow:auto" aria-live="polite"></div>`,
+  actions: [{ label: 'انصراف', cls: 'ghost', value: null }],
+  onOpen: (m, close) => {
+    const q = m.querySelector('#psQ'), box = m.querySelector('#psList');
+    let t;
+    q.oninput = () => { clearTimeout(t); t = setTimeout(async () => {
+      const v = q.value.trim();
+      if (v.length < 2) { box.innerHTML = ''; return; }
+      const r = await api(`/api/manager/students?${new URLSearchParams({ q: v, limit: 20 })}`);
+      box.innerHTML = r.rows.length ? r.rows.map((x) => `<button type="button" class="list-item" data-ps="${x.id}" style="width:100%;text-align:start;border:0;background:none;cursor:pointer;font:inherit"><div class="grow"><b>${esc(x.full_name)}</b><div class="tiny muted">${esc(gradeName(x.grade))} ${esc(x.class_name || '')} · <span dir="ltr">${esc(x.national_code || '—')}</span></div></div></button>`).join('') : '<div class="muted small">دانش‌آموزی پیدا نشد</div>';
+    }, 250); };
+    on(box, 'click', '[data-ps]', (e, b) => close({ id: Number(b.dataset.ps), name: b.querySelector('b').textContent }));
+  },
+}).then((v) => (v && v.id ? v : null));
+
 export async function openSmsModal(prefill = {}) {
   const md = await api('/api/manager/meta');
   return modal({
@@ -516,30 +534,26 @@ export async function openSmsModal(prefill = {}) {
 export async function smsOutbox(el) {
   setHead('صندوق خروجی پیامک', 'وضعیت همه‌ی پیامک‌های کانون و ارسال پیامک جدید به دانش‌آموزان و اولیا', `<button class="btn sm" id="btnNewSms">${icon('send', { size: 16 })} ارسال پیامک جدید</button>`);
   const rows = await api('/api/manager/sms-outbox');
-  el.innerHTML = `<section class="card">${rows.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>گیرنده</th><th>دانش‌آموز</th><th>متن</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead><tbody>${rows.map((m) => `<tr><td dir="ltr">${esc(m.recipient_phone)}</td><td>${esc(m.student_name || '—')}</td><td class="small">${esc(m.content)}${m.error_message ? `<div class="tiny red-t">${esc(m.error_message)}</div>` : ''}</td><td><span class="badge ${(SMS[m.status] || ['', ''])[1]}">${(SMS[m.status] || [m.status])[0]}</span></td><td class="tiny muted">${dt(m.sent_at || m.created_at)}</td><td>${m.status === 'failed' ? `<button class="btn sm soft" data-retry="${m.id}">ارسال مجدد</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'پیامکی ثبت نشده')}</section>`;
+  el.innerHTML = `
+    <section class="card">
+      <div class="row between" style="margin-bottom:14px;flex-wrap:wrap;gap:8px;align-items:center">
+        <div><b>تاریخچه پیامک‌های ارسالی</b> <span class="tiny muted">(${fa(rows.length)} پیام)</span></div>
+        <button class="btn sm" id="btnNewSmsInCard">${icon('send', { size: 16 })} ارسال پیامک جدید</button>
+      </div>
+      ${rows.length ? `
+        <div class="table-wrap"><table class="table"><thead><tr><th>گیرنده</th><th>دانش‌آموز</th><th>متن</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead><tbody>
+        ${rows.map((m) => `<tr><td dir="ltr">${esc(m.recipient_phone)}</td><td>${esc(m.student_name || '—')}</td><td class="small">${esc(m.content)}${m.error_message ? `<div class="tiny red-t">${esc(m.error_message)}</div>` : ''}</td><td><span class="badge ${(SMS[m.status] || ['', ''])[1]}">${(SMS[m.status] || [m.status])[0]}</span></td><td class="tiny muted">${dt(m.sent_at || m.created_at)}</td><td>${m.status === 'failed' ? `<button class="btn sm soft" data-retry="${m.id}">ارسال مجدد</button>` : ''}</td></tr>`).join('')}
+        </tbody></table></div>
+      ` : empty('inbox', 'پیامکی ثبت نشده')}
+    </section>
+  `;
   on(el, 'click', '[data-retry]', (e, b) => busy(b, async () => { const r = await post(`/api/manager/sms-outbox/${b.dataset.retry}/retry`); toast(r.ok ? 'پیامک ارسال شد' : `ناموفق: ${r.error}`, r.ok ? 'ok' : ''); smsOutbox(el); }));
-  $('#btnNewSms', el)?.addEventListener('click', async () => {
-    const res = await openSmsModal();
-    if (res) smsOutbox(el);
-  });
+
+  const triggerNewSms = () => openSmsModal().then((res) => { if (res) smsOutbox(el); });
+  const topBtn = document.getElementById('btnNewSms');
+  if (topBtn) topBtn.onclick = triggerNewSms;
+  $('#btnNewSmsInCard', el)?.addEventListener('click', triggerNewSms);
 }
-// انتخاب دانش‌آموز با جست‌وجوی سرور؛ نتیجه { id, name } یا null
-const pickStudent = (title, hint = '') => modal({
-  title,
-  body: `${hint ? `<p class="small" style="margin-top:0">${hint}</p>` : ''}<div class="field"><label for="psQ">نام یا کد ملی دانش‌آموز</label><input class="input" id="psQ" autocomplete="off" placeholder="حداقل ۲ حرف"></div><div id="psList" class="list" style="margin-top:10px;max-height:46vh;overflow:auto" aria-live="polite"></div>`,
-  actions: [{ label: 'انصراف', cls: 'ghost', value: null }],
-  onOpen: (m, close) => {
-    const q = m.querySelector('#psQ'), box = m.querySelector('#psList');
-    let t;
-    q.oninput = () => { clearTimeout(t); t = setTimeout(async () => {
-      const v = q.value.trim();
-      if (v.length < 2) { box.innerHTML = ''; return; }
-      const r = await api(`/api/manager/students?${new URLSearchParams({ q: v, limit: 20 })}`);
-      box.innerHTML = r.rows.length ? r.rows.map((x) => `<button type="button" class="list-item" data-ps="${x.id}" style="width:100%;text-align:start;border:0;background:none;cursor:pointer;font:inherit"><div class="grow"><b>${esc(x.full_name)}</b><div class="tiny muted">${esc(gradeName(x.grade))} ${esc(x.class_name || '')} · <span dir="ltr">${esc(x.national_code || '—')}</span></div></div></button>`).join('') : '<div class="muted small">دانش‌آموزی پیدا نشد</div>';
-    }, 250); };
-    on(box, 'click', '[data-ps]', (e, b) => close({ id: Number(b.dataset.ps), name: b.querySelector('b').textContent }));
-  },
-}).then((v) => (v && v.id ? v : null));
 
 export async function mgrBarpa(el) {
   setHead('کارنامه‌های آزمون جامع برپا', 'صدور دستی یا تفکیک خودکار کارنامه با آپلود PDF نتایج');
