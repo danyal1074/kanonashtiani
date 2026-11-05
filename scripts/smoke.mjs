@@ -402,6 +402,48 @@ const defaultBooks = sDbEnd.prepare("SELECT COUNT(*) n FROM exam_books WHERE cen
 check('مهاجرت نسخه ۵: کتاب‌های پیش‌فرض دارای center_id NULL هستند (عمومی)', defaultBooks >= 2);
 sDbEnd.close();
 
+// ==================== ارزیابی جامع امنیت و کنترل دسترسی بک‌اند ====================
+
+// ۱) خروج، پاکسازی نشست و اعتبارسنجی توکن
+const sLogout = await login('student', 'student');
+check('ورود موقت دانش‌آموز برای بررسی خروج', sLogout.status === 200 && !!sLogout.ck);
+const logoutRes = await call(sLogout.ck, 'POST', '/api/auth/logout');
+check('خروج موفقیت‌آمیز و ارسال هدر پاکسازی کوکی', logoutRes.status === 200 && /Max-Age=0/i.test(logoutRes.headers.get('set-cookie') || ''));
+check('درخواست بدون کوکی پس از خروج رد می‌شود (۴۰۱)', (await call(null, 'GET', '/api/me')).status === 401);
+
+// ۲) جلوگیری از دسترسی به داده‌های سایر کانون‌ها (Multi-tenant IDOR Isolation)
+const sDbTenant = new DatabaseSync(path.join(tmp, 'data', 'roshd.db'));
+sDbTenant.exec("INSERT INTO centers (id, name, slug) VALUES (888, 'کانون مجزا برای تست ایزولاسیون', 'other-center')");
+sDbTenant.exec("INSERT INTO classes (id, center_id, grade, name) VALUES (8881, 888, 9, 'کلاس کانون ۲')");
+sDbTenant.exec("INSERT INTO users (id, center_id, role, username, pass_hash, full_name, active) VALUES (8882, 888, 'student', 'stu_c2', 'dummy_hash', 'دانش‌آموز کانون ۲', 1)");
+sDbTenant.close();
+
+const crossClassFees = await call(S.manager.ck, 'GET', '/api/manager/fees/class/8881');
+check('مدیر نمی‌تواند به شهریه کلاس کانون دیگر دسترسی داشته باشد (۴۰۴)', crossClassFees.status === 404);
+const crossStudent = await call(S.manager.ck, 'GET', '/api/manager/students/8882');
+check('مدیر نمی‌تواند اطلاعات دانش‌آموز کانون دیگر را دریافت کند (۴۰۴)', crossStudent.status === 404);
+const crossTeacherAtt = await call(S.teacher.ck, 'GET', '/api/teacher/attendance?class_id=8881');
+check('معلم به حضور و غیاب کلاس کانون دیگر دسترسی ندارد (۴۰۳)', crossTeacherAtt.status === 403);
+
+// ۳) فروشگاه: محاسبه سمت سرور و جلوگیری از دستکاری قیمت توسط کلاینت
+const tamperedOrder = await call(S.student.ck, 'POST', '/api/shop/checkout', {
+  items: [{ id: prod.id, qty: 1, price: 10, total: 10 }]
+});
+check('قیمت سفارش فقط بر اساس قیمت پایگاه داده محاسبه می‌شود و دستکاری کلاینت نادیده گرفته می‌شود', tamperedOrder.status === 200 && tamperedOrder.data.total > 10);
+
+// ۴) امنیت آپلود و جلوگیری از مسیرپیمایی (Path Traversal)
+const traversalReq = await call(S.student.ck, 'GET', '/uploads/..%2f..%2fserver%2fdb.js');
+check('جلوگیری از مسیرپیمایی در خواندن فایل‌های آپلودی (۴۰۰)', traversalReq.status === 400);
+check('دانلود فایل‌های آپلودی بدون ورود مسدود است (۴۰۱)', (await fetch(B + '/uploads/sample.png')).status === 401);
+const bigUpload = await call(S.student.ck, 'POST', '/api/student/payment', {
+  file: { name: 'huge.png', data: 'data:image/png;base64,' + 'A'.repeat(Math.round(7 * 1024 * 1024 * 4 / 3)) }
+});
+check('آپلود فایل بیش از سقف مجاز رد می‌شود (۴۰۰)', bigUpload.status === 400);
+
+// ۵) تکالیف: جلوگیری از نمره‌دهی به تکلیف کلاس‌های دیگر توسط معلم
+const foreignGrade = await call(S.teacher.ck, 'POST', '/api/teacher/assignments/submissions/999999/grade', { score: 20 });
+check('معلم به ثبت نمره برای ارسال‌های خارج از کلاس خودش دسترسی ندارد (۴۰۴)', foreignGrade.status === 404);
+
 app.kill();
 await new Promise((r) => setTimeout(r, 300));
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* */ }
