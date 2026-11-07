@@ -1,4 +1,5 @@
-import { studentArt, studentIcon, studentLogo } from './student-icons.js';
+import { studentAvatarAsset } from './student-avatars.js';
+import { studentArt, studentIcon, studentLogo, studentCenterTitle } from './student-icons.js';
 import { api, esc, fa, num, pct, $, $$, on, setHead, icon, isProfilePhoto, WEEKDAYS, faWeekday, jdate, empty } from './core.js';
 
 export const art = studentArt;
@@ -8,7 +9,7 @@ const counter = n => n ? `<span class="student-counter">${num(n)}</span>` : '';
 export function shellHeader(me) {
   return `<header class="student-masthead no-print">
     <a class="student-points" href="#/profile" aria-label="امتیازهای من">${art('coin')}<span><b data-student-points>${num(me.student.points)}</b><small>امتیاز</small></span></a>
-    <a class="student-brand" href="#/home">${studentLogo(me.center)}<span><b>کانون نخبه‌پروری</b><small>${esc(me.center?.name || 'پلتفرم رشد نخبه')}</small></span></a>
+    <a class="student-brand" href="#/home">${studentLogo(me.center)}<span><b>کانون نخبه‌پروری</b><small>${esc(studentCenterTitle(me.center))}</small></span></a>
     <div class="student-header-actions"><a class="student-round" href="#/messages" aria-label="پیام‌ها">${navIcon('mail')}${counter(me.unread)}</a><a class="student-round" href="#/announcements" aria-label="اعلان‌ها">${navIcon('bell')}${counter(me.unseen?.length)}</a></div>
   </header>`;
 }
@@ -37,7 +38,7 @@ export async function home(el, _p, me) {
   const first = me.user.full_name.trim().split(/\s+/)[0];
   const notice = announcements[0];
   el.innerHTML = `<div class="student-dashboard"><div class="student-first-screen">
-    <section class="student-welcome" aria-labelledby="studentHello"><div class="student-welcome-copy"><span class="student-welcome-kicker">${art('sparkles')} امروز، نوبت درخشیدن توست</span><h1 id="studentHello">سلام <span>${esc(first)}</span> جان!</h1><p>هر روز، یک قدم<br><strong>نزدیک‌تر به رویاهایت</strong></p><a class="student-welcome-cta" href="#/study">بزن بریم یاد بگیریم ${navIcon('chevron-left',16)}</a></div><a class="student-portrait ${isProfilePhoto(me.student.avatar) ? 'has-own-photo' : ''}" href="#/profile" aria-label="پروفایل من"><span class="student-portrait-halo" aria-hidden="true"></span><img class="student-character" src="${isProfilePhoto(me.student.avatar) ? esc(me.student.avatar) : '/img/student-v2/student-character.webp'}" alt="${isProfilePhoto(me.student.avatar) ? 'عکس پروفایل شما' : 'دانش‌آموز آماده یادگیری'}" width="400" height="480" fetchpriority="high"><span class="student-portrait-star" aria-hidden="true">${art('star')}</span></a></section>
+    <section class="student-welcome" aria-labelledby="studentHello"><div class="student-welcome-copy"><span class="student-welcome-kicker">${art('sparkles')} امروز، نوبت درخشیدن توست</span><h1 id="studentHello">سلام <span>${esc(first)}</span> جان!</h1><p>هر روز، یک قدم<br><strong>نزدیک‌تر به رویاهایت</strong></p><a class="student-welcome-cta" href="#/study">بزن بریم یاد بگیریم ${navIcon('chevron-left',16)}</a></div><a class="student-portrait ${isProfilePhoto(me.student.avatar) ? 'has-own-photo' : ''}" href="#/profile" aria-label="پروفایل من"><span class="student-portrait-halo" aria-hidden="true"></span><img class="student-character" src="${isProfilePhoto(me.student.avatar) ? esc(me.student.avatar) : studentAvatarAsset(me)}" alt="${isProfilePhoto(me.student.avatar) ? 'عکس پروفایل شما' : 'دانش‌آموز آماده یادگیری'}" width="400" height="480" fetchpriority="high"><span class="student-portrait-star" aria-hidden="true">${art('star')}</span></a></section>
     <div class="student-status-grid"><a class="student-rank" href="#/roadmap"><div><h2>رتبه من در پایه</h2><strong>${num(d.rank.rank)}</strong><small>از میان ${num(d.rank.of)} دانش‌آموز</small><span class="student-rank-caption">هر قدمت، یک فرصت برای رشد</span></div>${art('podium')}</a>${levelCard(d)}</div>
     <nav class="student-features" aria-label="دسترسی سریع">${shortcuts.map((item, i) => tile(item, i === 1 ? counter(d.upcoming.length) : '')).join('')}</nav>
     <section class="student-panel student-today"><h2>${art('target')}کارهای امروز من</h2><div class="student-tasks-art">${art('tasks')}</div><div class="student-today-list"><a href="#/study" class="student-today-row ${goal >= 100 ? 'done' : ''}"><span class="student-task-check">${goal >= 100 ? navIcon('check', 16) : ''}</span><b>مطالعه روزانه</b><span>${num(d.study.today)} از ${num(d.study.goal)} دقیقه</span></a>${upcoming.map(a => `<a href="#/assignments" class="student-today-row"><span class="student-task-check"></span><b>${esc(a.title)}</b>${icon(a.subject === 'علوم' ? 'flask' : 'book', {size:26})}</a>`).join('')}${!upcoming.length ? '<a href="#/assignments" class="student-today-row done"><span class="student-task-check">'+navIcon('check',16)+'</span><b>تکلیف انجام‌نشده‌ای نداری</b></a>' : ''}</div></section>

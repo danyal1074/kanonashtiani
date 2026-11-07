@@ -1,0 +1,18 @@
+{
+  "tool": "built-in image_gen",
+  "transparent_background": true,
+  "avatars": [
+    {
+      "stage": "elementary",
+      "gender": "f",
+      "asset": "public/img/elementary/avatar-girl-v1.webp",
+      "prompt": "Use case: stylized-concept. Asset type: production transparent character cutout for a Persian student learning dashboard. Premium polished 3D animated family-film illustration, charming warm Iranian appearance, expressive dark brown eyes, friendly confident smile, excellent clean sculpted rendering, soft warm daylight. One character only, waist-up portrait, both shoulders visible, three-quarter pose slightly facing RIGHT and looking warmly at viewer. Subject fills 92% of canvas with small safe padding, face prominent and legible on mobile. GENUINELY TRANSPARENT alpha background, no rectangle, no floor, no ground shadow, no circle, no scenery, no text, no letters, no logos, no watermark. Natural correct hands, school books held low against torso. Finished UI asset, not a screenshot. Subject: a cheerful Iranian elementary school GIRL about 9 years old, unmistakably childlike round face and small stature, neatly draped LIGHT CREAM school headscarf covering hair, turquoise school jacket with small mustard-yellow accents, blue backpack straps on both shoulders, holding a slim coral-orange notebook. Attractive contemporary school character, age-appropriate proportions and modest clothing. The style should match a turquoise-jacket schoolboy mascot."
+    },
+    {
+      "stage": "secondary",
+      "gender": "f",
+      "asset": "public/img/student-v2/student-character-girl-v1.webp",
+      "prompt": "Use case: stylized-concept. Asset type: production transparent character cutout for a Persian student learning dashboard. Premium polished 3D animated family-film illustration, charming warm Iranian appearance, expressive dark brown eyes, friendly confident smile, excellent clean sculpted rendering, soft warm daylight. One character only, waist-up portrait, both shoulders visible, three-quarter pose slightly facing RIGHT and looking warmly at viewer. Subject fills 92% of canvas with small safe padding, face prominent and legible on mobile. GENUINELY TRANSPARENT alpha background, no rectangle, no floor, no ground shadow, no circle, no scenery, no text, no letters, no logos, no watermark. Natural correct hands, school books held low against torso. Finished UI asset, not a screenshot. Subject: an Iranian secondary school GIRL about 15 years old, clearly a teenager rather than a young child or adult. Neatly draped dusty lavender school headscarf covering hair, pale blue collared shirt and navy blue school cardigan, blue backpack with both straps, holding two purple and lilac textbooks against her lower torso. Warm thoughtful expression, tasteful natural face, no makeup, age-appropriate modest school clothing. Crisp friendly light-blue and violet palette matching an academic dashboard."
+    }
+  ]
+}
