@@ -1,3 +1,4 @@
+import { counselorSessionStart } from './counselor.js';
 import { buildSelfExamQuestions, sanitizeQuestionsForStudent, evaluateSelfExam } from '../self_exam.js';
 import { LEVELS } from '../logic.js';
 // پنل دانش‌آموز
@@ -35,6 +36,34 @@ export function studentResults(sid) {
 }
 
 export default function register(r) {
+  r.get('/api/student/counselor-sessions', S, (ctx) => all(`
+    SELECT cs.id,cs.title,cs.starts_at,cs.status,u.full_name counselor
+    FROM counselor_sessions cs JOIN users u ON u.id=cs.counselor_id
+    WHERE cs.student_id=? AND u.center_id=? AND u.role='counselor' ORDER BY cs.starts_at DESC`,ctx.user.id,ctx.user.center_id));
+  r.post('/api/student/counselor-sessions', S, (ctx) => {
+    const title=clampStr(ctx.body.title,200), start=counselorSessionStart(ctx.body.starts_at);
+    if (!title) fail(400,'موضوع درخواست جلسه را وارد کنید');
+    const counselor=ctx.body.counselor_id == null
+      ? get("SELECT id FROM users WHERE center_id=? AND role='counselor' AND active=1 ORDER BY id LIMIT 1",ctx.user.center_id)
+      : get("SELECT id FROM users WHERE id=? AND center_id=? AND role='counselor' AND active=1",Number(ctx.body.counselor_id),ctx.user.center_id);
+    if (!counselor) fail(404,'مشاور فعال در کانون یافت نشد');
+    const result=run("INSERT INTO counselor_sessions(student_id,counselor_id,title,starts_at,status,notes) VALUES (?,?,?,?,'requested','')",ctx.user.id,counselor.id,title,start);
+    return {ok:true,id:Number(result.lastInsertRowid)};
+  });
+  // Personal plans from the counselor, separate from class-wide study targets.
+  r.get('/api/student/counselor-plans', S, (ctx) => {
+    return all(`SELECT p.id,p.week_start,p.tasks_json,p.updated_at,u.full_name counselor FROM counselor_plans p JOIN users u ON u.id=p.counselor_id WHERE p.student_id=? AND u.center_id=? AND u.role='counselor' ORDER BY p.week_start DESC`, ctx.user.id,ctx.user.center_id)
+      .map(({tasks_json,...plan}) => ({...plan,tasks:JSON.parse(tasks_json)}));
+  });
+  r.put('/api/student/counselor-plans/:id/tasks/:index', S, (ctx) => {
+    const plan=get(`SELECT p.* FROM counselor_plans p JOIN users u ON u.id=p.counselor_id WHERE p.id=? AND p.student_id=? AND u.center_id=? AND u.role='counselor'`, Number(ctx.params.id),ctx.user.id,ctx.user.center_id);
+    if (!plan) fail(404,'برنامه یافت نشد');
+    const tasks=JSON.parse(plan.tasks_json), index=Number(ctx.params.index);
+    if (!Number.isInteger(index) || index<0 || index>=tasks.length || typeof ctx.body.done!=='boolean') fail(400,'فعالیت یا وضعیت معتبر نیست');
+    tasks[index].done=ctx.body.done;
+    run("UPDATE counselor_plans SET tasks_json=?,updated_at=datetime('now') WHERE id=? AND student_id=?",JSON.stringify(tasks),plan.id,ctx.user.id);
+    return {ok:true};
+  });
   r.get('/api/student/dashboard', S, (ctx) => {
     const u = ctx.user, s = studentInfo(u.id), today = ymd();
     const total = totalPoints(u.id);

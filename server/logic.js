@@ -104,7 +104,7 @@ export function audienceMatcher(user) {
     const cls = all('SELECT DISTINCT c.id, c.grade FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=?', user.id);
     return (a) => a.target_type === 'all' || cls.some((c) => (a.target_type === 'grade' && parseTarget(a).includes(c.grade)) || (a.target_type === 'classes' && parseTarget(a).includes(c.id)));
   }
-  return () => user.role === 'manager';
+  return (a) => user.role === 'manager' || (user.role === 'counselor' && a.target_type === 'all');
 }
 export function announcementsFor(user) {
   const list = all(`SELECT a.*, v.seen_at FROM announcements a LEFT JOIN announcement_views v ON v.announcement_id=a.id AND v.user_id=?
@@ -226,18 +226,20 @@ export function ensureLearningPath(sid) {
 
 // ---------- پیام‌رسان: مخاطبان مجاز (بدون نمایش شماره تلفن) ----------
 export function contactsOf(user) {
+  const counselors = all(`SELECT id, full_name name, 'counselor' role, 'مشاور تحصیلی' sub FROM users WHERE center_id=? AND role='counselor' AND active=1 AND id<>? ORDER BY full_name`, user.center_id, user.id);
+  if (user.role === 'counselor') return all(`SELECT u.id,u.full_name name,u.role,s.avatar,CASE u.role WHEN 'student' THEN 'دانش‌آموز' WHEN 'teacher' THEN 'دبیر' WHEN 'manager' THEN 'مدیر کانون' WHEN 'counselor' THEN 'مشاور تحصیلی' ELSE 'ولی دانش‌آموز' END sub FROM users u LEFT JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.active=1 AND u.id<>? AND u.role IN ('student','teacher','manager','parent','counselor') ORDER BY u.full_name`, user.center_id, user.id);
   if (user.role === 'student') {
     const s = get('SELECT class_id FROM students WHERE user_id=?', user.id);
     const teachers = all(`SELECT DISTINCT u.id, u.full_name name, 'teacher' role, GROUP_CONCAT(DISTINCT tc.subject) sub FROM teacher_classes tc JOIN users u ON u.id=tc.teacher_id WHERE tc.class_id=? GROUP BY u.id`, s?.class_id ?? -1);
     const mates = all(`SELECT u.id, u.full_name name, 'student' role, st.avatar, 'هم‌کلاسی' sub FROM students st JOIN users u ON u.id=st.user_id WHERE st.class_id=? AND u.id<>? AND u.active=1 ORDER BY u.full_name`, s?.class_id ?? -1, user.id);
     const managers = all(`SELECT id, full_name name, 'manager' role, 'مدیر کانون' sub FROM users WHERE center_id=? AND role='manager' AND active=1`, user.center_id);
-    return [...managers, ...teachers.map((t) => ({ ...t, sub: `دبیر ${t.sub}` })), ...mates];
+    return [...counselors, ...managers, ...teachers.map((t) => ({ ...t, sub: `دبیر ${t.sub}` })), ...mates];
   }
   if (user.role === 'parent') {
     const managers = all(`SELECT id, full_name name, 'manager' role, 'مدیر کانون' sub FROM users WHERE center_id=? AND role='manager' AND active=1`, user.center_id);
     const teachers = all(`SELECT DISTINCT u.id, u.full_name name, 'teacher' role, 'دبیر ' || GROUP_CONCAT(DISTINCT tc.subject) sub FROM parent_children pc JOIN students s ON s.user_id=pc.student_id
       JOIN teacher_classes tc ON tc.class_id=s.class_id JOIN users u ON u.id=tc.teacher_id WHERE pc.parent_id=? GROUP BY u.id`, user.id);
-    return [...managers, ...teachers];
+    return [...counselors, ...managers, ...teachers];
   }
   if (user.role === 'teacher') {
     const students = all(`SELECT DISTINCT u.id, u.full_name name, 'student' role, st.avatar, 'کلاس ' || c.name || ' - پایه ' || c.grade sub FROM teacher_classes tc JOIN students st ON st.class_id=tc.class_id
@@ -245,7 +247,7 @@ export function contactsOf(user) {
     const parents = all(`SELECT DISTINCT p.id, p.full_name name, 'parent' role, 'ولیِ ' || u.full_name sub FROM teacher_classes tc JOIN students st ON st.class_id=tc.class_id
       JOIN users u ON u.id=st.user_id JOIN parent_children pc ON pc.student_id=u.id JOIN users p ON p.id=pc.parent_id WHERE tc.teacher_id=? ORDER BY p.full_name`, user.id);
     const managers = all(`SELECT id, full_name name, 'manager' role, 'مدیر کانون' sub FROM users WHERE center_id=? AND role='manager'`, user.center_id);
-    return [...managers, ...students, ...parents];
+    return [...counselors, ...managers, ...students, ...parents];
   }
   if (user.role === 'manager') {
     const teachers = all(`SELECT id, full_name name, 'teacher' role, 'دبیر' sub FROM users WHERE center_id=? AND role='teacher' AND active=1 ORDER BY full_name`, user.center_id);
@@ -262,7 +264,7 @@ export function contactsOf(user) {
         )
       ORDER BY u.full_name
     `, user.center_id, user.id, user.id);
-    return [...teachers, ...messagedUsers];
+    return [...counselors, ...teachers, ...messagedUsers];
   }
   return [];
 }

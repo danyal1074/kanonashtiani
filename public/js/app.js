@@ -10,8 +10,9 @@ import { prepareManager, decorateManager } from './manager-ui.js';
 import { prepareTeacher } from './teacher-ui.js';
 import * as manager from './manager.js';
 import * as admin from './admin.js';
+import * as counselor from './counselor.js';
 
-const PANELS = { student, teacher, manager, admin };
+const PANELS = { student, teacher, counselor, manager, admin };
 document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.contact, tr[data-href], tr.click, .feature-tile[onclick]')) { e.preventDefault(); e.target.click(); } });
 // خطای عملیات‌های پس‌زمینه بی‌صدا نماند
 window.addEventListener('unhandledrejection', (e) => { if (e.reason?.message) toast(e.reason.message, 'err'); });
@@ -26,6 +27,8 @@ async function loadMe() {
 function shell(me) {
   const panel = PANELS[me.user.role];
   const c = me.center;
+  const isCounselor = me.user.role === 'counselor';
+  const coLogo = logoHtml(c?.logo || '/img/logo-ashtiani.png');
   const locked = me.fee?.locked;
   const navHtml = panel.nav(me).map((n) => {
     const isLocked = locked && !n.open;
@@ -36,12 +39,13 @@ function shell(me) {
   const brandName = c ? esc(c.name) : 'مدیریت سامانه';
   root.innerHTML = `
     ${me.impersonator ? `<div class="imp-bar" role="status">${icon('eye', { size: 18 })} در حال مشاهده پنل «${esc(me.user.full_name)}» (${ROLE_NAMES[me.user.role]}) به‌جای ${esc(me.impersonator.full_name)} <button class="btn sm ghost" id="stopImp">بازگشت به پنل مدیر سامانه</button></div>` : ''}
-    <div class="mobile-head no-print"><a class="sr-only" href="#view" onclick="event.preventDefault();document.getElementById('view').focus()">پرش به محتوا</a><button class="icon-btn" id="menuBtn" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">${icon('menu', { size: 22 })}</button><div class="brand-logo">${me.user.role === 'student' ? student.studentLogo(c) : logoHtml(c?.logo)}</div>
+    <div class="mobile-head no-print"><a class="sr-only" href="#view" onclick="event.preventDefault();document.getElementById('view').focus()">پرش به محتوا</a><button class="icon-btn" id="menuBtn" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">${icon('menu', { size: 22 })}</button><div class="brand-logo">${me.user.role === 'student' ? student.studentLogo(c) : isCounselor ? coLogo : logoHtml(c?.logo)}</div>
       <div class="grow"><div class="t1 ellipsis">${brandName}</div><div class="t2">پلتفرم رشد نخبه</div></div>${who}</div>
     ${me.user.role === 'student' ? student.shellHeader(me) : ''}
+    ${isCounselor ? `<header class="co-header no-print"><a class="co-brand" href="#/home"><span class="brand-logo">${coLogo}</span><span><b>${brandName}</b><small>سامانه مشاوره تحصیلی</small></span></a><a class="co-user" href="#/account">${who}<span><b>مشاور تحصیلی</b><small>${esc(me.user.full_name)}</small></span></a><div class="co-tools"><a href="#/sessions" aria-label="جلسات مشاوره">${counselor.coIcon('bell')}</a><a href="#/messages" aria-label="پیام‌ها">${counselor.coIcon('message')}</a><button id="coMenu" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">${counselor.coIcon('menu')}</button></div></header>` : ''}
     <div class="app ${me.user.role === 'student' ? 'theme-student' : 'theme-staff'}">
       <aside class="sidebar no-print" id="sidebar">
-        <div class="brand"><div class="brand-logo">${me.user.role === 'student' ? student.studentLogo(c) : logoHtml(c?.logo)}</div><div class="grow"><div class="t1">${brandName}</div><div class="t2">${icon('sprout', { size: 14 })} پلتفرم رشد نخبه</div></div></div>
+        <div class="brand"><div class="brand-logo">${me.user.role === 'student' ? student.studentLogo(c) : isCounselor ? coLogo : logoHtml(c?.logo)}</div><div class="grow"><div class="t1">${brandName}</div><div class="t2">${icon('sprout', { size: 14 })} پلتفرم رشد نخبه</div></div></div>
         <nav class="stack" style="gap:2px" aria-label="منوی اصلی">${navHtml}</nav>
         <div class="foot">
           <div class="row" style="padding:6px">${who}<div class="grow"><div class="bold small ellipsis">${esc(me.user.full_name)}</div><div class="tiny muted">${ROLE_NAMES[me.user.role]}${me.student ? ` • پایه ${gradeName(me.student.grade)}` : ''}</div></div>
@@ -49,12 +53,13 @@ function shell(me) {
         </div>
       </aside>
       <main class="main">
+        ${isCounselor ? `<div class="co-utility no-print"><div class="co-date">${counselor.coIcon('calendar')} ${jdate(me.today, { weekday: true })}</div><form class="co-search" id="coSearch"><input name="q" aria-label="جستجوی دانش‌آموز" placeholder="جستجوی دانش‌آموز…" autocomplete="off"><button aria-label="جستجو">${counselor.coIcon('search')}</button></form><a class="co-desktop-user" href="#/account">${who}<span><b>مشاور تحصیلی</b><small>${esc(me.user.full_name)}</small></span></a><a class="icon-btn" href="#/messages" aria-label="پیام‌ها">${counselor.coIcon('message')}</a><a class="icon-btn" href="#/sessions" aria-label="جلسات مشاوره">${counselor.coIcon('bell')}</a></div>` : ''}
         <div class="topbar"><div class="title"><h1></h1><div class="sub"></div></div><div class="actions"><span class="actions-slot row wrap"></span>
           <div class="me-chip" id="meChip" role="button" tabindex="0" aria-label="حساب کاربری من">${who}<div><div class="nm">${esc(me.user.full_name)}</div><div class="rl">${ROLE_NAMES[me.user.role]}</div></div></div></div></div>
         <div id="view" tabindex="-1" style="outline:none"></div>
       </main>
     </div>
-    ${bottom ? `<nav class="bottom-nav no-print" aria-label="منوی پایین">${bottom}${me.user.role === 'student' ? '' : `<a href="#" id="moreBtn" role="button" aria-controls="sidebar"><span class="bi">${icon('more', { size: 22 })}</span>بیشتر</a>`}</nav>` : ''}`;
+    ${bottom ? `<nav class="bottom-nav no-print" aria-label="منوی پایین">${bottom}${['student', 'counselor'].includes(me.user.role) ? '' : `<a href="#" id="moreBtn" role="button" aria-controls="sidebar"><span class="bi">${icon('more', { size: 22 })}</span>بیشتر</a>`}</nav>` : ''}`;
   const sb = $('#sidebar');
   const toggle = (open) => {
     sb.classList.toggle('open', open);
@@ -65,6 +70,8 @@ function shell(me) {
     if (open) { const s = document.createElement('div'); s.className = 'scrim'; s.onclick = () => toggle(false); document.body.append(s); }
   };
   $('#menuBtn').onclick = () => toggle(true);
+  $('#coMenu')?.addEventListener('click', () => toggle(true));
+  $('#coSearch')?.addEventListener('submit', (e) => { e.preventDefault(); location.hash = '#/students?q=' + encodeURIComponent(e.currentTarget.elements.q.value.trim()); });
   // با بزرگ‌شدن پنجره منوی کشویی و پرده‌ی آن بسته می‌شوند
   matchMedia('(min-width: 981px)').addEventListener('change', (e) => { if (e.matches) toggle(false); });
   $('#moreBtn')?.addEventListener('click', (e) => { e.preventDefault(); toggle(true); });
@@ -112,6 +119,7 @@ async function render() {
   if (!elementary) document.body.classList.remove('elementary-native-page','elementary-map-page');
   document.body.classList.toggle('student-home', !pub && path === '/home' && state.me?.user.role === 'student');
   document.body.classList.toggle('manager-ui', !pub && path !== '/login' && state.me?.user.role === 'manager');
+  document.body.classList.toggle('counselor-ui', !pub && path !== '/login' && state.me?.user.role === 'counselor');
   document.body.classList.toggle('teacher-ui', !pub && path !== '/login' && state.me?.user.role === 'teacher');
   if (pub) { const box = document.createElement('div'); root.replaceChildren(box); return pub.r.view(box, pub.params); }
   if (path === '/login' || !state.me) {
@@ -132,6 +140,7 @@ async function render() {
   if (me.user.role === 'student') student.prepareStudentPage(path);
   if (me.user.role === 'teacher') prepareTeacher(me, path);
   if (me.user.role === 'manager') prepareManager(me);
+  if (me.user.role === 'counselor') counselor.prepareCounselor(me, path);
   // عنصر تازه برای هر نما تا شنونده‌های نمای قبلی باقی نمانند
   const view = $('#view').cloneNode(false);
   $('#view').replaceWith(view);
@@ -141,9 +150,9 @@ async function render() {
   try {
     await found.r.view(view, found.params, me);
     if (token === rendering) {
-      if (path === '/home' && !['student', 'teacher', 'manager'].includes(me.user.role)) decorateDashboard(view, me, panel.nav(me));
+      if (path === '/home' && !['student', 'teacher', 'manager', 'counselor'].includes(me.user.role)) decorateDashboard(view, me, panel.nav(me));
       if (me.user.role === 'manager') decorateManager(view, me, path, panel.nav(me));
-      else if (!student.isElementary(me)) decoratePageArt(view, me, path);
+      else if (me.user.role !== 'counselor' && !student.isElementary(me)) decoratePageArt(view, me, path);
     }
   } catch (e) {
     if (token !== rendering) return;

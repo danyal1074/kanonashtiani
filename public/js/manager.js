@@ -11,6 +11,7 @@ export const nav = (me) => [
   { path: '/home', icon: 'chart', label: 'داشبورد' },
   { path: '/students', icon: 'users', label: 'مدیریت دانش‌آموزان' },
   { path: '/staff', icon: 'board', label: 'معلمان، کلاس‌ها و برنامه' },
+  { path: '/counselors', icon: 'users', label: 'مدیریت مشاوران' },
   { path: '/timetable', icon: 'calendar', label: 'برنامه هفتگی کانون' },
   { path: '/fees', icon: 'card', label: 'حق عضویت و رسیدها' },
   { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌رسانی' },
@@ -463,6 +464,29 @@ async function shopAdmin(el, _p, me) {
   $('#codeForm', el).onsubmit = (e) => { e.preventDefault(); busy(e.submitter, async () => { await post('/api/manager/discount-codes', formData(e.target)); shopAdmin(el, _p, me); }); };
 }
 
+// حساب‌های مستقل مشاور؛ تنها مدیر کانون به ساخت و ویرایش دسترسی دارد.
+async function counselors(el, params, me) {
+  setHead('مدیریت مشاوران', 'ساخت حساب مشاور تحصیلی برای دانش‌آموزان کانون', '<button class="btn sm" id="newCounselor">مشاور جدید</button>');
+  const data = await api('/api/manager/counselors');
+  const list = Array.isArray(data) ? data : data.counselors;
+  el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>مشاور</th><th>نام کاربری</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>${list.map(c => `<tr><td><div class="row">${nameAvatar(c.full_name)}<b>${esc(c.full_name)}</b></div></td><td><bdi>${esc(c.username || c.national_code || '—')}</bdi></td><td><span class="badge ${c.active ? 'green' : 'red'}">${c.active ? 'فعال' : 'غیرفعال'}</span></td><td><button class="btn sm ghost" data-edit-counselor="${c.id}">${icon('edit')} ویرایش</button></td></tr>`).join('') || `<tr><td colspan="4">${empty('users', 'هنوز مشاوری ثبت نشده؛ با «مشاور جدید» حساب بسازید.')}</td></tr>`}</tbody></table></div></div>`;
+  const edit = (c = {}) => modal({
+    title: c.id ? 'ویرایش مشاور' : 'مشاور جدید',
+    body: `<form class="stack" id="counselorForm"><div class="field"><label>نام و نام خانوادگی</label><input class="input" name="full_name" required maxlength="80" value="${esc(c.full_name || '')}"></div><div class="field"><label>نام کاربری</label><input class="input ltr" name="username" autocomplete="off" required maxlength="40" pattern="[a-zA-Z0-9_.]{3,40}" value="${esc(c.username || '')}" ${c.id ? 'readonly' : ''}></div><div class="field"><label>${c.id ? 'رمز جدید (برای حفظ رمز خالی بگذارید)' : 'رمز عبور (حداقل ۶ نویسه)'}</label><input class="input ltr" type="password" name="password" autocomplete="new-password" minlength="6" ${c.id ? '' : 'required'}></div><div class="field"><label>وضعیت حساب</label><select class="input" name="active"><option value="1">فعال</option><option value="0" ${c.active === 0 ? 'selected' : ''}>غیرفعال</option></select></div></form>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ذخیره مشاور', onClick: async m => {
+      const form = $('#counselorForm', m);
+      if (!form.reportValidity()) return false;
+      const f = formData(form), body = { ...f, active: f.active === '1' };
+      if (!body.password) delete body.password;
+      if (c.id) await put(`/api/manager/counselors/${c.id}`, body); else await post('/api/manager/counselors', body);
+      toast('حساب مشاور ذخیره شد', 'ok');
+      await counselors(el, params, me);
+    } }],
+  });
+  $('#newCounselor').onclick = () => edit();
+  on(el, 'click', '[data-edit-counselor]', (_e, b) => edit(list.find(c => c.id === Number(b.dataset.editCounselor))));
+}
+
 // ================= تنظیمات =================
 async function settings(el) {
   const s = await api('/api/manager/settings');
@@ -477,6 +501,7 @@ async function settings(el) {
 
 export const routes = [
   { path: '/home', view: home },
+  { path: '/counselors', view: counselors },
   { path: '/students', view: students },
   { path: '/staff', view: staff },
   { path: '/timetable', view: managerTimetable },

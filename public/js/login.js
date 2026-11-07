@@ -5,6 +5,7 @@ import { api, post, esc, $, $$, toast, logoHtml, en, icon } from './core.js';
 const ROLES = [
   { key: 'student', icon: 'graduation', name: 'دانش‌آموز', label: 'کد ملی یا نام کاربری', ph: '0012345679' },
   { key: 'teacher', icon: 'book', name: 'معلم', label: 'کد ملی یا نام کاربری', ph: 'teacher' },
+  { key: 'counselor', icon: 'users', name: 'مشاور', label: 'کد ملی یا نام کاربری', ph: 'counselor' },
   { key: 'manager', icon: 'building', name: 'مدیر کانون', label: 'کد ملی یا نام کاربری', ph: 'manager' },
 ];
 const ADMIN = { key: 'admin', icon: 'shield', name: 'مدیر سامانه', label: 'نام کاربری پشتیبانی', ph: 'admin' };

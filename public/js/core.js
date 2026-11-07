@@ -257,7 +257,7 @@ export const SUBJ_COLOR = { violet: 'var(--teal-700)', green: 'var(--green-700)'
 export const subjTint = (s) => SUBJ[s]?.[1] || 'violet';
 export const SOFT = { violet: 'var(--teal-50)', green: 'var(--green-100)', orange: 'var(--sun-100)', blue: 'var(--slate-100)', pink: 'var(--coral-100)', teal: 'var(--teal-100)', yellow: 'var(--sun-100)', red: 'var(--red-100)' };
 export const gradeName = (g) => ({ 1: 'اول', 2: 'دوم', 3: 'سوم', 4: 'چهارم', 5: 'پنجم', 6: 'ششم', 7: 'هفتم', 8: 'هشتم', 9: 'نهم' }[g] || fa(g));
-export const ROLE_NAMES = { student: 'دانش‌آموز', teacher: 'معلم', manager: 'مدیر کانون', parent: 'والدین', admin: 'مدیر سامانه' };
+export const ROLE_NAMES = { student: 'دانش‌آموز', teacher: 'معلم', counselor: 'مشاور', manager: 'مدیر کانون', parent: 'والدین', admin: 'مدیر سامانه' };
 export function logoHtml(logo) {
   if (!logo) return icon('sprout', { size: 24 });
   return /^(\/|data:|https?:)/.test(logo) ? `<img src="${esc(logo)}" alt="لوگو">` : esc(logo);

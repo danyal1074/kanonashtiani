@@ -239,10 +239,10 @@ setInterval(async () => {
 
 async function study(el) {
   setHead('مطالعه با پومودورو', '۲۵ دقیقه تمرکز کامل، ۵ دقیقه استراحت — هر پومودورو ۲ امتیاز');
-  const d = await api('/api/student/study');
+  const [d, counselorPlans] = await Promise.all([api('/api/student/study'), api('/api/student/counselor-plans')]);
   const goalPct = Math.min(100, Math.round((d.today / d.goal) * 100));
   const subjects = [...new Set([...d.week.plan.map((p) => p.subject), ...d.subjects])];
-  el.innerHTML = `<div class="grid c3">
+  el.innerHTML = `${counselorPlans.length ? `<section class="card" style="margin-bottom:18px"><div class="card-title">${icon('calendar')} برنامه شخصی مشاور</div>${counselorPlans.map(plan => `<div style="margin-bottom:12px"><div class="row between wrap"><b>${esc(plan.counselor)}</b><span class="tiny muted">هفته ${jdate(plan.week_start)}</span></div><div class="list">${plan.tasks.map((t,i) => `<label class="list-item" style="cursor:pointer"><input type="checkbox" data-counselor-plan="${plan.id}" data-task-index="${i}" ${t.done ? 'checked' : ''}><span class="grow"><b class="small">${WEEKDAYS[t.weekday]} · ${esc(t.title)}</b><span class="tiny muted" style="display:block">${esc(t.subject)} · هدف ${fa(t.target)} پومودورو</span></span></label>`).join('')}</div></div>`).join('')}</section>` : ''}<div class="grid c3">
     <div class="card span2"><div class="pomo" id="pomo"></div></div>
     <div class="stack" style="gap:18px">
       <div class="card tint-green"><div class="card-title"><span class="ib green">${icon('target', { size: 18 })}</span>هدف مطالعه امروز</div>
@@ -260,6 +260,15 @@ async function study(el) {
     <div class="card"><div class="card-title"><span class="ib">${icon('receipt', { size: 18 })}</span>جلسه‌های امروز</div>
       <div class="list">${d.sessions.map((s) => `<div class="list-item"><span class="ib">${icon('timer', { size: 18 })}</span><div class="grow"><b class="small">${esc(s.subject)}</b><div class="tiny muted">${fa(s.minutes)} دقیقه • ساعت ${jtime(s.created_at)}</div></div><span class="badge green">${sgn(2)}</span></div>`).join('') || empty('sprout', 'هنوز پومودورویی ثبت نشده')}</div></div>
   </div>`;
+  on(el, 'change', '[data-counselor-plan]', async (_e, checkbox) => {
+    const done = checkbox.checked;
+    checkbox.disabled = true;
+    try {
+      await put(`/api/student/counselor-plans/${checkbox.dataset.counselorPlan}/tasks/${checkbox.dataset.taskIndex}`, { done });
+      toast('وضعیت فعالیت ذخیره شد', 'ok');
+    } catch (err) { checkbox.checked = !done; toast(err.message, 'err'); }
+    finally { checkbox.disabled = false; }
+  });
   $('#notifyBtn', el).onclick = async () => {
     if (!('Notification' in window)) return toast('مرورگر شما از اعلان پشتیبانی نمی‌کند', 'err');
     const p = await Notification.requestPermission();

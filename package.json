@@ -17,6 +17,7 @@
     "import": "node scripts/import-students.mjs",
     "smoke": "node scripts/smoke.mjs",
     "loadtest": "node scripts/loadtest.mjs",
-    "review": "node scripts/review.mjs"
+    "review": "node scripts/review.mjs",
+    "test:counselor": "node scripts/test-counselor.mjs"
   }
 }

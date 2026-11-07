@@ -65,7 +65,7 @@ async function managers(el) {
 
 async function users(el) {
   setHead('کاربران و پشتیبانی', 'جستجو، بازنشانی رمز، غیرفعال‌سازی و ورود به پنل هر کاربر');
-  el.innerHTML = `<div class="card"><div class="row wrap" style="margin-bottom:12px"><input class="input grow" id="q" placeholder=" نام، نام کاربری، کد ملی یا موبایل…"><select class="input" id="role" style="width:auto"><option value="">همه نقش‌ها</option>${['student', 'teacher', 'manager', 'parent'].map((r) => `<option value="${r}">${ROLE_NAMES[r]}</option>`).join('')}</select></div><div id="list"></div></div>`;
+  el.innerHTML = `<div class="card"><div class="row wrap" style="margin-bottom:12px"><input class="input grow" id="q" placeholder=" نام، نام کاربری، کد ملی یا موبایل…"><select class="input" id="role" style="width:auto"><option value="">همه نقش‌ها</option>${['student', 'teacher', 'counselor', 'manager', 'parent'].map((r) => `<option value="${r}">${ROLE_NAMES[r]}</option>`).join('')}</select></div><div id="list"></div></div>`;
   const load = async () => {
     const list = await api(`/api/admin/users?q=${encodeURIComponent($('#q', el).value)}&role=${$('#role', el).value}`);
     $('#list', el).innerHTML = `<div class="table-wrap"><table class="table"><thead><tr><th>نام</th><th>نقش</th><th>شناسه</th><th>کانون</th><th>وضعیت</th><th></th></tr></thead><tbody>${list.map((u) => `<tr><td>${esc(u.full_name)}</td><td>${ROLE_NAMES[u.role]}</td><td class="num">${fa(u.username || u.national_code || u.mobile || '')}</td><td class="small">${esc(u.center || '—')}</td>

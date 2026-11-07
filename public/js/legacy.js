@@ -1,6 +1,6 @@
 // صفحه‌های قابلیت‌های تکمیلی کانون: خودسنجی، نقشه راه، مشاور، استودیوی طرح آزمون چاپی، نمرات مستمر، فاکتورها، کارنامه برپا،
 // لاگ حضور و غیاب و صندوق پیامک. فقط رابط کاربری؛ منطق و دسترسی‌ها سمت سرور است.
-import { api, post, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, empty, loading, jdate, jdatetime, icon, progress, gradeName, fileToData } from './core.js';
+import { api, post, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, empty, loading, jdate, jdatetime, icon, progress, gradeName, fileToData, dateField, readDate, tehranIso, ymdOf } from './core.js';
 import { sproutArt } from './icons.js';
 
 const dt = (s) => (s ? jdatetime(/^\d+(\.\d+)?$/.test(String(s)) ? new Date(Number(s)).toISOString() : String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z') : '—');
@@ -272,12 +272,26 @@ export async function roadmap(el) {
 // ================= دانش‌آموز: مشاور =================
 export async function counselor(el, _p, me) {
   setHead('مشاور تحصیلی', 'سؤال درسی و برنامه‌ریزی را از مشاور کانون بپرس');
-  const [c, chips] = await Promise.all([api('/api/counselor'), api('/api/counselor/quick-chips')]);
+  const [c, chips, meetings] = await Promise.all([api('/api/counselor'), api('/api/counselor/quick-chips'), api('/api/student/counselor-sessions')]);
   if (!c?.id) { el.innerHTML = empty('user', 'هنوز مشاوری برای کانون تعیین نشده است'); return; }
   el.innerHTML = `<div class="card" style="margin-bottom:12px"><div class="row" style="gap:12px"><span class="ib green">${icon('user', { size: 22 })}</span><div class="grow"><b>${esc(c.full_name)}</b><div class="small muted">${esc(c.title)}</div><div class="tiny muted">${esc(c.bio)}</div></div></div></div>
+  <section class="card" style="margin-bottom:12px"><div class="row between wrap"><h3>جلسات مشاوره من</h3>${c.can_request_session ? '<button class="btn sm" id="studentRequestSession">درخواست جلسه</button>' : '<span class="tiny muted">امکان درخواست جلسه پس از تعیین مشاور فعال می‌شود</span>'}</div><div class="list">${meetings.map(m => `<div class="list-item"><div class="grow"><b>${esc(m.title)}</b><div class="tiny muted">${jdatetime(m.starts_at)} · ${esc(m.counselor || '')}</div></div><span class="badge">${({requested:'در انتظار تأیید',scheduled:'تأیید شده',completed:'برگزار شده',cancelled:'لغو شده'})[m.status] || '—'}</span></div>`).join('') || empty('calendar', 'هنوز جلسه‌ای درخواست نکرده‌ای')}</div></section>
   <div class="chips" style="margin-bottom:12px">${chips.map((x) => `<button class="chip" data-chip="${esc(x.prompt)}">${esc(x.label)}</button>`).join('')}</div>
   <div class="card"><div id="cMsgs" class="stack" style="max-height:46vh;overflow:auto" aria-live="polite"></div>
   <form id="cForm" class="row" style="gap:8px;margin-top:12px"><label class="sr-only" for="cTxt">متن پیام</label><textarea class="input grow" id="cTxt" rows="2" maxlength="2000" placeholder="پیامت را بنویس…"></textarea><button class="btn" type="submit">ارسال</button></form></div>`;
+  if ($('#studentRequestSession', el)) $('#studentRequestSession', el).onclick = () => modal({
+    title: 'درخواست جلسه مشاوره',
+    body: `<form id="studentMeetingRequest" class="stack"><div class="field"><label>موضوع جلسه</label><input class="input" name="title" required maxlength="150" placeholder="برنامه‌ریزی و پیگیری مطالعه"></div><div class="field"><label>تاریخ پیشنهادی (شمسی)</label>${dateField('studentMeetingDate', ymdOf(), { minYear:1400, maxYear:1420 })}</div><div class="field"><label>ساعت پیشنهادی</label><input class="input" type="time" name="time" value="16:00" required></div><p class="tiny muted">زمان جلسه پس از بررسی مشاور تأیید می‌شود.</p></form>`,
+    actions: [{ label:'انصراف', cls:'ghost', value:false }, { label:'ارسال درخواست', onClick:async m => {
+      const f=$('#studentMeetingRequest',m);
+      if (!f.reportValidity()) return false;
+      const date=readDate(m,'studentMeetingDate');
+      if (!date) throw Error('تاریخ جلسه را انتخاب کن');
+      await post('/api/student/counselor-sessions', { title:f.elements.title.value.trim(), starts_at:tehranIso(date,f.elements.time.value) });
+      toast('درخواست برای مشاور ارسال شد', 'ok');
+      await counselor(el,_p,me);
+    }}],
+  });
   const draw = async () => {
     const box = $('#cMsgs', el);
     try {

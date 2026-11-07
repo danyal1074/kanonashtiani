@@ -47,7 +47,7 @@ export default function register(r) {
     const role = ctx.body.role;
     const id = toEnDigits(clampStr(ctx.body.identifier, 64));
     const pw = String(ctx.body.password || '');
-    if (!['student', 'teacher', 'manager', 'admin'].includes(role)) fail(400, 'نقش کاربری نامعتبر است');
+    if (!['student', 'teacher', 'manager', 'admin', 'counselor'].includes(role)) fail(400, 'نقش کاربری نامعتبر است');
     if (!id || !pw) fail(400, 'شناسه و رمز عبور را وارد کنید');
     const t = throttle(ctx.ip, id);
     let user;
@@ -284,12 +284,13 @@ export default function register(r) {
 
   // ---------- مشاور تحصیلی کانون (Option 3) ----------
   r.get('/api/counselor', { allowLocked: true }, (ctx) => {
-    const c = get(`SELECT id, full_name, role FROM users WHERE center_id=? AND role='manager' AND active=1 ORDER BY id ASC LIMIT 1`, ctx.user.center_id);
+    const c = get(`SELECT id, full_name, role FROM users WHERE center_id=? AND role IN ('counselor','manager') AND active=1 ORDER BY CASE role WHEN 'counselor' THEN 0 ELSE 1 END, id ASC LIMIT 1`, ctx.user.center_id);
     if (!c) return { id: null };
     return {
       id: c.id,
       full_name: c.full_name,
       role: 'counselor',
+      can_request_session: c.role === 'counselor',
       title: 'مشاور ارشد تحصیلی و استعدادپروری',
       bio: 'پاسخگوی سوالات آموزشی، تحلیل آزمون‌های برپا، هدایت تحصیلی و حل چالش‌های یادگیری شما',
       center_id: ctx.user.center_id
@@ -335,7 +336,7 @@ export default function register(r) {
       const allowed = all('SELECT student_id FROM parent_children WHERE parent_id=?', ctx.user.id).map((x) => x.student_id);
       if (!allowed.includes(row.student_id)) fail(403, 'دسترسی غیرمجاز به کارنامه');
     }
-    if (ctx.user.role === 'teacher' || ctx.user.role === 'manager') {
+    if (ctx.user.role === 'teacher' || ctx.user.role === 'manager' || ctx.user.role === 'counselor') {
       if (row.center_id !== ctx.user.center_id) fail(403, 'دسترسی غیرمجاز به این کارنامه');
     }
     return {

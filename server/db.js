@@ -331,6 +331,54 @@ CREATE INDEX IF NOT EXISTS ix_plans_class ON study_plans(class_id, week_start);
 
 export let db;
 
+// Rebuild the parent table with foreign keys disabled outside the transaction.
+// Children keep their original users references, IDs, rows, indexes and triggers.
+function counselorMigration(database) {
+  const oldSql = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get().sql;
+  if (!oldSql.includes("'counselor'")) {
+    const indexes = database.prepare("SELECT sql FROM sqlite_master WHERE tbl_name='users' AND type IN ('index','trigger') AND sql IS NOT NULL").all();
+    const sql = oldSql.replace(/CREATE TABLE(?: IF NOT EXISTS)? ["`]?users["`]?/i, 'CREATE TABLE users_counselor_v11')
+      .replace(/'admin'(?=\s*\)\s*\))/, "'admin','counselor'");
+    if (!sql.includes("'counselor'")) throw new Error('Unsupported users role constraint');
+    database.exec(sql);
+    const columns = database.prepare('PRAGMA table_info(users)').all().map((c) => '"' + c.name.replaceAll('"', '""') + '"').join(',');
+    database.exec(`INSERT INTO users_counselor_v11 (${columns}) SELECT ${columns} FROM users; DROP TABLE users; ALTER TABLE users_counselor_v11 RENAME TO users;`);
+    for (const index of indexes) database.exec(index.sql);
+  }
+  database.exec(`
+    CREATE TABLE counselor_plans (
+      id INTEGER PRIMARY KEY,
+      student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      counselor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      week_start TEXT NOT NULL,
+      tasks_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(student_id, week_start)
+    );
+    CREATE INDEX ix_counselor_plans_owner ON counselor_plans(counselor_id, week_start);
+    CREATE TABLE counselor_notes (
+      id INTEGER PRIMARY KEY,
+      student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      counselor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX ix_counselor_notes_owner ON counselor_notes(counselor_id,student_id);
+    CREATE TABLE counselor_sessions (
+      id INTEGER PRIMARY KEY,
+      student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      counselor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      starts_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('requested','scheduled','completed','cancelled')),
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX ix_counselor_sessions_owner ON counselor_sessions(counselor_id, starts_at);
+  `);
+}
+counselorMigration.foreignKeysOff = true;
+
 // آرایه مرتب مهاجرت‌های پایگاه داده: هر مهاجرت در نسخه (index + 1) با PRAGMA user_version اجرا می‌شود
 export const migrations = [
   // نسخه ۱: ساختار و ایندکس‌های پایه سامانه رشد نخبه
@@ -612,20 +660,30 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     const cols = database.prepare('PRAGMA table_info(students)').all().map((c) => c.name);
     if (!cols.includes('father_name')) database.exec('ALTER TABLE students ADD COLUMN father_name TEXT');
   },
+  // نسخه ۱۱: نقش مستقل مشاور، برنامه شخصی و جلسات مشاوره
+  counselorMigration,
 ];
 
 export function migrate(database = db) {
   let version = Number(database.prepare('PRAGMA user_version').get()?.user_version || 0);
   for (let i = version; i < migrations.length; i++) {
     const nextVersion = i + 1;
+    const foreignKeys = Number(database.prepare('PRAGMA foreign_keys').get().foreign_keys);
+    if (migrations[i].foreignKeysOff) {
+      database.exec('PRAGMA foreign_keys = OFF');
+      if (Number(database.prepare('PRAGMA foreign_keys').get().foreign_keys)) throw new Error('Migration requires a connection outside an existing transaction');
+    }
     database.exec('BEGIN');
     try {
       migrations[i](database);
+      if (migrations[i].foreignKeysOff && database.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Foreign key integrity check failed');
       database.exec(`PRAGMA user_version = ${nextVersion}`);
       database.exec('COMMIT');
     } catch (e) {
       database.exec('ROLLBACK');
       throw new Error(`خطا در اجرای مهاجرت نسخه ${nextVersion}: ${e.message}`);
+    } finally {
+      if (migrations[i].foreignKeysOff) database.exec(`PRAGMA foreign_keys = ${foreignKeys}`);
     }
   }
   return Number(database.prepare('PRAGMA user_version').get()?.user_version || 0);
