@@ -36,7 +36,7 @@ export async function loginView(root, onDone) {
           <div class="field-error" id="loginErr" role="alert" aria-live="assertive"></div>
           <button class="lg-submit" type="submit" id="loginBtn">ورود به حساب</button>
         </form>
-        <nav class="lg-links" aria-label="پیوندهای ورود"><a id="shopLink" href="#/c/${esc(center.slug || '')}">صفحه کانون و فروشگاه</a><a href="#" id="adminLink">ورود پشتیبانی سامانه</a></nav>
+        <nav class="lg-links" aria-label="پیوندهای ورود"><a id="shopLink" href="#/c/${esc(center.slug || '')}">صفحه کانون و فروشگاه</a><a href="#" id="adminLink">ورود پشتیبانی سامانه</a><button type="button" class="pwa-install" data-pwa-install><img src="/icons/icon-192.png" alt="" width="22" height="22"><span>نصب در موبایل</span></button></nav>
         ${centers.length > 1 ? `<div class="lg-center-pick"><label for="centerSel">کانون</label><select class="input" id="centerSel">${centers.map((c) => `<option value="${esc(c.slug)}" ${c.slug === center.slug ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>` : ''}
       </div>
     </main>

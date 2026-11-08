@@ -1,0 +1,87 @@
+/* گزینهٔ نصب؛ هم‌سبک منو، نه بنر تبلیغاتی */
+.sidebar .pwa-install,
+.student-more-footer .pwa-install,
+.lg-links .pwa-install {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-600, #3d4d5c);
+  font: inherit;
+  font-weight: 800;
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+}
+.sidebar .pwa-install img,
+.student-more-footer .pwa-install img,
+.lg-links .pwa-install img,
+.co-more-grid .pwa-install img,
+.tp-tile.pwa-install img,
+.elementary-native .pwa-install img {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: none;
+}
+.sidebar .pwa-install:hover,
+.student-more-footer .pwa-install:hover { background: var(--sand-50, rgba(11, 95, 102, .06)); color: var(--ink, #12202b); }
+
+.lg-links .pwa-install {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  background: none;
+  color: var(--lg-muted, #607086);
+  font-size: 15px;
+  font-weight: 700;
+}
+.lg-links .pwa-install img { width: 22px; height: 22px; border-radius: 6px; }
+.lg-links .pwa-install:hover { text-decoration: underline; }
+
+.student-more-footer { flex-wrap: wrap; }
+.student-more-footer .pwa-install { flex: 1 0 100%; justify-content: flex-start; }
+
+.counselor-ui .co-more-grid > button.pwa-install {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 90px;
+  padding: 16px;
+  border: 1.5px solid #fff;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #fcfdffd9, #edf4ffd9);
+  box-shadow: var(--shadow);
+  color: #227eea;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: start;
+  cursor: pointer;
+}
+.counselor-ui .co-more-grid > button.pwa-install b { color: var(--ink); font-size: 13px; }
+
+.tp-tile.pwa-install img { width: 46px; height: 46px; border-radius: 14px; }
+
+body.student-elementary .elementary-native button.pwa-install.row {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+  margin: 14px 12px 0;
+  width: calc(100% - 24px);
+}
+body.student-elementary .elementary-native button.pwa-install.row img { width: 40px; height: 40px; border-radius: 12px; }
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  [data-pwa-install] { display: none !important; }
+}
+html.pwa-standalone [data-pwa-install] { display: none !important; }

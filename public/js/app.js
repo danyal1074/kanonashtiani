@@ -1,3 +1,4 @@
+import { startPwa } from './pwa.js';
 import { decoratePageArt } from './artwork.js';
 import { decorateDashboard } from './reference-ui.js';
 // راه‌انداز برنامه: پوسته، منو، مسیر‌یابی نقش‌ها، اطلاعیه تمام‌صفحه، تبریک تولد و قفل پنل
@@ -46,6 +47,7 @@ function shell(me) {
     <div class="app ${me.user.role === 'student' ? 'theme-student' : 'theme-staff'}">
       <aside class="sidebar no-print" id="sidebar">
         <div class="brand"><div class="brand-logo">${me.user.role === 'student' ? student.studentLogo(c) : isCounselor ? coLogo : logoHtml(c?.logo)}</div><div class="grow"><div class="t1">${brandName}</div><div class="t2">${icon('sprout', { size: 14 })} پلتفرم رشد نخبه</div></div></div>
+        <button type="button" class="pwa-install" data-pwa-install><img src="/icons/icon-192.png" alt="" width="28" height="28"><span>نصب در موبایل</span></button>
         <nav class="stack" style="gap:2px" aria-label="منوی اصلی">${navHtml}</nav>
         <div class="foot">
           <div class="row" style="padding:6px">${who}<div class="grow"><div class="bold small ellipsis">${esc(me.user.full_name)}</div><div class="tiny muted">${ROLE_NAMES[me.user.role]}${me.student ? ` • پایه ${gradeName(me.student.grade)}` : ''}</div></div>
@@ -276,5 +278,6 @@ export async function boot() {
 window.addEventListener('hashchange', render);
 window.addEventListener('roshd:locked', async () => { await loadMe(); root.innerHTML = ''; location.hash = '#/payment'; render(); });
 window.roshdRefresh = refreshMe;
+startPwa();
 boot();
 
