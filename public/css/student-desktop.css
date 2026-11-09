@@ -1,0 +1,139 @@
+/* Dedicated student workspace. Tablet and phone retain their own layouts. */
+.sd-profile { display:none; }
+.student-profile-character { display:block; width:100%; height:100%; border-radius:50%; object-fit:cover; object-position:center 12%; }
+@media(min-width:1100px) {
+ body.student-ui { --student-dock-space:0px; --ep-dock:0px; }
+ body.student-ui #root { max-width:1760px; margin-inline:auto; padding:20px 24px 32px; }
+ body.student-ui .app { display:grid; grid-template-columns:232px minmax(0,1fr); align-items:start; gap:24px; width:100%; max-width:none; margin:0; padding:0; min-height:0; background:none; }
+ body.student-ui .main { min-width:0; max-width:none; width:100%; margin:0; padding:0 0 24px; }
+ body.student-ui .student-masthead,body.student-ui .elementary-shell-header { width:100%; max-width:none; height:84px; min-height:84px; margin:0 0 16px; padding:0 0 14px; background:none; }
+ body.student-elementary .elementary-shell-header .hdr { padding:0; }
+ body.student-elementary .elementary-shell-header .brand .t { font-size:15px; line-height:1.6; }
+ body.student-elementary .elementary-shell-header .brand .t span { font-size:14px; }
+ body.student-elementary .elementary-shell-header .brand img { width:56px; height:60px; }
+ body.student-elementary .elementary-shell-header .bell,body.student-elementary .elementary-shell-header .back { width:46px; height:46px; }
+ body.student-elementary .elementary-shell-header .coins { min-height:40px; font-size:20px; }
+
+ body.student-ui .sidebar { display:flex; position:sticky; top:20px; width:auto; max-width:none; height:calc(100dvh - 140px); transform:none; z-index:10; flex-direction:column; padding:14px; overflow:hidden; border:1px solid #fff; border-radius:26px; background:linear-gradient(165deg,#ffffffec,#eef7ffed); box-shadow:0 8px 24px #416ba322; }
+ body.student-elementary .sidebar { background:linear-gradient(165deg,#ffffffed,#edf8f1ef); }
+ body.student-ui .sidebar > .brand { display:none; }
+ body.student-ui .sidebar nav { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; padding:3px; }
+ body.student-ui .sidebar .nav-item { min-height:42px; border:0; border-radius:13px; margin:2px 0; padding:7px 9px; gap:9px; font-size:13px; color:var(--ink); box-shadow:none; }
+ body.student-ui .sidebar .nav-item .ni { background:none; width:28px; height:28px; flex:none; }
+ body.student-ui .sidebar .nav-item.on { background:linear-gradient(115deg,#148aff,#0564e8); color:#fff; box-shadow:0 4px 10px #126ce126; }
+ body.student-elementary .sidebar .nav-item.on { background:linear-gradient(115deg,#26b873,#13894d); }
+ body.student-ui .sd-profile { display:flex; flex:none; flex-direction:column; align-items:center; gap:4px; padding:8px 4px 16px; margin-bottom:8px; color:var(--ink); border-bottom:1px solid var(--line); text-align:center; }
+ body.student-ui .sd-profile-photo { display:block; width:90px; height:90px; overflow:hidden; border:3px solid #fff; border-radius:26px; background:linear-gradient(135deg,#daeaff,#edddff); box-shadow:0 4px 12px #335d9825; }
+ body.student-elementary .sd-profile-photo { background:linear-gradient(135deg,#ccf1e2,#e5f2ff); }
+ body.student-ui .sd-profile-photo img { width:100%; height:100%; object-fit:cover; object-position:center 10%; }
+ body.student-ui .sd-profile b { font-size:16px; font-weight:900; line-height:1.6; }
+ body.student-ui .sd-profile small { font-size:12px; color:var(--muted); }
+ body.student-ui .sidebar .foot { flex:none; margin-top:10px; padding-top:10px; border-color:var(--line); }
+ body.student-ui .sidebar .foot .row > :not(#logoutBtn) { display:none; }
+ body.student-ui #logoutBtn { width:100%; display:flex; gap:8px; border-radius:12px; color:#b62f44; background:#fff1f3; font-size:12px; }
+ body.student-ui #logoutBtn::after { content:'خروج از حساب'; }
+ body.student-ui .bottom-nav { display:none; }
+ body.student-ui .topbar { padding:16px 20px; margin-bottom:20px; border:1px solid #fff; border-radius:22px; background:#ffffffb3; }
+ body.student-ui .topbar .title { text-align:start; padding:0; }
+ body.student-ui .topbar h1 { justify-content:flex-start; font-size:25px; }
+ body.student-ui .topbar .actions { width:auto; }
+ body.student-ui .student-back { display:none; }
+ body.student-ui #view .grid > *,body.student-ui .table-wrap { min-width:0; max-width:100%; }
+ body.student-ui .table-wrap { overflow-x:auto; overscroll-behavior-inline:contain; }
+ body.student-ui .chat { grid-template-columns:280px minmax(0,1fr); height:calc(100dvh - 230px); min-height:480px; }
+ body.student-ui .chat-list,body.student-ui .chat-pane { min-width:0; }
+ body.student-secondary .student-dashboard { gap:20px; }
+ body.student-secondary .student-first-screen { height:auto; min-height:0; padding:0; display:grid; grid-template-columns:minmax(0,1.25fr) minmax(300px,.9fr); grid-template-rows:250px 264px; gap:20px; }
+ body.student-secondary .student-welcome { grid-column:1; grid-row:1; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); }
+ body.student-secondary .student-welcome-copy { padding:18px 24px 18px 8px; }
+ body.student-secondary .student-welcome h1 { font-size:30px; line-height:1.5; }
+ body.student-secondary .student-welcome p { font-size:16px; line-height:1.7; }
+ body.student-secondary .student-welcome-kicker { font-size:12px; }
+ body.student-secondary .student-portrait { padding-top:12px; }
+ body.student-secondary .student-status-grid { grid-column:2; grid-row:1; grid-template-columns:minmax(0,1fr); grid-template-rows:1fr 1fr; gap:12px; }
+ body.student-secondary .student-rank { padding:12px 20px; border-radius:23px; }
+ body.student-secondary .student-rank h2 { font-size:15px; }
+ body.student-secondary .student-rank strong { font-size:39px; line-height:1.1; margin-block:0; }
+ body.student-secondary .student-rank .student-art { max-height:92px; width:30%; }
+ body.student-secondary .student-rank-caption { display:none; }
+ body.student-secondary .student-rank small { font-size:12px; }
+ body.student-secondary .student-level { padding:12px 20px; flex-direction:row; justify-content:space-between; gap:12px; }
+ body.student-secondary .student-level h2 { font-size:14px; margin-bottom:8px; }
+ body.student-secondary .student-level-medal { width:74px; height:74px; flex:none; }
+ body.student-secondary .student-level-medal b { font-size:17px; }
+ body.student-secondary .student-level-medal > .student-art { width:35px; height:35px; }
+ body.student-secondary .student-features { grid-column:1; grid-row:2; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+ body.student-secondary .student-feature { min-height:0; padding:10px 3px; }
+ body.student-secondary .student-features .student-feature .student-art { width:60px; height:60px; max-height:60%; }
+ body.student-secondary .student-features .student-feature b { font-size:14px; line-height:1.5; }
+ body.student-secondary .student-first-screen .student-today { grid-column:2; grid-row:2; padding:20px 14px; border-radius:24px; }
+ body.student-secondary .student-today h2 { font-size:20px; margin-bottom:14px; }
+ body.student-secondary .student-today-list { width:80%; gap:10px; }
+ body.student-secondary .student-today-row { min-height:0; padding:6px 8px; gap:6px; }
+ body.student-secondary .student-today-row b { font-size:13px; }
+ body.student-secondary .student-tasks-art { width:19%; bottom:14px; }
+ body.student-secondary .student-events { margin:0; padding:20px; }
+ body.student-secondary .student-event-banner { min-height:170px; }
+ body.student-secondary .student-event-banner > div { max-width:65%; }
+ body.student-secondary .student-event-banner > .student-art { width:30%; height:120%; }
+ body.student-secondary .student-subjects { grid-template-columns:repeat(3,minmax(0,1fr)); }
+ body.student-elementary .elementary-first-screen { height:auto; min-height:0; padding:0; display:grid; grid-template-columns:minmax(0,1.25fr) minmax(300px,.9fr); grid-template-rows:250px 264px; gap:20px; }
+ body.student-elementary .elementary-first-screen .scene { grid-column:1; grid-row:1; padding:10px 16px 0 0; border-radius:26px; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); }
+ body.student-elementary .elementary-native .avwrap { max-width:none; width:100%; }
+ body.student-elementary .elementary-native .avatar:not(.own-photo) { width:100%; transform:none; }
+ body.student-elementary .elementary-native .greet { padding-inline-start:8px; }
+ body.student-elementary .elementary-native .greet h1 { font-size:30px; }
+ body.student-elementary .elementary-native .greet p { display:block; font-size:14px; }
+ body.student-elementary .elementary-native .level { height:76px; margin-bottom:14px; padding-top:10px; }
+ body.student-elementary .elementary-native .level .ttl { font-size:16px; }
+ body.student-elementary .elementary-native .level .track { top:37px; height:10px; }
+ body.student-elementary .elementary-native .level .score { top:52px; font-size:12px; }
+ body.student-elementary .ep-rankings { grid-column:2; grid-row:1; margin:0; grid-template-columns:minmax(0,1fr); grid-template-rows:repeat(2,minmax(0,1fr)); gap:12px; }
+ body.student-elementary .ep-rank-card { padding:14px 24px; gap:18px; border-radius:24px; }
+ body.student-elementary .ep-rank-icon { width:64px; height:64px; }
+ body.student-elementary .ep-rank-copy h2 { font-size:17px; }
+ body.student-elementary .ep-rank-number strong { font-size:44px; }
+ body.student-elementary .ep-rank-number small { font-size:13px; }
+ body.student-elementary .elementary-first-screen > .grid { grid-column:1; grid-row:2; padding:0; gap:12px; }
+ body.student-elementary .elementary-native .tile { border-radius:22px; padding:10px 3px; justify-content:center; }
+ body.student-elementary .elementary-native .tile .ai { width:60px; height:60px; max-height:none; margin-bottom:10px; }
+ body.student-elementary .elementary-native .tile .ai img { max-height:60px; }
+ body.student-elementary .elementary-native .tile > span:last-child { font-size:15px; white-space:normal; text-align:center; }
+ body.student-elementary .elementary-first-screen .ep-today { grid-column:2; grid-row:2; margin:0; padding:18px 14px; gap:12px; }
+ body.student-elementary .elementary-native .ep-today h2 { font-size:19px; }
+ body.student-elementary .ep-today-content { grid-template-columns:minmax(0,1fr) 62px; gap:8px; }
+ body.student-elementary .elementary-native .ep-today .task { flex:1 1 58px; max-height:60px; min-height:44px; }
+ body.student-elementary .ep-task-title { font-size:13px; }
+ body.student-elementary .ep-task-copy small { display:block; font-size:11px; }
+ body.student-elementary .elementary-native > .banner { margin:20px 0 0; width:100%; height:164px; min-height:164px; border-radius:26px; }
+ body.student-elementary .elementary-native .banner .pic { width:60%; }
+ body.student-elementary .elementary-native .banner .txt { top:20px; right:28px; width:43%; }
+ body.student-elementary .elementary-native .banner h3 { font-size:25px; }
+ body.student-elementary .elementary-native .banner p { display:block; font-size:15px; }
+ body.student-elementary .elementary-native .banner .cta { margin-top:10px; min-height:34px; width:150px; font-size:15px; }
+ body.student-elementary .elementary-native .sec { margin:26px 0 14px; font-size:22px; }
+ body.student-elementary .elementary-native .phero { margin:0 0 20px; padding:24px; border-radius:26px; }
+ body.student-elementary .elementary-native .phero h1 { font-size:30px; }
+ body.student-elementary .elementary-native .row { min-height:72px; padding:14px 18px; }
+ body.student-elementary .elementary-native .row h4 { font-size:16px; }
+ body.student-elementary .elementary-native .row small { font-size:13px; }
+ body.student-elementary .elementary-native > .grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; padding:0; }
+ body.student-elementary .elementary-native > .grid .tile { min-height:122px; }
+ body.student-elementary .elementary-native .w3 { height:calc(100dvh - 160px); min-height:520px; }
+ body.student-elementary .elementary-native .pcard { padding:24px; }
+ body.student-elementary .elementary-native .pimg { object-fit:contain; max-height:190px; }
+ body.student-elementary[data-student-page='/more'] .elementary-native > .list,body.student-elementary[data-student-page='/home'] .elementary-native > .list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+ body.student-elementary[data-student-page='/study'] #view { max-width:1000px; margin-inline:auto; }
+}
+@media(min-width:1500px) {
+ body.student-ui .app { grid-template-columns:248px minmax(0,1fr); gap:28px; }
+ body.student-ui #root { padding-inline:32px; }
+ body.student-elementary .elementary-first-screen,body.student-secondary .student-first-screen { grid-template-rows:280px 280px; gap:24px; }
+ body.student-secondary .student-welcome h1,body.student-elementary .elementary-native .greet h1 { font-size:34px; }
+ body.student-secondary .student-today-row b,body.student-elementary .ep-task-title { font-size:15px; }
+}
+@media print {
+ body.student-ui #root { max-width:none; padding:0; }
+ body.student-ui .app { display:block; }
+ body.student-ui .student-first-screen,body.student-ui .elementary-first-screen { display:block; height:auto; min-height:0; }
+}

@@ -1,3 +1,7 @@
+import { studentAvatarAsset } from './student-avatars.js';
+matchMedia('(min-width:1100px)').addEventListener('change', () => {
+  if (document.body.classList.contains('student-ui')) document.querySelector('.scrim')?.click();
+});
 import * as elementary from './elementary.js';
 import { isElementary } from './student-variant.js';
 export { isElementary };
@@ -6,10 +10,24 @@ export { studentLogo } from './student-design.js';
 export const shellHeader = me => isElementary(me) ? elementary.shellHeader(me) : studentDesign.shellHeader(me);
 export const navIcon = (name,size=24) => isElementary(state.me) ? elementary.navIcon(name) : studentDesign.navIcon(name,size);
 export const leavePage = () => elementary.leave();
-export function prepareStudentPage(path) { if (isElementary(state.me)) elementary.preparePage(path); else { document.body.classList.remove('elementary-native-page','elementary-map-page'); studentDesign.prepareStudentPage(path); } }
+export function prepareStudentPage(path) {
+  document.body.dataset.studentPage = path;
+  prepareDesktopProfile(state.me);
+  if (isElementary(state.me)) elementary.preparePage(path);
+  else { document.body.classList.remove('elementary-native-page','elementary-map-page'); studentDesign.prepareStudentPage(path); }
+}
+function prepareDesktopProfile(me) {
+  const sidebar = document.querySelector('.theme-student .sidebar');
+  if (!sidebar || !me?.student) return;
+  let profile = sidebar.querySelector('.sd-profile');
+  if (!profile) { profile = document.createElement('a'); profile.className = 'sd-profile'; profile.href = '#/profile'; sidebar.prepend(profile); }
+  const source = isProfilePhoto(me.student.avatar) ? me.student.avatar : studentAvatarAsset(me);
+  profile.innerHTML = `<span class="sd-profile-photo"><img src="${esc(source)}" alt="آواتار من" width="100" height="100"></span><b>${esc(me.user.full_name)}</b><small>دانش‌آموز پایه ${gradeName(me.student.grade)}</small>`;
+}
+
 import { openPhotoPicker } from './profile-photo.js';
 // پنل دانش‌آموز
-import { api, post, put, esc, fa, hasIcon, AVATAR_ICONS, sgn, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, progress, ring, empty, cdHtml, countdown,
+import { api, post, put, esc, fa, hasIcon, AVATAR_ICONS, sgn, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, isProfilePhoto, progress, ring, empty, cdHtml, countdown,
   jdate, jtime, jshort, subjIcon, subjTint, SOFT, SUBJ_COLOR, gradeName, icon, fileToData, beep, confetti, WEEKDAYS, faWeekday, ymdOf, lineChart, barChart, state } from './core.js';
 import { messagesView, announcementsView, passwordCard, bindPassword } from './common.js';
 import { gamesHub, mathRush, storyView } from './games.js';
@@ -349,7 +367,7 @@ async function profile(el, _p, me) {
   const cats = {};
   d.ledger.forEach((l) => { cats[l.category] = (cats[l.category] || 0) + l.amount; });
   el.innerHTML = `<div class="grid c3">
-    <div class="card tint-violet"><div class="row"><button class="avatar lg" id="avBtn" style="cursor:pointer;border:0" aria-label="تغییر آواتار">${avatar(d.info.avatar, 'lg')}</button><div class="grow"><h3>${esc(d.info.full_name)}</h3>
+    <div class="card tint-violet"><div class="row"><button class="avatar lg" id="avBtn" style="cursor:pointer;border:0" aria-label="تغییر آواتار"><img class="student-profile-character" src="${esc(isProfilePhoto(d.info.avatar) ? d.info.avatar : studentAvatarAsset(me))}" alt="آواتار من"></button><div class="grow"><h3>${esc(d.info.full_name)}</h3>
       <div class="small muted">${esc(d.info.school || '')}</div><div class="small">پایه ${gradeName(d.info.grade)} • کلاس ${esc(d.info.class_name || '')}</div><div class="tiny muted">کد ملی: ${fa(d.info.national_code)} • تولد: ${jdate(d.info.birth_date)}</div></div></div>
       <button class="btn soft sm" style="margin-top:12px" id="avBtn2">${icon('edit', { size: 16 })} انتخاب آواتار</button> <button class="btn sm" id="photoBtn" style="margin-top:12px">${icon('camera', { size: 16 })} بارگذاری عکس من</button><p class="tiny muted">عکس شما در پروفایل و پنل نمایش داده می‌شود.</p></div>
     <div class="card"><div class="card-title"><span class="ib green">${icon('chart', { size: 18 })}</span>ترازنامه امتیاز</div>

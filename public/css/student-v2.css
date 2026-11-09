@@ -226,3 +226,69 @@ body.student-ui { --student-header-size:92px; --student-dock-space:104px; backgr
 .student-welcome-cta { min-height:34px; }
 .student-ui summary { min-height:40px; display:flex; align-items:center; }
 .student-more-list a, .student-ui .student-more a { min-height:40px; }
+
+/* Shared heading fits beside its controls; the greeting begins below it. */
+body.student-secondary { --student-header-size:92px; }
+body.student-secondary .student-masthead { height:var(--student-header-size); min-height:var(--student-header-size); grid-template-columns:auto minmax(0,1fr) auto; gap:16px; padding:12px 24px; }
+body.student-secondary .student-brand { flex-direction:row; gap:10px; min-width:0; padding:0; }
+body.student-secondary .student-brand > img { width:52px; height:52px; flex:none; }
+body.student-secondary .student-brand > span { min-width:0; }
+body.student-secondary .student-brand b { font-size:15px; line-height:1.6; }
+body.student-secondary .student-brand small { display:block; max-width:none; font-size:14px; font-weight:750; line-height:1.7; text-wrap:balance; }
+body.student-secondary .student-first-screen { height:calc(100svh - var(--student-header-size) - var(--student-dock-space)); padding:12px 0 0; }
+body.student-secondary .student-welcome { overflow:hidden; container:student-greeting / size; }
+body.student-secondary .student-welcome-copy { align-self:center; padding-block:8px; }
+body.student-secondary .student-welcome-kicker { white-space:normal; font-size:11px; }
+body.student-secondary .student-welcome p { font-size:14px; line-height:1.65; margin-block:4px 7px; }
+body.student-secondary .student-welcome-cta { font-size:11px; min-height:28px; line-height:1.5; padding-block:2px; }
+body.student-secondary .student-portrait { align-self:stretch; height:100%; padding:10px 4px 0; overflow:hidden; }
+body.student-secondary .student-character { height:100%; max-height:100%; object-fit:contain; }
+body.student-secondary .student-portrait.has-own-photo { padding:10px; }
+body.student-secondary .student-portrait.has-own-photo .student-character { height:100%; }
+@media(max-width:640px) {
+ body.student-secondary { --student-header-size:88px; }
+ body.student-secondary .student-masthead { gap:8px; padding:10px 12px; }
+ body.student-secondary .student-brand { gap:6px; }
+ body.student-secondary .student-brand > img { width:40px; height:44px; }
+ body.student-secondary .student-brand b { font-size:12.5px; line-height:1.5; }
+ body.student-secondary .student-brand small { font-size:12.5px; line-height:1.5; }
+ body.student-secondary .student-welcome h1 { font-size:clamp(20px,5.2vw,25px); line-height:1.5; }
+ body.student-secondary .student-welcome p { font-size:12px; }
+}
+@media(max-width:640px) and (max-height:650px) {
+ body.student-secondary { --student-header-size:72px; }
+ body.student-secondary .student-masthead { padding-block:6px; }
+ body.student-secondary .student-brand > img { width:32px; height:36px; }
+ body.student-secondary .student-brand b,body.student-secondary .student-brand small { font-size:11px; line-height:1.5; }
+ body.student-secondary .student-first-screen { padding-top:8px; }
+}
+@media(min-width:641px) and (max-height:700px) {
+ body.student-secondary { --student-header-size:76px; }
+ body.student-secondary .student-first-screen { padding-top:8px; }
+}
+@container student-greeting (max-height:160px) {
+ body.student-secondary .student-welcome-kicker,body.student-secondary .student-welcome-cta { display:none; }
+ body.student-secondary .student-welcome h1 { font-size:21px; line-height:1.4; }
+ body.student-secondary .student-welcome p { font-size:12px; line-height:1.5; margin:4px 0 0; }
+}
+@container student-greeting (max-height:95px) {
+ body.student-secondary .student-welcome p { display:none; }
+ body.student-secondary .student-welcome h1 { font-size:18px; margin:0; }
+ body.student-secondary .student-welcome-copy { padding-block:4px; }
+}
+
+/* Daily actions share the available card height instead of spilling outside it. */
+body.student-secondary .student-first-screen .student-today { justify-content:flex-start; }
+body.student-secondary .student-today-list { flex:1; grid-auto-rows:minmax(0,1fr); min-height:0; }
+body.student-secondary .student-today-row { min-height:0; padding-block:2px; }
+body.student-secondary .student-today-row b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media(max-height:650px) {
+ body.student-secondary .student-first-screen .student-today { padding-block:5px; }
+ body.student-secondary .student-today h2 { font-size:13px; line-height:1.3; margin-bottom:4px; }
+ body.student-secondary .student-today h2 .student-art { width:18px; height:18px; }
+ body.student-secondary .student-today-list { gap:3px; }
+ body.student-secondary .student-today-row { padding-block:1px; }
+ body.student-secondary .student-today-row b { font-size:11px; line-height:1.3; }
+ body.student-secondary .student-task-check { width:14px; height:14px; border-width:1px; border-radius:4px; }
+ body.student-secondary .student-today-row > .ic { width:16px!important; height:16px!important; }
+}

@@ -14,3 +14,10 @@ export function studentLogo(center) {
   if (!center?.logo || /ashtiani/i.test(center.logo)) return '<img src="/img/student-v2/logo-ashtiani.webp" alt="نشان کانون نخبه‌پروری" width="72" height="72">';
   return `<img src="${escapeAttr(center.logo)}" alt="نشان کانون" width="72" height="72">`;
 }
+
+// Keep the shared school heading concise without repeating its prefix.
+export function studentCenterTitle(center) {
+  const name = String(center?.name || '').trim();
+  if (/آشتیانی|ashtiani/i.test(name) || (!name && /ashtiani/i.test(center?.logo || ''))) return 'شهید کاظمی آشتیانی';
+  return name.replace(/^(?:کانون(?:[\s‌-]*نخبه[\s‌-]*پروری)?[\s‌-]*)+/u, '').trim() || 'رشد نخبه';
+}
