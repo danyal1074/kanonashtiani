@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'roshd-smoke-'));
 const PORT = 3950 + Math.floor(Math.random() * 500);
-const env = { ...process.env, ROSHD_DATA_DIR: path.join(tmp, 'data'), ROSHD_UPLOAD_DIR: path.join(tmp, 'up'), PORT: String(PORT) };
+const env = { ...process.env, ROSHD_DATA_DIR: path.join(tmp, 'data'), ROSHD_UPLOAD_DIR: path.join(tmp, 'up'), PORT: String(PORT), ROSHD_USER_BURST: '2000', ROSHD_USER_RPS: '200' };
 if (spawnSync(process.execPath, ['server/seed.js'], { cwd: ROOT, env }).status !== 0) { console.error('ساخت داده نمونه ناموفق'); process.exit(1); }
 
 // آماده‌سازی صفحه تستی کتاب برای آزمودن اندپوینت صفحات محافظت‌شده
@@ -199,6 +199,8 @@ check('انتقال گروهی دانش‌آموز به کلاس', mv.status ===
 const newCls = await call(S.manager.ck, 'POST', '/api/manager/classes', { grade: 9, name: 'ب-تست' });
 const dist = await call(S.manager.ck, 'POST', '/api/manager/classes/distribute', { grade: 9, class_ids: (await call(S.manager.ck, 'GET', '/api/manager/meta')).data.classes.filter((c) => c.grade === 9).map((c) => c.id) });
 check('تقسیم خودکار دانش‌آموزان بین چند کلاس', newCls.status === 200 && dist.status === 200 && dist.data.moved >= 1, JSON.stringify(dist.data));
+const gF = (await call(S.manager.ck, 'GET', '/api/manager/students?gender=f&limit=100')).data, gM = (await call(S.manager.ck, 'GET', '/api/manager/students?gender=m&limit=100')).data;
+check('فیلتر جنسیت در فهرست دانش‌آموزان', gF.total > 0 && gM.total > 0 && gF.rows.every((x) => x.gender === 'f') && gM.rows.every((x) => x.gender === 'm'));
 check('حذف همه بدون تأیید رد می‌شود', (await call(S.manager.ck, 'POST', '/api/manager/bulk-delete', { what: 'announcements' })).status === 400 && (await call(S.manager.ck, 'POST', '/api/manager/students/delete', { all: true })).status === 400);
 check('حذف همهٔ اطلاعیه‌ها با تأیید', (await call(S.manager.ck, 'POST', '/api/manager/bulk-delete', { what: 'announcements', confirm: true })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/announcements')).data.length === 0);
 const impUpd = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `کد ملی,نام,کلاس,شهریه
@@ -557,6 +559,10 @@ const annWithSms = await call(S.manager.ck, 'POST', '/api/manager/announcements'
   sms_recipient: 'parent'
 });
 check('ثبت اطلاعیه به همراه ارسال پیامک موفق است', annWithSms.status === 200 && annWithSms.data.ok && annWithSms.data.sms?.total >= 0);
+
+const spl = await call(S.manager.ck, 'POST', '/api/manager/classes/split-gender', {});
+const chk = (await call(S.manager.ck, 'GET', '/api/manager/students?limit=100&grade=5')).data.rows;
+check('پسرها کلاس الف و دخترها کلاس ب (همهٔ پایه‌ها)', spl.status === 200 && spl.data.boys > 0 && spl.data.girls > 0 && chk.every((x) => x.class_name === (x.gender === 'f' ? 'ب' : 'الف')), JSON.stringify(spl.data));
 
 app.kill();
 await new Promise((r) => setTimeout(r, 300));
