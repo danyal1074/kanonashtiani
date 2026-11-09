@@ -388,3 +388,21 @@ export function labelControls(root = document) {
     if (name) c.setAttribute('aria-label', name.slice(0, 80));
   });
 }
+
+// نوار وضعیت اتصال: هنگام قطع اینترنت به کاربر هشدار می‌دهد که تغییرات ذخیره نمی‌شوند (داده‌ای بی‌صدا از دست نرود)
+if (typeof window !== 'undefined' && !window.__roshdNetBar) {
+  window.__roshdNetBar = true;
+  const draw = () => {
+    let b = document.getElementById('netBar');
+    if (navigator.onLine) { b?.remove(); return; }
+    if (b) return;
+    b = document.createElement('div');
+    b.id = 'netBar'; b.setAttribute('role', 'status'); b.setAttribute('aria-live', 'polite');
+    b.style.cssText = 'position:fixed;top:0;inset-inline:0;z-index:2000;padding:6px 12px;text-align:center;font-size:13px;color:#fff;background:#b45309;box-shadow:0 2px 8px #0003';
+    b.textContent = 'اتصال اینترنت قطع است. تغییرات جدید تا برگشت اتصال ذخیره نمی‌شوند؛ صفحه را نبندید.';
+    document.body.append(b);
+  };
+  window.addEventListener('offline', draw);
+  window.addEventListener('online', () => { draw(); try { toast('اتصال برگشت', 'ok'); } catch { /* */ } });
+  if (document.readyState !== 'loading') draw(); else document.addEventListener('DOMContentLoaded', draw);
+}

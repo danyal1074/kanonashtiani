@@ -557,6 +557,8 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; font-si
   .main { padding: var(--s-5) var(--s-5) var(--s-8); }
 }
 @media (max-width: 980px) {
+  /* منوی کشویی بستهٔ بیرون از صفحه نباید اسکرول افقی بسازد */
+  html, body { overflow-x: clip; }
   .app { grid-template-columns: 1fr; }
   .sidebar { position: fixed; top: 0; bottom: 0; right: 0; left: auto; width: min(300px, 86vw); z-index: 90; transform: translateX(110%); transition: transform var(--dur-3) var(--ease); box-shadow: var(--shadow-lg); }
   .sidebar.open { transform: none; }

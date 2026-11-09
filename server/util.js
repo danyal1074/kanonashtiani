@@ -60,7 +60,7 @@ const SECRET = process.env.ROSHD_SECRET || fs.readFileSync(SECRET_FILE, 'utf8').
 const TOKEN_DAYS = 14;
 
 export function signToken(payload) {
-  const body = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + TOKEN_DAYS * 864e5 })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ jti: crypto.randomBytes(9).toString('base64url'), ...payload, exp: Date.now() + TOKEN_DAYS * 864e5 })).toString('base64url');
   const sig = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
   return `${body}.${sig}`;
 }

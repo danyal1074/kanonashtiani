@@ -4,8 +4,8 @@ import path from 'node:path';
 import { CURATED_QUESTIONS } from '../self_exam.js';
 // مسیرهای مشترک: ورود، پروفایل، اطلاعیه، پیام‌رسان، صفحه عمومی کانون و فروشگاه
 import { all, get, run, tx, ROOT, DATA_DIR } from '../db.js';
-import { COOKIE, isHttps, serveFile } from '../http.js';
-import { fail, hashPasswordAsync, verifyPasswordAsync, needsRehash, signToken, ymd, jMonthOf, toEnDigits, clampStr, normalizeIranianMobile, normalizeNationalCode, randomCode, saveUpload } from '../util.js';
+import { COOKIE, isHttps, serveFile, parseCookies } from '../http.js';
+import { fail, hashPasswordAsync, verifyPasswordAsync, needsRehash, signToken, readToken, ymd, jMonthOf, toEnDigits, clampStr, normalizeIranianMobile, normalizeNationalCode, randomCode, saveUpload } from '../util.js';
 import { feeStatus, announcementsFor, contactsOf, levelOf, totalPoints } from '../logic.js';
 
 // محدودیت تلاش ناموفق ورود: هر (آی‌پی، شناسه) ۸ بار در ۱۰ دقیقه؛ و سقف کلی هر آی‌پی (مدرسه‌ای با ده‌ها دانش‌آموز پشت یک آی‌پی)
@@ -76,6 +76,9 @@ export default function register(r) {
   });
 
   r.post('/api/auth/logout', { auth: false, allowLocked: true }, (ctx) => {
+    // نشست خروج‌شده باطل می‌شود (کوکی کپی‌شده هم دیگر کار نمی‌کند)
+    const p = readToken(parseCookies(ctx.req.headers.cookie)[COOKIE]);
+    if (p?.jti) { run('INSERT OR IGNORE INTO revoked_tokens (jti, exp) VALUES (?,?)', p.jti, p.exp); run('DELETE FROM revoked_tokens WHERE exp < ?', Date.now()); }
     ctx.res.setHeader('Set-Cookie', cookieHeader('', 0, ctx.req));
     return { ok: true };
   });

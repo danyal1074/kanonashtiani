@@ -128,6 +128,7 @@ check('اشتراک سامانه پیش‌فرض خاموش است: مجموع �
 check('مسیرهای پنل والدین حذف شده‌اند', (await call(S.manager.ck, 'GET', '/api/parent/children/1')).status === 404);
 check('دانش‌آموز بدون موبایل با کد ملی وارد می‌شود', (await login('student', nc2, nc2)).status === 200);
 check('مدیر اشتراک سامانه را تغییر می‌دهد', (await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 120000, settings: [] })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/fees')).data.system_fee === 120000);
+check('مبلغ با ارقام فارسی و عربی درست ذخیره می‌شود', (await call(S.manager.ck, 'PUT', '/api/manager/fees', { settings: [{ grade: 4, amount: '۵۸۰۰۰۰' }, { grade: 5, amount: '٥٨٠٠٠٠' }] })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/fees')).data.settings.filter((f) => f.grade === 4 || f.grade === 5).every((f) => f.amount === 580000));
 check('اشتراک سامانه عددی نامعتبر صفر می‌شود', (await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 'abc', settings: [] })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/fees')).data.system_fee === 0);
 await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 100000, settings: [] });
 check('نقش ناشناخته (والدین) در ورود رد می‌شود', (await call('', 'POST', '/api/auth/login', { role: 'parent', identifier: '09120000000', password: 'x' })).status === 400);
@@ -168,6 +169,9 @@ const impFull = await call(S.manager.ck, 'POST', '/api/manager/students/import',
 ` });
 check('ثبت‌نام گروهی با همهٔ ستون‌های اختیاری', impFull.status === 200 && impFull.data.created === 1, JSON.stringify(impFull.data).slice(0, 140));
 const gf = await login('student', nc4, nc4);
+const loOut = await login('student', nc4, nc4);
+await call(loOut.ck, 'POST', '/api/auth/logout');
+check('پس از خروج، کوکی قدیمی باطل می‌شود', (await call(loOut.ck, 'GET', '/api/me')).status === 401);
 check('ورود دانش‌آموز با ارقام فارسی (کد ملی) هم کار می‌کند', (await login('student', nc4.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]), nc4.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]))).status === 200);
 const meF = (await call(gf.ck, 'GET', '/api/me')).data;
 check('اطلاعات موجود در فایل در پروفایل ثبت شد (فهرست خالی‌ها تهی است)', meF.student.missing.length === 0, JSON.stringify(meF.student.missing));

@@ -41,6 +41,7 @@ function loadUser(req) {
   const tok = parseCookies(req.headers.cookie)[COOKIE];
   const p = readToken(tok);
   if (!p) return {};
+  if (p.jti && get('SELECT 1 x FROM revoked_tokens WHERE jti=?', p.jti)) return {};
   const user = get('SELECT id, center_id, role, username, national_code, mobile, full_name, gender, active, pass_hash, must_change_password, (SELECT profile_done FROM students WHERE user_id=users.id) profile_done FROM users WHERE id=?', p.uid);
   if (!user || !user.active || user.role === 'parent') return {};
   // اعتبار توکن پس از تغییر رمز از بین می‌رود

@@ -58,6 +58,13 @@ export function parseCookies(header = '') {
   return out;
 }
 
+// ورودی‌های فقط‌عددیِ دارای ارقام فارسی/عربی (کد ملی، موبایل، مبلغ، نمره، تاریخ…) به ارقام انگلیسی تبدیل می‌شوند.
+// متن آزاد (نام، نشانی، پاسخ) و رمزها دست نمی‌خورند.
+const NUMLIKE = /^[\s\d۰-۹٠-٩.,\-+/:]+$/, HAS_FA_DIGIT = /[۰-۹٠-٩]/, KEEP_KEYS = new Set(['password', 'current', 'next', 'pw']);
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹', AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+const digitsReviver = (k, v) => (typeof v === 'string' && !KEEP_KEYS.has(k) && HAS_FA_DIGIT.test(v) && NUMLIKE.test(v)
+  ? v.replace(/[۰-۹]/g, (d) => FA_DIGITS.indexOf(d)).replace(/[٠-٩]/g, (d) => AR_DIGITS.indexOf(d)) : v);
+
 export function readBody(req, limit = 12 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const declared = Number(req.headers['content-length'] || 0);
@@ -75,7 +82,7 @@ export function readBody(req, limit = 12 * 1024 * 1024) {
       if (done) return;
       done = true;
       if (!chunks.length) return resolve({});
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new HttpError(400, 'بدنه درخواست نامعتبر است')); }
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'), digitsReviver)); } catch { reject(new HttpError(400, 'بدنه درخواست نامعتبر است')); }
     });
     req.on('error', (e) => { if (!done) { done = true; reject(e); } });
     req.on('aborted', () => { if (!done) { done = true; reject(new HttpError(400, 'ارتباط قطع شد')); } });
