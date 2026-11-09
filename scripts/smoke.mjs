@@ -124,7 +124,7 @@ check('ثبت‌نام بدون موبایل والدین مجاز است', (awa
 const feesCfg = (await call(S.manager.ck, 'GET', '/api/manager/fees')).data;
 check('اشتراک سامانه پیش‌فرض ۱۰۰ هزار تومان است', feesCfg.system_fee === 100000, feesCfg.system_fee);
 const payInfo = (await call(S.student.ck, 'GET', '/api/student/payment')).data;
-check('مجموع پرداخت = حق عضویت + اشتراک سامانه (جدا)', payInfo.total === payInfo.amount + payInfo.system_fee && (payInfo.amount === 0 ? payInfo.system_fee === 0 : payInfo.system_fee === 100000), JSON.stringify([payInfo.amount, payInfo.system_fee, payInfo.total]));
+check('اشتراک سامانه پیش‌فرض خاموش است: مجموع پرداخت = حق عضویت و پنل دانش‌آموز اشتراک نشان نمی‌دهد', feesCfg.system_fee_enabled === false && payInfo.system_fee === 0 && payInfo.total === payInfo.amount, JSON.stringify([payInfo.amount, payInfo.system_fee, payInfo.total]));
 check('مسیرهای پنل والدین حذف شده‌اند', (await call(S.manager.ck, 'GET', '/api/parent/children/1')).status === 404);
 check('دانش‌آموز بدون موبایل با کد ملی وارد می‌شود', (await login('student', nc2, nc2)).status === 200);
 check('مدیر اشتراک سامانه را تغییر می‌دهد', (await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 120000, settings: [] })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/fees')).data.system_fee === 120000);
@@ -140,11 +140,11 @@ check('ثبت‌نام گروهی با ستون‌های پایه و جنسیت 
 const impNoGrade = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت
 بی‌جنسیت,${nc2},09121112234,چهارم,
 `, dry_run: true });
-check('جنسیت خالی خطای واضح می‌دهد', impNoGrade.status === 200 && impNoGrade.data.errors.some((e) => /جنسیت/.test(e.message)));
-const impNoCols = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس
-x,${nc2},0912
+check('جنسیت خالی اجباری نیست: ثبت می‌شود و در گزارش هشدار می‌آید', impNoGrade.status === 200 && impNoGrade.data.error_count === 0 && impNoGrade.data.valid + impNoGrade.data.will_update === 1, JSON.stringify(impNoGrade.data).slice(0, 160));
+const impNoCols = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,شماره تماس
+x,09121234567
 `, dry_run: true });
-check('نبودن ستون پایه و جنسیت در فایل رد می‌شود', impNoCols.status === 400 && /پایه/.test(impNoCols.data.error));
+check('نبودن ستون کد ملی در فایل رد می‌شود (فقط نام و کد ملی لازم‌اند)', impNoCols.status === 400 && /کد ملی/.test(impNoCols.data.error), JSON.stringify(impNoCols.data));
 const gs = await login('student', nc3, nc3);
 check('ورود دانش‌آموز واردشده گروهی', gs.status === 200);
 const feeG = (await call(S.manager.ck, 'GET', '/api/manager/fees')).data;
@@ -173,7 +173,33 @@ check('اطلاعات موجود در فایل در پروفایل ثبت شد (
 const impNoPhone = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت
 بی‌شماره,${nc2},,نهم,پسر
 `, dry_run: true });
-check('شمارهٔ تماس خالی در ثبت‌نام گروهی رد می‌شود', impNoPhone.status === 200 && impNoPhone.data.errors.some((e) => /شماره تماس/.test(e.message)));
+check('شمارهٔ تماس خالی در ثبت‌نام گروهی اجباری نیست', impNoPhone.status === 200 && impNoPhone.data.valid + impNoPhone.data.will_update === 1 && impNoPhone.data.error_count === 0, JSON.stringify(impNoPhone.data).slice(0, 160));
+// ثبت دستی پرداخت، انتقال کلاس و حذف گروهی
+const uid4 = (await call(S.manager.ck, 'GET', `/api/manager/students?q=${nc4}`)).data.rows[0]?.id;
+const sysOn = await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee: 100000, system_fee_enabled: true, settings: [] });
+check('مدیر اشتراک سامانه را روشن می‌کند', sysOn.status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/fees')).data.system_fee_enabled === true);
+await call(S.manager.ck, 'PUT', '/api/manager/fees', { system_fee_enabled: false, settings: [] });
+const mp = await call(S.manager.ck, 'POST', '/api/manager/students/fee-paid', { ids: [uid4], paid: true });
+check('مدیر پرداخت حق عضویت را دستی ثبت می‌کند', mp.status === 200 && mp.data.changed === 1, JSON.stringify(mp.data));
+const mpAgain = await call(S.manager.ck, 'POST', '/api/manager/students/fee-paid', { ids: [uid4], paid: true });
+check('ثبت دوباره پرداخت تکرار نمی‌شود', mpAgain.data.already === 1 && mpAgain.data.changed === 0);
+const gfPay = (await call(gf.ck, 'GET', '/api/student/payment')).data;
+check('پنل دانش‌آموز «پرداخت شد» و ماه را نشان می‌دهد', gfPay.status === 'paid' && !!gfPay.period, JSON.stringify([gfPay.status, gfPay.period]));
+const mu = await call(S.manager.ck, 'POST', '/api/manager/students/fee-paid', { ids: [uid4], paid: false });
+check('مدیر پرداخت دستی را لغو می‌کند', mu.status === 200 && mu.data.changed === 1 && (await call(gf.ck, 'GET', '/api/student/payment')).data.status !== 'paid');
+const clsList = (await call(S.manager.ck, 'GET', '/api/manager/meta')).data.classes;
+const own = clsList.find((c) => c.grade === 9);
+const mv = await call(S.manager.ck, 'POST', '/api/manager/students/move', { ids: [uid4], class_id: own.id });
+check('انتقال گروهی دانش‌آموز به کلاس', mv.status === 200 && mv.data.moved === 1);
+const newCls = await call(S.manager.ck, 'POST', '/api/manager/classes', { grade: 9, name: 'ب-تست' });
+const dist = await call(S.manager.ck, 'POST', '/api/manager/classes/distribute', { grade: 9, class_ids: (await call(S.manager.ck, 'GET', '/api/manager/meta')).data.classes.filter((c) => c.grade === 9).map((c) => c.id) });
+check('تقسیم خودکار دانش‌آموزان بین چند کلاس', newCls.status === 200 && dist.status === 200 && dist.data.moved >= 1, JSON.stringify(dist.data));
+check('حذف همه بدون تأیید رد می‌شود', (await call(S.manager.ck, 'POST', '/api/manager/bulk-delete', { what: 'announcements' })).status === 400 && (await call(S.manager.ck, 'POST', '/api/manager/students/delete', { all: true })).status === 400);
+check('حذف همهٔ اطلاعیه‌ها با تأیید', (await call(S.manager.ck, 'POST', '/api/manager/bulk-delete', { what: 'announcements', confirm: true })).status === 200 && (await call(S.manager.ck, 'GET', '/api/manager/announcements')).data.length === 0);
+const impUpd = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `کد ملی,نام,کلاس,شهریه
+${nc4},علی کامل,نهم ب-تست,پرداخت شده
+` });
+check('ثبت‌نام گروهی دانش‌آموز موجود را به‌روز می‌کند (کلاس و پرداخت)، رد نمی‌کند', impUpd.status === 200 && impUpd.data.created === 0 && impUpd.data.updated === 1 && impUpd.data.fee_paid_recorded === 1, JSON.stringify(impUpd.data).slice(0, 200));
 check('ساخت کانون دوم ممنوع است (سامانهٔ اختصاصی آشتیانی)', (await call(S.admin.ck, 'POST', '/api/admin/centers', { name: 'کانون دیگر', slug: 'other-center', manager_username: 'other_mgr', manager_password: '123456' })).status === 403);
 check('حالت نمایشی در نسخهٔ واقعی خاموش است', (await call('', 'GET', '/api/public/mode')).data.demo === false);
 check('جدول هفتگی مدیر برمی‌گردد', Array.isArray((await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data));

@@ -668,6 +668,14 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     if (!cols.includes('mother_name')) database.exec('ALTER TABLE students ADD COLUMN mother_name TEXT');
     if (!cols.includes('phone2')) database.exec('ALTER TABLE students ADD COLUMN phone2 TEXT');
   },
+  // اشتراک سامانه قابل خاموش/روشن (پیش‌فرض: اعمال نشود)؛ ماه حق عضویت و علامت ثبت دستی روی پرداخت‌ها
+  (database) => {
+    const cc = database.prepare('PRAGMA table_info(centers)').all().map((c) => c.name);
+    if (!cc.includes('system_fee_enabled')) database.exec('ALTER TABLE centers ADD COLUMN system_fee_enabled INTEGER NOT NULL DEFAULT 0');
+    const pc = database.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
+    if (!pc.includes('period')) database.exec('ALTER TABLE payments ADD COLUMN period TEXT');
+    if (!pc.includes('manual')) database.exec('ALTER TABLE payments ADD COLUMN manual INTEGER NOT NULL DEFAULT 0');
+  },
 ];
 
 export function migrate(database = db) {

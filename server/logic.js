@@ -1,6 +1,6 @@
 // منطق دامنه: امتیاز، سطح، رتبه، قفل پنل، اطلاعیه‌ها، مسیر یادگیری، جریمه‌های خودکار
 import { all, get, run, tx } from './db.js';
-import { ymd, addDays, weekStart, faWeekday, nowIso } from './util.js';
+import { ymd, addDays, weekStart, faWeekday, nowIso, jMonthOf, JMONTHS } from './util.js';
 
 export const LEVELS = [
   { min: 0, name: 'جوانه', icon: '🌱' },
@@ -64,8 +64,9 @@ export function feeStatus(sid) {
   const st = get('SELECT s.grade, u.center_id FROM students s JOIN users u ON u.id=s.user_id WHERE s.user_id=?', sid);
   if (!st) return null;
   const fee = get('SELECT amount, lock_date FROM fee_settings WHERE center_id=? AND grade=?', st.center_id, st.grade) || { amount: 0, lock_date: null };
-  const sysFee = fee.amount ? (get('SELECT system_fee FROM centers WHERE id=?', st.center_id)?.system_fee ?? 0) : 0;
-  const pays = all('SELECT id, amount, system_fee, status, reject_reason, receipt_path, created_at, reviewed_at FROM payments WHERE student_id=? AND invoice_id IS NULL ORDER BY id DESC', sid);
+  const cen = get('SELECT system_fee, system_fee_enabled FROM centers WHERE id=?', st.center_id);
+  const sysFee = fee.amount && cen?.system_fee_enabled ? (cen.system_fee ?? 0) : 0;
+  const pays = all('SELECT id, amount, system_fee, status, reject_reason, receipt_path, created_at, reviewed_at, period, manual FROM payments WHERE student_id=? AND invoice_id IS NULL ORDER BY id DESC', sid);
   const activePays = pays.filter((p) => p.status !== 'reversed');
   let status = 'unpaid';
   if (activePays.some((p) => p.status === 'approved')) status = 'paid';
@@ -74,7 +75,7 @@ export function feeStatus(sid) {
   if (!fee.amount) status = status === 'unpaid' || status === 'rejected' ? 'free' : status;
   const deadlinePassed = !!fee.lock_date && ymd() > fee.lock_date;
   const locked = deadlinePassed && !['paid', 'free'].includes(status);
-  return { grade: st.grade, amount: fee.amount, system_fee: sysFee, total: fee.amount + sysFee, lock_date: fee.lock_date, status, locked, payments: pays };
+  return { grade: st.grade, amount: fee.amount, system_fee_enabled: !!cen?.system_fee_enabled, period: activePays.find((p) => p.status === 'approved')?.period || null, system_fee: sysFee, total: fee.amount + sysFee, lock_date: fee.lock_date, status, locked, payments: pays };
 }
 
 export function recalcInvoice(invoiceId) {
@@ -313,4 +314,54 @@ export function runPenaltyJob() {
     }
   });
   return applied;
+}
+
+// ================= ثبت دستی/گروهی «حق عضویت پرداخت شد» =================
+export const periodLabel = () => { const [y, m] = jMonthOf(ymd()); return `${JMONTHS[m - 1]} ${y}`; };
+
+// علامت‌گذاری پرداخت‌شده توسط مدیر (یا ثبت‌نام گروهی). اگر مبلغ حق عضویت هنوز تعیین نشده باشد، پرداخت با مبلغ صفر ثبت می‌شود
+// و وقتی مبلغ تعیین شد، مبلغ و سند حسابداری آن کامل می‌شود (backfillZeroPayments).
+export function markFeePaid(centerId, sid, { period } = {}) {
+  const fs = feeStatus(sid);
+  if (!fs) return null;
+  if (fs.status === 'paid') return { result: 'already' };
+  const name = get('SELECT full_name FROM users WHERE id=?', sid)?.full_name || '';
+  const label = period || periodLabel();
+  const pending = get("SELECT id, amount FROM payments WHERE student_id=? AND invoice_id IS NULL AND status='pending' ORDER BY id DESC", sid);
+  let pid, amount;
+  if (pending) {
+    pid = pending.id; amount = pending.amount;
+    run("UPDATE payments SET status='approved', reviewed_at=datetime('now'), period=? WHERE id=?", label, pid);
+  } else {
+    amount = fs.total || 0;
+    pid = Number(run("INSERT INTO payments (student_id, amount, system_fee, status, fee_type, reviewed_at, period, manual) VALUES (?,?,?,'approved','tuition',datetime('now'),?,1)", sid, amount, fs.system_fee || 0, label).lastInsertRowid);
+  }
+  if (amount > 0) run('INSERT INTO transactions (center_id, type, amount, title, category, date, ref) VALUES (?,?,?,?,?,?,?)', centerId, 'income', amount, `حق عضویت ${label} - ${name}`, 'حق عضویت', ymd(), `pay:${pid}`);
+  run("DELETE FROM points WHERE student_id=? AND ref LIKE 'fee:%'", sid);
+  return { result: amount > 0 ? 'paid' : 'unset', id: pid };
+}
+
+// برگشت پرداخت تأییدشدهٔ حق عضویت با سند اصلاحی
+export function unmarkFeePaid(centerId, sid, reason = 'لغو علامت پرداخت توسط مدیر', actorId = null) {
+  const name = get('SELECT full_name FROM users WHERE id=?', sid)?.full_name || '';
+  const pays = all("SELECT id, amount FROM payments WHERE student_id=? AND invoice_id IS NULL AND status='approved' AND reversed_at IS NULL", sid);
+  for (const p of pays) {
+    run("UPDATE payments SET status='reversed', reversed_at=datetime('now'), reversed_by=?, reverse_reason=?, reject_reason=? WHERE id=?", actorId, reason, `برگشت: ${reason}`, p.id);
+    if (p.amount > 0) run('INSERT INTO transactions (center_id, type, amount, title, category, date, ref) VALUES (?,?,?,?,?,?,?)', centerId, 'expense', p.amount, `سند اصلاحی برگشت حق عضویت - ${name}`, 'اصلاحیه', ymd(), `reversal:${p.id}`);
+  }
+  return pays.length;
+}
+
+// پرداخت‌های ثبت‌شده با مبلغ صفر (پیش از تعیین مبلغ) پس از تعیین مبلغ کامل می‌شوند و در حسابداری ثبت می‌شوند
+export function backfillZeroPayments(centerId) {
+  const rows = all("SELECT p.id, p.student_id, p.period, u.full_name FROM payments p JOIN users u ON u.id=p.student_id WHERE u.center_id=? AND p.status='approved' AND p.amount=0 AND p.invoice_id IS NULL AND p.manual=1", centerId);
+  let n = 0;
+  for (const p of rows) {
+    const fs = feeStatus(p.student_id);
+    if (!fs?.total) continue;
+    run('UPDATE payments SET amount=?, system_fee=? WHERE id=?', fs.total, fs.system_fee || 0, p.id);
+    run('INSERT INTO transactions (center_id, type, amount, title, category, date, ref) VALUES (?,?,?,?,?,?,?)', centerId, 'income', fs.total, `حق عضویت ${p.period || periodLabel()} - ${p.full_name}`, 'حق عضویت', ymd(), `pay:${p.id}`);
+    n++;
+  }
+  return n;
 }

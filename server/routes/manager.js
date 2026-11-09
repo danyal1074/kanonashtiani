@@ -4,7 +4,7 @@ import path from 'node:path';
 import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
 import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
 import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
-import { feeStatus, announcementAudience, saveExamResult, recalcInvoice } from '../logic.js';
+import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
 import { sendSms, smsProvider } from '../sms.js';
@@ -166,9 +166,10 @@ export default function register(r) {
   });
   // ثبت‌نام گروهی از CSV؛ با dry_run فقط اعتبارسنجی و گزارش خطای هر سطر بدون ثبت
   r.post('/api/manager/students/import', M, async (ctx) => {
-    const csv = String(ctx.body.csv || '');
-    if (!csv.trim()) fail(400, 'فایل CSV خالی است');
-    try { return await importStudents(ctx.user.center_id, csv, { dryRun: !!ctx.body.dry_run }); } catch (e) { fail(400, e.message); }
+    const csv = String(ctx.body.csv || ''), xlsx_b64 = String(ctx.body.xlsx_b64 || '');
+    if (!csv.trim() && !xlsx_b64) fail(400, 'فایل خالی است');
+    const dg = Number(ctx.body.default_grade), defaults = { grade: GRADES.includes(dg) ? dg : null, gender: ctx.body.default_gender === 'f' ? 'f' : ctx.body.default_gender === 'm' ? 'm' : null };
+    try { return await importStudents(ctx.user.center_id, xlsx_b64 ? { xlsx_b64 } : csv, { dryRun: !!ctx.body.dry_run, defaults }); } catch (e) { fail(e.status || 400, e.message); }
   });
   r.put('/api/manager/students/:id', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);
@@ -187,6 +188,86 @@ export default function register(r) {
       run(`DELETE FROM users WHERE role='parent' AND center_id=? AND NOT EXISTS (SELECT 1 FROM parent_children pc WHERE pc.parent_id=users.id)`, ctx.user.center_id);
     });
     return { ok: true };
+  });
+  // ---------- عملیات گروهی روی دانش‌آموزان ----------
+  // هدف: فهرست شناسه‌ها (ids) یا همهٔ نتایج یک فیلتر (filter: {q, grade, class_id, school}) یا همه (all: true)
+  const pickStudents = (ctx) => {
+    const b = ctx.body, cid = ctx.user.center_id;
+    if (Array.isArray(b.ids)) {
+      const ids = [...new Set(b.ids.map(Number).filter(Number.isInteger))];
+      if (!ids.length) return [];
+      return all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.id IN (${ids.map(() => '?').join(',')})`, cid, ...ids).map((x) => x.id);
+    }
+    if (!b.all && !b.filter) fail(400, 'دانش‌آموزان را انتخاب کنید');
+    const q = b.filter || {}, where = ['u.center_id=?', "u.role='student'"], p = [cid];
+    if (q.q) { where.push('(u.full_name LIKE ? OR u.national_code LIKE ?)'); const t = `%${toEnDigits(String(q.q)).trim()}%`; p.push(t, t); }
+    if (q.grade) { where.push('s.grade=?'); p.push(Number(q.grade)); }
+    if (q.class_id) { where.push('s.class_id=?'); p.push(Number(q.class_id)); }
+    if (q.school) { where.push('s.school=?'); p.push(String(q.school)); }
+    return all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE ${where.join(' AND ')}`, ...p).map((x) => x.id);
+  };
+  r.post('/api/manager/students/fee-paid', M, (ctx) => {
+    const ids = pickStudents(ctx), paid = ctx.body.paid !== false, period = clampStr(ctx.body.period, 30) || undefined;
+    if (!ids.length) fail(400, 'دانش‌آموزی انتخاب نشده است');
+    const out = { ok: true, count: ids.length, changed: 0, already: 0, unset: 0 };
+    tx(() => {
+      for (const id of ids) {
+        if (paid) {
+          const r_ = markFeePaid(ctx.user.center_id, id, { period });
+          if (r_?.result === 'already') out.already++; else if (r_) { out.changed++; if (r_.result === 'unset') out.unset++; }
+        } else out.changed += unmarkFeePaid(ctx.user.center_id, id, clampStr(ctx.body.reason, 200) || undefined, ctx.user.id) ? 1 : 0;
+      }
+    });
+    return out;
+  });
+  r.post('/api/manager/students/move', M, (ctx) => {
+    const c = ownClass(ctx, ctx.body.class_id), ids = pickStudents(ctx);
+    if (!ids.length) fail(400, 'دانش‌آموزی انتخاب نشده است');
+    let moved = 0;
+    tx(() => { for (const id of ids) moved += run('UPDATE students SET class_id=?, grade=? WHERE user_id=?', c.id, c.grade, id).changes; });
+    return { ok: true, moved };
+  });
+  r.post('/api/manager/students/delete', M, (ctx) => {
+    if (ctx.body.confirm !== true) fail(400, 'تأیید حذف لازم است');
+    const ids = pickStudents(ctx);
+    if (!ids.length) fail(400, 'دانش‌آموزی برای حذف نیست');
+    tx(() => {
+      for (const id of ids) run('DELETE FROM users WHERE id=?', id);
+      run(`DELETE FROM users WHERE role='parent' AND center_id=? AND NOT EXISTS (SELECT 1 FROM parent_children pc WHERE pc.parent_id=users.id)`, ctx.user.center_id);
+    });
+    return { ok: true, deleted: ids.length };
+  });
+  // تقسیم دانش‌آموزان یک پایه بین چند کلاس (به‌ترتیب حروف الفبا، یکی در میان؛ دختر/پسر جداگانه متعادل می‌شوند)
+  r.post('/api/manager/classes/distribute', M, (ctx) => {
+    const grade = Number(ctx.body.grade);
+    const classIds = (Array.isArray(ctx.body.class_ids) ? ctx.body.class_ids : []).map(Number);
+    if (!GRADES.includes(grade) || classIds.length < 2) fail(400, 'پایه و حداقل دو کلاس را انتخاب کنید');
+    const classes = classIds.map((id) => ownClass(ctx, id));
+    if (classes.some((c) => c.grade !== grade)) fail(400, 'کلاس‌ها باید از همین پایه باشند');
+    const st = all(`SELECT u.id, u.gender FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1 AND s.grade=? ORDER BY u.full_name`, ctx.user.center_id, grade);
+    const byGender = ctx.body.by_gender !== false;
+    let n = 0;
+    tx(() => {
+      const groups = byGender ? [st.filter((x) => x.gender === 'f'), st.filter((x) => x.gender !== 'f')] : [st];
+      let k = 0;
+      for (const g of groups) for (const x of g) { run('UPDATE students SET class_id=? WHERE user_id=?', classes[k++ % classes.length].id, x.id); n++; }
+    });
+    return { ok: true, moved: n };
+  });
+  // «حذف همه» برای بخش‌های مختلف (با تأیید)
+  r.post('/api/manager/bulk-delete', M, (ctx) => {
+    if (ctx.body.confirm !== true) fail(400, 'تأیید حذف لازم است');
+    const cid = ctx.user.center_id, what = String(ctx.body.what || '');
+    let n = 0;
+    tx(() => {
+      if (what === 'announcements') n = run('DELETE FROM announcements WHERE center_id=?', cid).changes;
+      else if (what === 'schedule') n = run('DELETE FROM schedule WHERE class_id IN (SELECT id FROM classes WHERE center_id=?)', cid).changes;
+      else if (what === 'transactions') n = run(`DELETE FROM transactions WHERE center_id=? AND (ref IS NULL OR (ref NOT LIKE 'pay:%' AND ref NOT LIKE 'reversal:%'))`, cid).changes;
+      else if (what === 'classes') n = run(`DELETE FROM classes WHERE center_id=? AND NOT EXISTS (SELECT 1 FROM students s WHERE s.class_id=classes.id) AND NOT EXISTS (SELECT 1 FROM schedule sc WHERE sc.class_id=classes.id)`, cid).changes;
+      else if (what === 'teachers' || what === 'counselors') n = run('DELETE FROM users WHERE center_id=? AND role=?', cid, what === 'teachers' ? 'teacher' : 'counselor').changes;
+      else fail(400, 'بخش نامعتبر است');
+    });
+    return { ok: true, deleted: n };
   });
   r.post('/api/manager/students/:id/reset-password', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);
@@ -271,17 +352,19 @@ export default function register(r) {
       const st = all(`SELECT ${paymentStateSql()} st FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.active=1`, c.id);
       return { ...c, paid: st.filter((x) => x.st === 'paid').length, pending: st.filter((x) => x.st === 'pending').length, unpaid: st.filter((x) => x.st === 'unpaid').length };
     });
-    return { settings: GRADES.map((g) => set[g] || { grade: g, amount: 0, lock_date: null }), classes, system_fee: get('SELECT system_fee FROM centers WHERE id=?', ctx.user.center_id)?.system_fee ?? 0 };
+    return { settings: GRADES.map((g) => set[g] || { grade: g, amount: 0, lock_date: null }), classes, system_fee: get('SELECT system_fee FROM centers WHERE id=?', ctx.user.center_id)?.system_fee ?? 0, system_fee_enabled: !!get('SELECT system_fee_enabled FROM centers WHERE id=?', ctx.user.center_id)?.system_fee_enabled };
   });
   r.put('/api/manager/fees', M, (ctx) => {
     tx(() => {
       if (ctx.body.system_fee !== undefined) run('UPDATE centers SET system_fee=? WHERE id=?', Math.max(0, Math.round(Number(ctx.body.system_fee) || 0)), ctx.user.center_id);
+      if (ctx.body.system_fee_enabled !== undefined) run('UPDATE centers SET system_fee_enabled=? WHERE id=?', ctx.body.system_fee_enabled ? 1 : 0, ctx.user.center_id);
       for (const f of ctx.body.settings || []) {
         if (!GRADES.includes(Number(f.grade))) continue;
         if (f.lock_date && !isDate(f.lock_date)) fail(400, 'تاریخ قفل نامعتبر است');
         run(`INSERT INTO fee_settings (center_id, grade, amount, lock_date) VALUES (?,?,?,?) ON CONFLICT(center_id, grade) DO UPDATE SET amount=excluded.amount, lock_date=excluded.lock_date`,
           ctx.user.center_id, Number(f.grade), Math.max(0, Math.round(Number(f.amount) || 0)), f.lock_date || null);
       }
+      backfillZeroPayments(ctx.user.center_id);
     });
     return { ok: true };
   });
@@ -303,7 +386,7 @@ export default function register(r) {
   r.post('/api/manager/receipts/:id/approve', M, (ctx) => {
     const p = ownPayment(ctx);
     tx(() => {
-      run(`UPDATE payments SET status='approved', reviewed_at=datetime('now') WHERE id=?`, p.id);
+      run(`UPDATE payments SET status='approved', reviewed_at=datetime('now'), period=COALESCE(period, ?) WHERE id=?`, periodLabel(), p.id);
       if (p.invoice_id) {
         const inv = get('SELECT fee_type, period FROM fee_invoices WHERE id=?', p.invoice_id);
         const title = inv ? `فاکتور ${inv.fee_type || ''} ${inv.period || ''} - ${p.full_name}`.trim() : `فاکتور - ${p.full_name}`;
