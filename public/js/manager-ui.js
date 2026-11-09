@@ -1,14 +1,8 @@
 // پوستهٔ تازهٔ پنل مدیر کانون: منوی گروه‌بندی‌شده، نوار بالا با جست‌وجو و اعلان، منوی موبایل.
-// دو طرح آزمایشی (A مینیمال رسمی، B آموزشی گرم) با یک کلید قابل مقایسه‌اند؛ انتخاب در مرورگر ذخیره می‌شود.
 import { esc, icon, nameAvatar, logoHtml, api, fa, ROLE_NAMES } from './core.js';
 
-const CONCEPT_KEY = 'roshd-admin-concept';
-export const getConcept = () => { try { return localStorage.getItem(CONCEPT_KEY) === 'a' ? 'a' : 'b'; } catch { return 'b'; } };
-export function setConcept(c) {
-  try { localStorage.setItem(CONCEPT_KEY, c); } catch { /* */ }
-  document.body.dataset.concept = c;
-  document.querySelectorAll('[data-concept-set]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.conceptSet === c)));
-}
+// طرح نهایی: «B آموزشی» (انتخاب مدیر). صفت data-concept برای انتخابگرهای CSS ثابت می‌ماند.
+const CONCEPT = 'b';
 
 // گروه‌بندی منو: هیچ مسیری حذف نشده؛ آنچه در گروه‌ها نیست به «بیشتر» می‌رود.
 const GROUPS = [
@@ -46,7 +40,6 @@ export function managerShellHtml(me, nav, bottom) {
     : `<div class="ad-group">${g.title ? `<div class="ad-gt">${g.title}</div>` : ''}${g.items.map(item).join('')}</div>`).join('');
   const SHORT = { '/fees': 'رسیدها', '/accounting': 'حسابداری' };
   const bottomHtml = bottom.slice(0, 4).map((n) => `<a href="#${n.path}" data-path="${n.path}"><span class="bi">${icon(ICONS[n.path] || n.icon, { size: 22 })}</span><span>${SHORT[n.path] || LABELS[n.path] || n.label}</span></a>`).join('');
-  const concept = getConcept();
   return `
     ${me.impersonator ? `<div class="imp-bar" role="status">${icon('eye', { size: 18 })} در حال مشاهده پنل «${esc(me.user.full_name)}» <button class="btn sm ghost" id="stopImp">بازگشت</button></div>` : ''}
     <a class="sr-only" href="#view" onclick="event.preventDefault();document.getElementById('view').focus()">پرش به محتوا</a>
@@ -55,8 +48,6 @@ export function managerShellHtml(me, nav, bottom) {
         <a class="ad-brand" href="#/home" aria-label="داشبورد"><span class="ad-logo">${logoHtml(c?.logo || '/img/logo-ashtiani.png')}</span><span class="ad-brand-t"><b>${esc(c?.name || 'کانون آشتیانی')}</b><small>پنل مدیریت</small></span></a>
         <nav class="ad-nav" aria-label="منوی اصلی">${navHtml}</nav>
         <div class="ad-foot">
-          <div class="ad-concept" role="group" aria-label="طرح آزمایشی"><span>طرح آزمایشی</span>
-            <button type="button" data-concept-set="a" aria-pressed="${concept === 'a'}">A مینیمال</button><button type="button" data-concept-set="b" aria-pressed="${concept === 'b'}">B آموزشی</button></div>
           <div class="ad-foot-nav">${[byPath.get('/settings'), byPath.get('/account')].filter(Boolean).map(item).join('')}
             <button class="nav-item" id="logoutBtn" type="button"><span class="ni">${icon('logout', { size: 19 })}</span><span class="nl">خروج</span></button></div>
         </div>
@@ -79,11 +70,10 @@ export function managerShellHtml(me, nav, bottom) {
 
 let wired = false;
 export function prepareManager(me) {
-  document.body.dataset.concept = getConcept();
+  document.body.dataset.concept = CONCEPT;
   if (!wired) {
     wired = true;
     document.addEventListener('click', (e) => {
-      const b = e.target.closest?.('[data-concept-set]'); if (b) setConcept(b.dataset.conceptSet);
       // منوی کشویی سربرگ: با کلیک بیرون یا انتخاب یک گزینه بسته شود
       document.querySelectorAll('.ad-dd[open]').forEach((d) => { if (!d.contains(e.target) || e.target.closest('.ad-dd-menu button')) d.removeAttribute('open'); });
     });

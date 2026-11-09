@@ -1,7 +1,7 @@
 /* =====================================================================
    پنل مدیر کانون آشتیانی — طراحی تازه
    سبک: سفید و خاکستری روشن، رنگ فیروزه‌ای سازمانی (از لوگو)، رنگ تأکیدی محدود، آیکون خطی، بدون سه‌بعدی.
-   دو طرح قابل مقایسه با body[data-concept]:  a = مینیمال رسمی ، b = آموزشی گرم
+   طرح نهایی: «آموزشی گرم» (body[data-concept=b]) — انتخاب مدیر کانون
    تمام قواعد زیر فقط برای body.manager-ui است و بقیهٔ پنل‌ها را تغییر نمی‌دهد.
    ===================================================================== */
 
@@ -28,8 +28,6 @@ body.manager-ui {
   --focus: 0 0 0 3px #fff, 0 0 0 5px rgba(11,107,112,.55);
   background: var(--bg); color: var(--ink); font-feature-settings: 'tnum';
 }
-/* طرح A — مینیمال رسمی: ساید‌بار روشن، حاشیهٔ نازک، بدون سایه، فشرده */
-body.manager-ui[data-concept="a"] { --bg: #F7F8FA; --r-card: 10px; --r-ctl: 8px; --card-border: #E4E7EC; --card-shadow: none; }
 /* طرح B — آموزشی گرم: ساید‌بار فیروزه‌ای تیره، کارت‌های نرم‌تر، رنگ‌های پررنگ‌تر */
 body.manager-ui[data-concept="b"] {
   --bg: #F3F7F6; --r-card: 16px; --r-ctl: 11px; --card-border: #E0EAE8; --card-shadow: 0 1px 2px rgba(7,63,68,.05), 0 10px 28px -14px rgba(7,63,68,.16);
@@ -67,11 +65,6 @@ body.manager-ui[data-concept="b"] {
 .manager-ui .ad-more[open] summary svg { transform: rotate(-90deg); }
 .manager-ui .ad-foot { border-top: 1px solid var(--sb-line); padding-top: 10px; margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .manager-ui .ad-foot-nav { display: flex; flex-direction: column; gap: 2px; }
-.manager-ui .ad-concept { display: flex; align-items: center; gap: 4px; background: var(--sb-hover); border-radius: 10px; padding: 3px; font-size: 11px; color: var(--sb-muted); }
-.manager-ui .ad-concept > span { padding: 0 6px; font-weight: 700; white-space: nowrap; }
-.manager-ui .ad-concept button { flex: 1; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; font-weight: 700; padding: 4px 6px; cursor: pointer; }
-.manager-ui .ad-concept button[aria-pressed="true"] { background: var(--sb-bg); color: var(--ink); box-shadow: var(--shadow-xs); }
-.manager-ui[data-concept="b"] .ad-concept button[aria-pressed="true"] { background: #fff; color: var(--brand-900); }
 
 .manager-ui .main { min-width: 0; padding: 0 clamp(14px, 2.2vw, 32px) 40px; max-width: 1560px; width: 100%; margin-inline: auto; }
 .manager-ui .topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; min-height: 68px; padding: 10px 0; margin: 0 0 6px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px); border: 0; box-shadow: none; border-radius: 0; }
