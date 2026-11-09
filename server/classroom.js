@@ -109,7 +109,7 @@ export function syncStudentsLater(ids) {
 // دانش‌آموزان حذف‌شده: ابتدا در صف ماندگار، سپس ارسال
 export function removeStudentsLater(ids) {
   if (!classroomEnabled()) return;
-  queueRemovals(ids);
+  try { queueRemovals(ids); } catch (e) { console.warn('[classroom-queue]', e.message); return; } // هرگز حذف دانش‌آموز در پنل را ناموفق نکن
   pendingRemoval = true;
   schedule();
 }
