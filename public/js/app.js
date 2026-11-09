@@ -7,7 +7,7 @@ import { loginView } from './login.js';
 import { publicRoutes } from './shop.js';
 import * as student from './student.js';
 import * as teacher from './teacher.js';
-import { prepareManager, decorateManager } from './manager-ui.js';
+import { prepareManager, decorateManager, managerShellHtml } from './manager-ui.js';
 import { prepareTeacher } from './teacher-ui.js';
 import * as manager from './manager.js';
 import * as admin from './admin.js';
@@ -38,7 +38,7 @@ function shell(me) {
   const bottom = (panel.bottomNav?.(me) || []).map((n) => `<a href="#${n.path}" data-path="${n.path}"><span class="bi">${me.user.role === 'student' ? student.navIcon(locked && !n.open ? 'more' : n.icon) : icon(locked && !n.open ? 'lock' : n.icon, { size: 22 })}</span>${n.label}${n.badge ? `<span class="cnt">${fa(n.badge)}</span>` : ''}</a>`).join('');
   const who = me.student ? avatar(me.student.avatar) : nameAvatar(me.user.full_name);
   const brandName = c ? esc(c.name) : 'مدیریت سامانه';
-  root.innerHTML = `
+  root.innerHTML = me.user.role === 'manager' ? managerShellHtml(me, panel.nav(me), panel.bottomNav?.(me) || []) : `
     ${me.impersonator ? `<div class="imp-bar" role="status">${icon('eye', { size: 18 })} در حال مشاهده پنل «${esc(me.user.full_name)}» (${ROLE_NAMES[me.user.role]}) به‌جای ${esc(me.impersonator.full_name)} <button class="btn sm ghost" id="stopImp">بازگشت به پنل مدیر سامانه</button></div>` : ''}
     <div class="mobile-head no-print"><a class="sr-only" href="#view" onclick="event.preventDefault();document.getElementById('view').focus()">پرش به محتوا</a><button class="icon-btn" id="menuBtn" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">${icon('menu', { size: 22 })}</button><div class="brand-logo">${me.user.role === 'student' ? student.studentLogo(c) : isCounselor ? coLogo : logoHtml(c?.logo)}</div>
       <div class="grow"><div class="t1 ellipsis">${brandName}</div><div class="t2">پلتفرم رشد نخبه</div></div>${who}</div>

@@ -55,6 +55,106 @@ function paymentStateSql() {
 }
 
 export default function register(r) {
+  // شمارنده‌های سبک برای نشانهٔ اعلان در نوار بالا (فقط خواندنی)
+  r.get('/api/manager/badges', M, (ctx) => ({
+    pending_receipts: get(`SELECT COUNT(*) n FROM payments p JOIN users u ON u.id=p.student_id WHERE u.center_id=? AND p.status='pending'`, ctx.user.center_id).n,
+  }));
+  // ---------- تحلیل‌ها برای داشبورد (فقط خواندنی؛ فرمول‌ها در docs/analytics-design.md) ----------
+  const jm = (dateStr) => { const [y, m] = jMonthOf(dateStr.slice(0, 10)); return y * 12 + (m - 1); };
+  const jmLabel = (k) => JMONTHS[k % 12];
+  const analyticsCache = new Map();
+  r.get('/api/manager/analytics', M, (ctx) => {
+    const cid = ctx.user.center_id, grade = GRADES.includes(Number(ctx.query.grade)) ? Number(ctx.query.grade) : null;
+    const days = [7, 14, 30].includes(Number(ctx.query.days)) ? Number(ctx.query.days) : 14;
+    const key = `${cid}|${grade}|${days}`, hit = analyticsCache.get(key);
+    if (hit && Date.now() - hit.t < 15000) return hit.v;
+    const today = ymd(), gradeSql = grade ? ' AND s.grade=?' : '', gp = grade ? [grade] : [];
+    const nowK = jm(today);
+
+    // دانش‌آموزان فعال + مبلغ قابل وصول و دریافتی هر نفر (پرداخت تأییدشدهٔ حق عضویت، سقف به مبلغ قابل وصول)
+    const sys = get('SELECT system_fee, system_fee_enabled FROM centers WHERE id=?', cid);
+    const sysFee = sys?.system_fee_enabled ? sys.system_fee || 0 : 0;
+    const feeBy = Object.fromEntries(all('SELECT grade, amount FROM fee_settings WHERE center_id=?', cid).map((f) => [f.grade, f.amount]));
+    const studs = all(`SELECT u.id, s.grade, s.class_id, u.created_at, ${paymentStateSql()} st,
+        COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL), 0) paid
+      FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1${gradeSql}`, cid, ...gp);
+    const sums = { due: 0, collected: 0, paid: 0, pending: 0, unpaid: 0 };
+    const byGradeMap = new Map(GRADES.map((g) => [g, { grade: g, paid: 0, pending: 0, unpaid: 0, due: 0, collected: 0 }]));
+    for (const s of studs) {
+      const fee = feeBy[s.grade] || 0, due = fee ? fee + sysFee : 0, got = Math.min(s.paid, due || s.paid);
+      sums.due += due; sums.collected += due ? got : 0; sums[s.st]++;
+      const g = byGradeMap.get(s.grade); g[s.st]++; g.due += due; g.collected += due ? got : 0;
+    }
+    const collection = { ...sums, students: studs.length, pct_amount: sums.due ? Math.round((sums.collected / sums.due) * 1000) / 10 : null, pct_students: studs.length ? Math.round((sums.paid / studs.length) * 1000) / 10 : null };
+
+    // مالی: شش ماه شمسی اخیر
+    const fin = [];
+    for (let i = 5; i >= 0; i--) {
+      const k = nowK - i, y = Math.floor(k / 12), m = (k % 12) + 1;
+      const f = (a) => `${a[0]}-${String(a[1]).padStart(2, '0')}-${String(a[2]).padStart(2, '0')}`;
+      const next = m === 12 ? [y + 1, 1] : [y, m + 1];
+      const row = get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) inc, COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) exp FROM transactions WHERE center_id=? AND date>=? AND date<?`, cid, f(j2g(y, m, 1)), f(j2g(next[0], next[1], 1)));
+      fin.push({ label: JMONTHS[m - 1], income: row.inc, expense: row.exp, net: row.inc - row.exp });
+    }
+    const totals = get(`SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) inc, COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) exp FROM transactions WHERE center_id=?`, cid);
+
+    // حضور و غیاب: روزهای اخیر + مقایسهٔ کلاس‌ها (آخر ۳۰ روز)
+    const from = addDays(today, -(days - 1));
+    const attDays = all(`SELECT a.date, SUM(a.status='present') present, SUM(a.status='absent') absent, SUM(a.status='excused') excused FROM attendance a JOIN classes c ON c.id=a.class_id
+      ${grade ? 'JOIN students s ON s.user_id=a.student_id AND s.grade=?' : ''} WHERE c.center_id=? AND a.date BETWEEN ? AND ? GROUP BY a.date ORDER BY a.date`, ...gp, cid, from, today)
+      .map((d) => ({ date: d.date, present: d.present, absent: d.absent, excused: d.excused, rate: Math.round((d.present / (d.present + d.absent + d.excused)) * 1000) / 10 }));
+    const attClasses = all(`SELECT c.grade, c.name, SUM(a.status='present') present, SUM(a.status='absent') absent, SUM(a.status='excused') excused FROM attendance a JOIN classes c ON c.id=a.class_id
+      WHERE c.center_id=? AND a.date BETWEEN ? AND ? ${grade ? 'AND c.grade=?' : ''} GROUP BY c.id HAVING (present+absent+excused)>0 ORDER BY c.grade, c.name`, cid, addDays(today, -29), today, ...gp)
+      .map((c) => ({ grade: c.grade, name: c.name, absent: c.absent, total: c.present + c.absent + c.excused, rate: Math.round((c.present / (c.present + c.absent + c.excused)) * 1000) / 10 }));
+
+    // رشد دانش‌آموزان: ثبت‌نام جدید هر ماه شمسی و جمع تجمعی
+    const created = studs.map((s) => jm(s.created_at || today));
+    const minK = Math.min(nowK, ...(created.length ? created : [nowK])), startK = Math.max(minK, nowK - 11);
+    let cum = created.filter((k) => k < startK).length;
+    const growth = [];
+    for (let k = startK; k <= nowK; k++) { const n = created.filter((x) => x === k).length; cum += n; growth.push({ label: jmLabel(k), new: n, total: cum }); }
+
+    // عملکرد آموزشی: میانگین درصد آزمون‌ها به‌تفکیک پایه و ماه + توزیع نمره
+    const ex = all(`SELECT s.grade, r.percent, r.created_at FROM exam_results r JOIN students s ON s.user_id=r.student_id JOIN users u ON u.id=r.student_id WHERE u.center_id=? AND r.percent IS NOT NULL${gradeSql}`, cid, ...gp);
+    const avg = (a) => (a.length ? Math.round((a.reduce((x, y) => x + y, 0) / a.length) * 10) / 10 : null);
+    const academic = {
+      n: ex.length,
+      byGrade: GRADES.map((g) => { const v = ex.filter((e) => e.grade === g).map((e) => e.percent); return { grade: g, avg: avg(v), n: v.length }; }).filter((g) => g.n),
+      months: [...new Set(ex.map((e) => jm(e.created_at)))].sort((a, b) => a - b).slice(-6).map((k) => { const v = ex.filter((e) => jm(e.created_at) === k).map((e) => e.percent); return { label: jmLabel(k), avg: avg(v), n: v.length }; }),
+      distribution: [[0, 40, 'زیر ۴۰'], [40, 60, '۴۰ تا ۶۰'], [60, 80, '۶۰ تا ۸۰'], [80, 101, '۸۰ تا ۱۰۰']].map(([lo, hi, label]) => ({ label, n: ex.filter((e) => e.percent >= lo && e.percent < hi).length })),
+    };
+
+    // شاخص‌ها، هشدارها و فعالیت‌های اخیر
+    const pendingReceipts = get(`SELECT COUNT(*) n FROM payments p JOIN users u ON u.id=p.student_id WHERE u.center_id=? AND p.status='pending'`, cid).n;
+    const absentToday = get(`SELECT COUNT(*) n FROM attendance a JOIN classes c ON c.id=a.class_id WHERE c.center_id=? AND a.date=? AND a.status='absent'`, cid, today).n;
+    const unsentSms = get(`SELECT COUNT(*) n FROM attendance a JOIN classes c ON c.id=a.class_id WHERE c.center_id=? AND a.date=? AND a.status='absent' AND a.sms_sent=0`, cid, today).n;
+    const lockedNow = studs.filter((s) => s.st !== 'paid' && feeBy[s.grade] && (get('SELECT lock_date FROM fee_settings WHERE center_id=? AND grade=?', cid, s.grade)?.lock_date || '9999') < today).length;
+    const alerts = [];
+    if (pendingReceipts) alerts.push({ tone: 'warn', text: `${pendingReceipts} رسید در انتظار بررسی است`, href: '#/fees' });
+    if (unsentSms) alerts.push({ tone: 'warn', text: `پیامک غیبت امروز برای ${unsentSms} دانش‌آموز ارسال نشده`, href: '#/home' });
+    if (lockedNow) alerts.push({ tone: 'danger', text: `${lockedNow} دانش‌آموز به‌دلیل پایان مهلت پرداخت قفل هستند`, href: '#/fees' });
+    const classesNoStudents = get(`SELECT COUNT(*) n FROM classes c WHERE c.center_id=? AND NOT EXISTS (SELECT 1 FROM students s WHERE s.class_id=c.id)`, cid).n;
+    if (classesNoStudents) alerts.push({ tone: 'info', text: `${classesNoStudents} کلاس هنوز دانش‌آموز ندارد`, href: '#/staff' });
+    const recent = [
+      ...all(`SELECT p.created_at t, u.full_name n, p.status st, p.amount a FROM payments p JOIN users u ON u.id=p.student_id WHERE u.center_id=? ORDER BY p.id DESC LIMIT 6`, cid).map((p) => ({ t: p.t, kind: 'payment', text: `${p.st === 'approved' ? 'پرداخت تأیید شد' : p.st === 'pending' ? 'رسید جدید' : p.st === 'rejected' ? 'رسید رد شد' : 'پرداخت برگشت خورد'}: ${p.n}`, amount: p.a })),
+      ...all(`SELECT created_at t, title FROM announcements WHERE center_id=? ORDER BY id DESC LIMIT 3`, cid).map((a) => ({ t: a.t, kind: 'announcement', text: `اطلاعیه: ${a.title}` })),
+      ...all(`SELECT u.created_at t, u.full_name n FROM users u WHERE u.center_id=? AND u.role='student' ORDER BY u.id DESC LIMIT 3`, cid).map((u) => ({ t: u.t, kind: 'student', text: `ثبت‌نام دانش‌آموز: ${u.n}` })),
+    ].sort((a, b) => String(b.t).localeCompare(String(a.t))).slice(0, 8);
+
+    const out = {
+      generated: today, grade, days,
+      kpi: {
+        students: studs.length, teachers: get(`SELECT COUNT(*) n FROM users WHERE center_id=? AND role='teacher' AND active=1`, cid).n,
+        classes: get(`SELECT COUNT(*) n FROM classes WHERE center_id=?`, cid).n, collection_pct: collection.pct_amount, pending_receipts: pendingReceipts, absent_today: absentToday,
+      },
+      collection, byGrade: [...byGradeMap.values()].filter((g) => !grade || g.grade === grade),
+      finance: { months: fin, totals: { income: totals.inc, expense: totals.exp, balance: totals.inc - totals.exp } },
+      attendance: { days: attDays, byClass: attClasses }, growth, academic, alerts, recent,
+    };
+    analyticsCache.set(key, { t: Date.now(), v: out });
+    if (analyticsCache.size > 50) analyticsCache.clear();
+    return out;
+  });
   r.get('/api/manager/dashboard', M, (ctx) => {
     const cid = ctx.user.center_id, today = ymd();
     const rows = all(`SELECT s.grade, ${paymentStateSql()} st FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1`, cid);
@@ -130,10 +230,11 @@ export default function register(r) {
     if (q.class_id) { where.push('s.class_id=?'); p.push(Number(q.class_id)); }
     if (q.school) { where.push('s.school=?'); p.push(q.school); }
     if (q.gender === 'm' || q.gender === 'f') { where.push('u.gender=?'); p.push(q.gender); }
+    if (['paid', 'pending', 'unpaid'].includes(q.pay)) { where.push(`${paymentStateSql()}=?`); p.push(q.pay); }
     const w = where.join(' AND ');
     const total = get(`SELECT COUNT(*) n FROM users u JOIN students s ON s.user_id=u.id WHERE ${w}`, ...p).n;
     const limit = Math.min(100, Number(q.limit) || 30), offset = Math.max(0, Number(q.offset) || 0);
-    const rows = all(`SELECT u.id, u.full_name, u.national_code, u.gender, s.school, s.grade, s.class_id, c.name class_name, s.birth_date, s.parent_phone, s.address, s.avatar,
+    const rows = all(`SELECT u.id, u.full_name, u.national_code, u.gender, s.school, s.grade, s.class_id, c.name class_name, s.birth_date, s.parent_phone, s.phone2, s.father_name, s.mother_name, s.address, s.avatar,
       ${paymentStateSql()} pay FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE ${w} ORDER BY s.grade, c.name, u.full_name LIMIT ? OFFSET ?`, ...p, limit, offset);
     return { total, rows };
   });
@@ -210,6 +311,7 @@ export default function register(r) {
     if (q.class_id) { where.push('s.class_id=?'); p.push(Number(q.class_id)); }
     if (q.school) { where.push('s.school=?'); p.push(String(q.school)); }
     if (q.gender === 'm' || q.gender === 'f') { where.push('u.gender=?'); p.push(q.gender); }
+    if (['paid', 'pending', 'unpaid'].includes(q.pay)) { where.push(`${paymentStateSql()}=?`); p.push(q.pay); }
     return all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE ${where.join(' AND ')}`, ...p).map((x) => x.id);
   };
   r.post('/api/manager/students/fee-paid', M, (ctx) => {

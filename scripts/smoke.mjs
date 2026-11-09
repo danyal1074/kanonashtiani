@@ -564,6 +564,12 @@ const spl = await call(S.manager.ck, 'POST', '/api/manager/classes/split-gender'
 const chk = (await call(S.manager.ck, 'GET', '/api/manager/students?limit=100&grade=5')).data.rows;
 check('پسرها کلاس الف و دخترها کلاس ب (همهٔ پایه‌ها)', spl.status === 200 && spl.data.boys > 0 && spl.data.girls > 0 && chk.every((x) => x.class_name === (x.gender === 'f' ? 'ب' : 'الف')), JSON.stringify(spl.data));
 
+const anl = await call(S.manager.ck, 'GET', '/api/manager/analytics?grade=6&days=7');
+check('تحلیل داشبورد: ساختار درست و درصد وصول بین ۰ تا ۱۰۰', anl.status === 200 && anl.data.finance.months.length === 6 && Array.isArray(anl.data.byGrade) && (anl.data.collection.pct_amount === null || (anl.data.collection.pct_amount >= 0 && anl.data.collection.pct_amount <= 100)), JSON.stringify(anl.data).slice(0, 160));
+check('تحلیل داشبورد فقط برای مدیر است', (await call(S.student.ck, 'GET', '/api/manager/analytics')).status === 403 && (await call(null, 'GET', '/api/manager/analytics')).status === 401);
+check('شمارندهٔ اعلان رسیدها', (await call(S.manager.ck, 'GET', '/api/manager/badges')).data.pending_receipts >= 0);
+check('فیلتر وضعیت پرداخت در فهرست دانش‌آموزان', (await call(S.manager.ck, 'GET', '/api/manager/students?pay=paid&limit=100')).data.rows.every((x) => x.pay === 'paid'));
+
 app.kill();
 await new Promise((r) => setTimeout(r, 300));
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* */ }

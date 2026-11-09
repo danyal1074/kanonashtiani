@@ -3,6 +3,8 @@ import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, nameAvatar, progress, empty, jdate, jtime, jshort,
   subjIcon, gradeName, dateField, readDate, fileToData, barChart, lineChart, donut, WEEKDAYS, addDays, formData, state, en, logoHtml, timeAgo, printOverlay, icon, hasIcon, JMONTHS } from './core.js';
 import { messagesView, accountView } from './common.js';
+import { adminHome } from './admin-dashboard.js';
+import { comboChart, donut as adDonut } from './admin-charts.js';
 import { studentDetailHtml } from './teacher.js';
 import { managerTimetable, KINDS, kindOf } from './timetable.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
@@ -49,38 +51,7 @@ const REJECT_REASONS = ['تصویر رسید ناخوانا است', 'مبلغ �
 const PAY_COLORS = ['#0E9157', '#F2B33D', '#D8262F'];
 
 // ================= داشبورد =================
-async function home(el, _p, me) {
-  const d = await api('/api/manager/dashboard');
-  setHead('داشبورد کانون', `${jdate(me.today, { weekday: true })} · ${esc(me.center.name)}`,
-    `<a class="btn ghost sm" href="#/announcements">${icon('megaphone', { size: 16 })} اطلاعیه</a><a class="btn sm" href="#/students">${icon('plus', { size: 16 })} ثبت‌نام دانش‌آموز</a>`);
-  const collected = Math.round((d.kpi.paid / Math.max(1, d.kpi.active)) * 100);
-  const pendingSms = d.absents.filter((a) => a.status === 'absent' && !a.sms_sent).length;
-  el.innerHTML = `<div class="grid c4">
-      ${kpi('users', '', fa(d.kpi.active), 'دانش‌آموز فعال', '#/students', `${fa(d.kpi.teachers)} معلم`)}
-      ${kpi('check-circle', 'green', fa(d.kpi.paid), 'حق عضویت پرداخت‌شده', '#/fees', `${fa(collected)}٪ وصول`)}
-      ${kpi('clock', 'sun', fa(d.kpi.pending + d.kpi.unpaid), 'در انتظار پرداخت', '#/fees', `${fa(d.kpi.pending)} رسید در صف بررسی`)}
-      ${kpi('user-x', 'red', fa(d.kpi.absentToday), 'غایبان امروز', '', pendingSms ? `${fa(pendingSms)} پیامک ارسال‌نشده` : 'پیامک‌ها ارسال شده')}
-    </div>
-  <div class="grid c3" style="margin-top:var(--s-5)">
-    <section class="card span2" aria-labelledby="mT1"><div class="card-title"><span class="ib">${icon('chart', { size: 18 })}</span><span id="mT1">وضعیت حق عضویت به تفکیک پایه</span></div>
-      ${barChart(d.byGrade.map((g) => ({ label: gradeName(g.grade), values: [g.paid, g.pending, g.unpaid] })), [{ name: 'پرداخت‌شده', color: PAY_COLORS[0] }, { name: 'در انتظار تأیید', color: PAY_COLORS[1] }, { name: 'پرداخت‌نشده', color: PAY_COLORS[2] }], { stacked: true, height: 250, fmt: (v) => fa(Math.round(v)) })}</section>
-    <div class="stack" style="gap:var(--s-5)">
-      <section class="card"><div class="row"><span class="ib lg green">${icon('wallet', { size: 22 })}</span><div class="grow"><div class="small muted">مانده صندوق</div><div style="font-size:var(--fs-lg);font-weight:900">${money(d.balance)}</div></div></div>
-        <a class="btn ghost sm block" style="margin-top:var(--s-4)" href="#/accounting">حسابداری ${icon('chevron-left', { size: 16 })}</a></section>
-      <section class="card tint-orange"><div class="row"><span class="ib lg sun">${icon('receipt', { size: 22 })}</span><div class="grow"><div class="small muted">رسیدهای در صف بررسی</div><div style="font-size:var(--fs-xl);font-weight:900">${fa(d.receiptsPending)}</div></div></div>
-        <a class="btn accent sm block" style="margin-top:var(--s-4)" href="#/fees">بررسی رسیدها</a></section>
-      <section class="card" aria-label="درصد وصول">${donut([{ name: 'پرداخت‌شده', value: d.kpi.paid, color: PAY_COLORS[0] }, { name: 'در انتظار تأیید', value: d.kpi.pending, color: PAY_COLORS[1] }, { name: 'پرداخت‌نشده', value: d.kpi.unpaid, color: PAY_COLORS[2] }], { size: 116, label: `${fa(collected)}٪`, sub: 'وصول' })}</section>
-    </div>
-  </div>
-  <section class="card" style="margin-top:var(--s-5)" aria-labelledby="mT2"><div class="card-title"><span class="ib red">${icon('user-x', { size: 18 })}</span><span id="mT2">غایبان امروز و پیامک به والدین</span>
-    ${pendingSms ? `<button class="btn sm more" id="smsAll">${icon('send', { size: 16 })} ارسال به همه (${fa(pendingSms)})</button>` : ''}</div>
-    <div class="list">${d.absents.map((a) => `<div class="list-item" style="flex-wrap:wrap">${nameAvatar(a.full_name, 'sm')}<div class="grow" style="min-width:140px"><div class="small bold">${esc(a.full_name)}</div><div class="tiny muted">پایه ${gradeName(a.grade)} · کلاس ${esc(a.class_name)}</div></div>
-      ${a.status === 'absent' ? '<span class="badge red">غایب</span>' : '<span class="badge yellow">با اطلاع</span>'}<span class="tiny muted num" dir="ltr" style="min-width:96px;text-align:left">${fa(a.parent_phone)}</span>
-      <span style="min-width:120px;text-align:left">${a.status !== 'absent' ? '<span class="tiny muted">نیاز به پیامک ندارد</span>' : a.sms_sent ? `<span class="badge green">${icon('check', { size: 12 })} پیامک ارسال شد</span>` : `<button class="btn sm soft" data-sms="${a.id}">${icon('phone', { size: 14 })} ارسال پیامک</button>`}</span></div>`).join('') || empty('check-circle', '<b>امروز غایبی ثبت نشده</b>حضور و غیاب کلاس‌ها توسط معلم‌ها ثبت می‌شود.')}</div>
-    <div class="tiny muted" style="margin-top:var(--s-3);display:flex;gap:6px;align-items:center">${icon('info', { size: 14 })} ارسال پیامک در این نسخه شبیه‌سازی می‌شود.</div></section>`;
-  on(el, 'click', '[data-sms]', (e, b) => busy(b, async () => { const r = await post(`/api/manager/attendance/${b.dataset.sms}/sms`); toast(r.failed ? `ارسال نشد: ${r.errors[0] || 'خطای درگاه پیامک'}` : r.simulated ? 'ارسال شبیه‌سازی شد (درگاه پیامک تنظیم نیست)' : 'پیامک ارسال شد', r.failed ? 'err' : 'ok'); home(el, _p, me); }));
-  $('#smsAll', el)?.addEventListener('click', (e) => busy(e.currentTarget, async () => { const r = await post('/api/manager/attendance/all/sms'); toast(r.failed ? `${fa(r.sent)} ارسال شد، ${fa(r.failed)} ناموفق: ${r.errors[0] || ''}` : `${fa(r.sent)} پیامک ${r.simulated ? 'شبیه‌سازی' : 'ارسال'} شد`, r.failed ? 'err' : 'ok'); home(el, _p, me); }));
-}
+const home = (el, p, me) => adminHome(el, p, me);
 
 // ================= دانش‌آموزان =================
 // «حذف همه» با تأیید تایپی؛ برای هر بخش جداگانه
@@ -131,53 +102,81 @@ const readStudent = (m) => ({ ...formData($('#stForm', m)), national_code: en($(
 
 async function students(el) {
   let md = await meta();
-  const q = { q: '', grade: '', class_id: '', school: '', gender: '', offset: 0 };
-  let rows = [], total = 0;
+  const hq = new URLSearchParams(location.hash.split('?')[1] || '');
+  const q = { q: hq.get('q') || '', grade: '', class_id: '', school: '', gender: '', pay: '', offset: 0 };
+  const PAGE = 30;
+  let rows = [], total = 0, allResults = false;
   const sel = new Set();
-  setHead('مدیریت دانش‌آموزان', 'ثبت‌نام، ویرایش، جستجو و فیلتر', `<button class="btn ghost sm" id="printCreds">${icon('receipt', { size: 16 })} چاپ کارت‌های ورود</button> <button class="btn ghost sm" id="importSt">ثبت‌نام گروهی (اکسل / CSV)</button> <button class="btn ghost sm" id="classesSt">کلاس‌ها</button> <button class="btn ghost sm" id="syncClassroom">همگام‌سازی کلاس آنلاین</button> <button class="btn ghost sm" id="delAllSt" style="color:var(--red)">حذف همه</button> <button class="btn sm" id="addSt"> ثبت‌نام دانش‌آموز</button>`);
-  el.innerHTML = `<div class="card" style="margin-bottom:16px"><div class="row wrap"><input class="input grow" id="q" placeholder=" جستجوی زنده نام یا کد ملی…" style="min-width:220px">
-    <select class="input" id="fg" style="width:auto"><option value="">همه پایه‌ها</option>${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select>
-    <select class="input" id="fc" style="width:auto"><option value="">همه کلاس‌ها</option></select>
-    <select class="input" id="fgender" style="width:auto"><option value="">همهٔ جنسیت‌ها</option><option value="m">پسر</option><option value="f">دختر</option></select>
-    <select class="input" id="fs" style="width:auto;max-width:220px"><option value="">همه مدارس</option>${md.schools.map((s) => `<option>${esc(s)}</option>`).join('')}</select></div></div>
-    <div class="card"><div class="row between" style="margin-bottom:10px"><b id="total"></b><div class="row wrap" style="gap:6px"><span class="small muted" id="bulkInfo"></span><button class="btn sm green" data-bulk="paid">حق عضویت: پرداخت شد</button><button class="btn sm ghost" data-bulk="unpaid">لغو پرداخت</button><button class="btn sm soft" data-bulk="move">انتقال به کلاس…</button><button class="btn sm red" data-bulk="delete">حذف…</button></div></div><div class="table-wrap"><table class="table"><thead><tr><th style="width:34px"><input type="checkbox" id="selAll" aria-label="انتخاب همهٔ ردیف‌های نمایش‌داده‌شده"></th><th>دانش‌آموز</th><th>کد ملی</th><th>پایه/کلاس</th><th>مدرسه</th><th>موبایل والدین</th><th>حق عضویت</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>
-    <div class="center" style="margin-top:12px"><button class="btn ghost" id="more">نمایش بیشتر</button></div></div>`;
+  setHead('دانش‌آموزان', 'جست‌وجو، فیلتر و مدیریت ثبت‌نام‌ها', `<button class="btn sm" id="addSt">${icon('user-plus', { size: 16 })} ثبت دانش‌آموز</button> <button class="btn ghost sm" id="importSt">${icon('upload', { size: 16 })} ثبت‌نام گروهی</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">${icon('more', { size: 17 })}</summary><div class="ad-dd-menu"><button type="button" id="printCreds">${icon('printer', { size: 16 })} چاپ کارت‌های ورود</button><button type="button" id="classesSt">${icon('layers', { size: 16 })} مدیریت کلاس‌ها</button><button type="button" id="syncClassroom">${icon('refresh', { size: 16 })} همگام‌سازی کلاس آنلاین</button><button type="button" id="delAllSt" class="danger">${icon('trash', { size: 16 })} حذف همهٔ دانش‌آموزان…</button></div></details>`);
+  el.innerHTML = `<div class="ad-toolbar" role="search">
+      <label class="ad-searchbox"><span class="si">${icon('search', { size: 17 })}</span><input class="input" id="q" type="search" placeholder="جست‌وجوی نام یا کد ملی…" value="${esc(q.q)}" aria-label="جست‌وجوی دانش‌آموز" autocomplete="off"></label>
+      <select class="input ad-f" id="fg" aria-label="پایه"><option value="">همهٔ پایه‌ها</option>${md.grades.map((g) => `<option value="${g}">پایه ${gradeName(g)}</option>`).join('')}</select>
+      <select class="input ad-f" id="fc" aria-label="کلاس"><option value="">همهٔ کلاس‌ها</option></select>
+      <select class="input ad-f" id="fpay" aria-label="وضعیت پرداخت"><option value="">همهٔ وضعیت‌های پرداخت</option><option value="paid">پرداخت‌شده</option><option value="pending">در انتظار تأیید</option><option value="unpaid">پرداخت‌نشده</option></select>
+      <select class="input ad-f" id="fgender" aria-label="جنسیت"><option value="">همهٔ جنسیت‌ها</option><option value="m">پسر</option><option value="f">دختر</option></select>
+      <select class="input ad-f" id="fs" aria-label="مدرسه"><option value="">همهٔ مدارس</option>${md.schools.map((x) => `<option>${esc(x)}</option>`).join('')}</select>
+      <button class="btn ghost sm" id="clearF" type="button" hidden>${icon('x', { size: 14 })} پاک‌کردن فیلترها</button></div>
+    <div class="card ad-tablecard">
+      <div class="ad-th"><b id="total">…</b><span class="small muted" id="rangeInfo"></span></div>
+      <div class="ad-bulk" id="bulkBar" hidden role="region" aria-label="عملیات گروهی"><span id="bulkInfo"></span>
+        <button class="btn sm soft" id="selectAllRes" type="button" hidden></button>
+        <span class="grow"></span><button class="btn sm green" data-bulk="paid">${icon('check-circle', { size: 15 })} ثبت پرداخت</button><button class="btn sm ghost" data-bulk="unpaid">لغو پرداخت</button><button class="btn sm ghost" data-bulk="move">انتقال به کلاس…</button><button class="btn sm red" data-bulk="delete">${icon('trash', { size: 15 })} حذف…</button><button class="btn sm ghost" id="bulkClear" type="button">لغو انتخاب</button></div>
+      <div class="table-wrap"><table class="table ad-cards"><thead><tr><th style="width:38px"><input type="checkbox" id="selAll" aria-label="انتخاب همهٔ ردیف‌های این صفحه"></th><th>دانش‌آموز</th><th>پایه و کلاس</th><th>موبایل والدین</th><th>حق عضویت</th><th><span class="sr-only">عملیات</span></th></tr></thead><tbody id="tb"></tbody></table></div>
+      <div class="ad-pager" id="pager"></div></div>`;
   const fillClasses = () => { $('#fc', el).innerHTML = `<option value="">همه کلاس‌ها</option>${md.classes.filter((c) => !q.grade || c.grade === Number(q.grade)).map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}`; };
   fillClasses();
-  const rowHtml = (s) => `<tr><td><input type="checkbox" data-sel="${s.id}" ${sel.has(s.id) ? 'checked' : ''} aria-label="انتخاب ${esc(s.full_name)}"></td><td class="click" data-view="${s.id}"><b>${esc(s.full_name)}</b></td><td class="num">${fa(s.national_code)}</td><td>${gradeName(s.grade)} ${esc(s.class_name || '—')}<div class="tiny muted">پنل ${s.grade <= 6 ? 'دبستان' : 'متوسطه'}</div></td><td class="small">${esc(s.school || '')}</td><td class="num">${fa(s.parent_phone)}</td>
-    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td><td><div class="row" style="gap:4px"><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'x' : 'check-circle', { size: 16 })}</button><button class="icon-btn" data-sms="${s.id}" title="ارسال پیامک" aria-label="ارسال پیامک">${icon('message', { size: 16 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
+  const rowHtml = (s) => `<tr><td class="ad-sel"><input type="checkbox" data-sel="${s.id}" ${sel.has(s.id) || allResults ? 'checked' : ''} aria-label="انتخاب ${esc(s.full_name)}"></td>
+    <td class="ad-first"><button type="button" class="ad-student ad-link" data-view="${s.id}" aria-label="پروفایل ${esc(s.full_name)}">${nameAvatar(s.full_name)}<span><b>${esc(s.full_name)}</b><small class="num">${fa(s.national_code)}</small></span></button></td>
+    <td data-l="پایه و کلاس">${gradeName(s.grade)} · ${esc(s.class_name || '—')}</td><td data-l="موبایل والدین" class="num">${s.parent_phone ? fa(s.parent_phone) : '—'}</td>
+    <td data-l="حق عضویت"><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td>
+    <td class="ad-act"><div class="row" style="gap:2px;justify-content:flex-end"><button class="icon-btn" data-view="${s.id}" title="پروفایل" aria-label="پروفایل">${icon('eye', { size: 17 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 17 })}</button><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'circle-x' : 'check-circle', { size: 17 })}</button><button class="icon-btn" data-sms="${s.id}" title="پیامک" aria-label="ارسال پیامک">${icon('message', { size: 17 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف" style="color:var(--red)">${icon('trash', { size: 17 })}</button></div></td></tr>`;
   let seq = 0;
-  const load = async (append) => {
+  const load = async () => {
     const my = ++seq;
-    if (!append) q.offset = 0;
-    const r = await api(`/api/manager/students?${new URLSearchParams({ ...q, limit: 40 })}`);
+    const r = await api(`/api/manager/students?${new URLSearchParams({ ...q, limit: PAGE })}`);
     if (my !== seq) return;
-    rows = append ? rows.concat(r.rows) : r.rows; total = r.total;
-    $('#tb', el).innerHTML = rows.map(rowHtml).join('') || `<tr><td colspan="8">${empty('search', 'دانش‌آموزی با این مشخصات پیدا نشد')}</td></tr>`;
+    rows = r.rows; total = r.total;
+    $('#tb', el).innerHTML = rows.map(rowHtml).join('') || `<tr><td colspan="6">${empty('search', 'دانش‌آموزی با این مشخصات پیدا نشد')}</td></tr>`;
     $('#total', el).textContent = `${fa(total)} دانش‌آموز`;
-    $('#more', el).style.display = rows.length < total ? '' : 'none';
-    $('#selAll', el).checked = false;
+    const pages = Math.max(1, Math.ceil(total / PAGE)), page = Math.floor(q.offset / PAGE) + 1;
+    $('#rangeInfo', el).textContent = total ? `نمایش ${fa(q.offset + 1)} تا ${fa(q.offset + rows.length)}` : '';
+    $('#pager', el).innerHTML = total > PAGE ? `<span>صفحهٔ ${fa(page)} از ${fa(pages)}</span><span class="row" style="gap:6px"><button class="btn ghost sm" data-page="${page - 2}" ${page <= 1 ? 'disabled' : ''}>${icon('chevron-right', { size: 15 })} قبلی</button><button class="btn ghost sm" data-page="${page}" ${page >= pages ? 'disabled' : ''}>بعدی ${icon('chevron-left', { size: 15 })}</button></span>` : '';
+    $('#selAll', el).checked = rows.length > 0 && rows.every((x) => sel.has(x.id));
+    $('#clearF', el).hidden = !(q.q || q.grade || q.class_id || q.school || q.gender || q.pay);
     bulkInfo();
   };
   let tmr;
-  $('#q', el).oninput = (e) => { clearTimeout(tmr); tmr = setTimeout(() => { q.q = en(e.target.value.trim()); load(); }, 220); };
-  $('#fg', el).onchange = (e) => { q.grade = e.target.value; q.class_id = ''; fillClasses(); load(); };
-  $('#fc', el).onchange = (e) => { q.class_id = e.target.value; load(); };
-  $('#fs', el).onchange = (e) => { q.school = e.target.value; load(); };
-  $('#fgender', el).onchange = (e) => { q.gender = e.target.value; load(); };
-  $('#more', el).onclick = () => { q.offset = rows.length; load(true); };
-  load();
+  $('#q', el).oninput = (e) => { clearTimeout(tmr); tmr = setTimeout(() => { q.q = en(e.target.value.trim()); q.offset = 0; resetSel(); load(); }, 250); };
+  $('#fg', el).onchange = (e) => { q.grade = e.target.value; q.class_id = ''; q.offset = 0; fillClasses(); resetSel(); load(); };
+  $('#fc', el).onchange = (e) => { q.class_id = e.target.value; q.offset = 0; resetSel(); load(); };
+  $('#fs', el).onchange = (e) => { q.school = e.target.value; q.offset = 0; resetSel(); load(); };
+  $('#fgender', el).onchange = (e) => { q.gender = e.target.value; q.offset = 0; resetSel(); load(); };
+  $('#fpay', el).onchange = (e) => { q.pay = e.target.value; resetSel(); q.offset = 0; load(); };
+  $('#clearF', el).onclick = () => { Object.assign(q, { q: '', grade: '', class_id: '', school: '', gender: '', pay: '', offset: 0 }); $('#q', el).value = ''; ['fg', 'fc', 'fpay', 'fgender', 'fs'].forEach((id) => { $('#' + id, el).value = ''; }); fillClasses(); resetSel(); load(); };
+  on(el, 'click', '[data-page]', (e, b) => { q.offset = Math.max(0, Number(b.dataset.page)) * PAGE; load(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  load().then(() => { if (hq.get('new')) $('#addSt').click(); });
 
-  // ----- انتخاب و عملیات گروهی (روی انتخاب‌شده‌ها، یا اگر چیزی انتخاب نشده بود روی همهٔ نتایج فیلتر فعلی) -----
-  const filtered = () => !!(q.q || q.grade || q.class_id || q.school || q.gender);
-  const target = () => (sel.size ? { ids: [...sel] } : { filter: { q: q.q, grade: q.grade, class_id: q.class_id, school: q.school, gender: q.gender } });
-  const targetLabel = () => (sel.size ? `${fa(sel.size)} دانش‌آموز انتخاب‌شده` : filtered() ? `همهٔ ${fa(total)} دانش‌آموزِ نتیجهٔ فیلتر` : `همهٔ ${fa(total)} دانش‌آموز`);
-  function bulkInfo() { $('#bulkInfo', el).textContent = `عملیات روی: ${targetLabel()}`; }
-  on(el, 'change', '[data-sel]', (e, b) => { const id = Number(b.dataset.sel); if (b.checked) sel.add(id); else sel.delete(id); bulkInfo(); });
-  $('#selAll', el).onchange = (e) => { $$('[data-sel]', el).forEach((b) => { b.checked = e.target.checked; const id = Number(b.dataset.sel); if (b.checked) sel.add(id); else sel.delete(id); }); bulkInfo(); };
-  const afterBulk = () => { sel.clear(); metaCache = null; load(); };
+  // ----- انتخاب و عملیات گروهی: فقط روی افراد صریحاً انتخاب‌شده (یا «همهٔ نتایج فیلتر» که کاربر خودش انتخاب می‌کند) -----
+  const filterObj = () => ({ q: q.q, grade: q.grade, class_id: q.class_id, school: q.school, gender: q.gender, pay: q.pay });
+  const target = () => (allResults ? { filter: filterObj() } : { ids: [...sel] });
+  const count = () => (allResults ? total : sel.size);
+  const targetLabel = () => (allResults ? `همهٔ ${fa(total)} دانش‌آموزِ نتیجهٔ فیلتر` : `${fa(sel.size)} دانش‌آموز انتخاب‌شده`);
+  function resetSel() { sel.clear(); allResults = false; }
+  function bulkInfo() {
+    const bar = $('#bulkBar', el), has = sel.size > 0 || allResults;
+    bar.hidden = !has;
+    $('#bulkInfo', el).innerHTML = has ? `<b>${targetLabel()}</b>` : '';
+    const all = $('#selectAllRes', el), pageAll = rows.length > 0 && rows.every((x) => sel.has(x.id));
+    all.hidden = !(pageAll && total > rows.length && !allResults);
+    all.textContent = `انتخاب همهٔ ${fa(total)} نتیجه`;
+  }
+  on(el, 'change', '[data-sel]', (e, b) => { const id = Number(b.dataset.sel); allResults = false; if (b.checked) sel.add(id); else sel.delete(id); $('#selAll', el).checked = rows.every((x) => sel.has(x.id)); bulkInfo(); });
+  $('#selAll', el).onchange = (e) => { allResults = false; $$('[data-sel]', el).forEach((b) => { b.checked = e.target.checked; const id = Number(b.dataset.sel); if (b.checked) sel.add(id); else sel.delete(id); }); bulkInfo(); };
+  $('#selectAllRes', el).onclick = () => { allResults = true; bulkInfo(); };
+  $('#bulkClear', el).onclick = () => { resetSel(); $$('[data-sel]', el).forEach((b) => { b.checked = false; }); $('#selAll', el).checked = false; bulkInfo(); };
+  const afterBulk = () => { resetSel(); metaCache = null; load(); };
   on(el, 'click', '[data-bulk]', async (e, b) => {
-    if (!total) { toast('دانش‌آموزی برای این عملیات نیست'); return; }
+    if (!count()) { toast('ابتدا دانش‌آموزان را انتخاب کنید'); return; }
     const kind = b.dataset.bulk, label = targetLabel();
     if (kind === 'paid' || kind === 'unpaid') {
       const paid = kind === 'paid';
@@ -309,9 +308,30 @@ async function students(el) {
     const s = rows.find((x) => x.id === Number(b.dataset.del));
     if (await confirmBox(`«${esc(s.full_name)}» و همه سوابقش (امتیاز، آزمون، پرداخت) برای همیشه حذف شود؟`, 'حذف دانش‌آموز')) { await del(`/api/manager/students/${s.id}`); toast('حذف شد', 'ok'); metaCache = null; load(); }
   });
+  const closeDrawer = () => { $('.ad-drawer-back')?.remove(); $('.ad-drawer')?.remove(); };
   on(el, 'click', '[data-view]', async (e, td) => {
-    const d = await api(`/api/manager/students/${td.dataset.view}`);
-    modal({ title: `${esc(d.info.avatar)} ${esc(d.info.full_name)}`, wide: true, body: studentDetailHtml(d) });
+    const s = rows.find((x) => x.id === Number(td.dataset.view)); if (!s) return;
+    closeDrawer();
+    const back = document.createElement('div'); back.className = 'ad-drawer-back'; back.dataset.close = '1';
+    const dr = document.createElement('aside'); dr.className = 'ad-drawer'; dr.setAttribute('role', 'dialog'); dr.setAttribute('aria-modal', 'true'); dr.setAttribute('aria-label', `پروفایل ${s.full_name}`);
+    const kv = (k, v) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : '');
+    dr.innerHTML = `<header><div class="ad-student">${nameAvatar(s.full_name)}<span><b>${esc(s.full_name)}</b><small>پایه ${gradeName(s.grade)} · کلاس ${esc(s.class_name || '—')}</small></span></div><button class="icon-btn" data-close aria-label="بستن">${icon('x', { size: 20 })}</button></header>
+      <div class="body"><div class="ad-sec">اطلاعات</div><dl class="ad-kv">${kv('کد ملی', `<span class="num">${fa(s.national_code)}</span>`)}${kv('جنسیت', s.gender === 'f' ? 'دختر' : 'پسر')}${kv('مدرسه', esc(s.school || ''))}${kv('تاریخ تولد', s.birth_date ? jdate(s.birth_date, { year: true }) : '')}${kv('نام پدر', esc(s.father_name || ''))}${kv('نام مادر', esc(s.mother_name || ''))}${kv('موبایل والدین', s.parent_phone ? `<span class="num" dir="ltr">${fa(s.parent_phone)}</span>` : '')}${kv('شماره دوم', s.phone2 ? `<span class="num" dir="ltr">${fa(s.phone2)}</span>` : '')}${kv('نشانی', esc(s.address || ''))}</dl>
+      <div class="ad-sec">حق عضویت</div><div class="row" style="gap:10px"><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span><button class="btn sm ${s.pay === 'paid' ? 'ghost' : 'green'}" data-d="paid">${s.pay === 'paid' ? 'لغو پرداخت' : 'ثبت پرداخت'}</button></div>
+      <div class="ad-sec">عملکرد</div><div id="drPerf"><div class="ad-skel" style="height:90px"></div></div></div>
+      <footer><button class="btn sm" data-d="edit">${icon('edit', { size: 15 })} ویرایش</button><button class="btn sm ghost" data-d="sms">${icon('message', { size: 15 })} پیامک به والدین</button><span class="grow"></span><button class="btn sm ghost" data-d="del" style="color:var(--red)">${icon('trash', { size: 15 })} حذف</button></footer>`;
+    document.body.append(back, dr);
+    dr.querySelector('[data-close]').focus();
+    const esc_ = (ev) => { if (ev.key === 'Escape') { closeDrawer(); document.removeEventListener('keydown', esc_); } };
+    document.addEventListener('keydown', esc_);
+    back.onclick = () => closeDrawer();
+    dr.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-close]')) return closeDrawer();
+      const b = ev.target.closest('[data-d]'); if (!b) return;
+      closeDrawer();
+      $(`[data-${{ paid: 'paid', edit: 'edit', sms: 'sms', del: 'del' }[b.dataset.d]}="${s.id}"]`, el)?.click();
+    });
+    try { const d = await api(`/api/manager/students/${s.id}`); const box = $('#drPerf', dr); if (box) box.innerHTML = studentDetailHtml(d); } catch (err) { const box = $('#drPerf', dr); if (box) box.innerHTML = `<div class="ad-err">${esc(err.message)}</div>`; }
   });
   on(el, 'click', '[data-sms]', async (e, b) => {
     const s = rows.find((x) => x.id === Number(b.dataset.sms));
@@ -373,6 +393,7 @@ async function staff(el) {
     });
   };
   $('#addT').onclick = () => teacherModal(null);
+  if (new URLSearchParams(location.hash.split('?')[1] || '').get('new') === 'teacher') setTimeout(() => $('#addT')?.click(), 50);
   on(el, 'click', '[data-et]', (e, b) => teacherModal(md.teachers.find((t) => t.id === Number(b.dataset.et))));
   $('#addC').onclick = () => modal({ title: ' کلاس جدید', body: `<form class="form-grid" id="cForm"><div class="field"><label>پایه</label><select class="input" name="grade">${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div><div class="field"><label>نام کلاس</label><input class="input" name="name" placeholder="مثلاً: ج" required></div></form>`,
     actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ایجاد', onClick: async (m) => { await post('/api/manager/classes', formData($('#cForm', m))); toast('کلاس ایجاد شد', 'ok'); staff(el); } }] });
@@ -380,25 +401,52 @@ async function staff(el) {
 
 // ================= حق عضویت =================
 async function fees(el) {
-  setHead('حق عضویت و رسیدها', 'تعیین مبلغ و تاریخ قفل هر پایه، بررسی رسیدهای کارت‌به‌کارت');
-  let tab = 'pending';
-  const d = await api('/api/manager/fees');
-  el.innerHTML = `<div class="grid c3"><div class="card span2"><div class="card-title"><span class="ib">${icon('receipt', { size: 18 })}</span>صف بررسی رسیدها<div class="seg more">${[['pending', ' در انتظار'], ['approved', ' تأییدشده'], ['rejected', ' ردشده'], ['reversed', ' برگشتی']].map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div></div><div id="rq"></div></div>
-    <div class="card"><div class="card-title"><span class="ib sun">${icon('sliders', { size: 18 })}</span>مبلغ و تاریخ قفل هر پایه</div><form id="feeForm" class="stack">
-      <div class="card flat" style="padding:12px"><b>اشتراک سامانه (همهٔ پایه‌ها)</b><label class="row" style="gap:8px;margin-top:8px"><input type="checkbox" id="sysOn" ${d.system_fee_enabled ? 'checked' : ''}> <span>اعمال اشتراک سامانه بر پرداخت دانش‌آموزان <span class="tiny muted">(فعلاً خاموش)</span></span></label><div class="field" style="margin-top:6px"><label for="sysFee">مبلغ اشتراک سامانه (تومان، جدا از حق عضویت)</label><input class="input ltr" id="sysFee" value="${d.system_fee}" inputmode="numeric"></div><p class="tiny muted" style="margin:0">تا وقتی خاموش باشد، به مبلغ پرداخت دانش‌آموز اضافه نمی‌شود و در پنل او دیده نمی‌شود. وقتی روشن شود، به مبلغ حق عضویت هر پایه اضافه و جداگانه نوشته می‌شود.</p></div>
-      <div class="card flat" style="padding:12px"><b>قیمت‌گذاری یکجا برای همهٔ پایه‌ها</b><div class="row" style="margin-top:6px;gap:6px"><input class="input ltr grow" id="allAmt" inputmode="numeric" placeholder="مثلاً 580000" aria-label="مبلغ همهٔ پایه‌ها"><button type="button" class="btn sm soft" id="applyAll">اعمال به همه</button></div><p class="tiny muted" style="margin:6px 0 0">مبلغ در همهٔ پایه‌ها نوشته می‌شود؛ سپس «ذخیره تنظیمات» را بزنید. بعد هر پایه را می‌توانید جدا تغییر دهید.</p></div>
-      ${d.settings.map((f) => `<div class="card flat" style="padding:12px"><b>پایه ${gradeName(f.grade)}</b><div class="field" style="margin-top:6px"><label>مبلغ (تومان)</label><input class="input ltr" data-amt="${f.grade}" value="${f.amount}" inputmode="numeric"></div><div class="field"><label>تاریخ قفل پنل</label>${dateField(`lock${f.grade}`, f.lock_date, { minYear: 1404, maxYear: 1406 })}</div></div>`).join('')}
-      <button class="btn">${icon('check', { size: 16 })} ذخیره تنظیمات</button></form></div></div>
-    <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('building', { size: 18 })}</span>گزارش وضعیت پرداخت هر کلاس</div><div class="table-wrap"><table class="table"><thead><tr><th>کلاس</th><th>پرداخت‌شده</th><th>در انتظار</th><th>پرداخت‌نشده</th><th style="min-width:160px">درصد وصول</th><th></th></tr></thead><tbody>
-    ${d.classes.map((c) => { const t = c.paid + c.pending + c.unpaid; const r = t ? (c.paid / t) * 100 : 0; return `<tr><td><b>${gradeName(c.grade)} ${esc(c.name)}</b></td><td class="pos">${fa(c.paid)}</td><td style="color:#c2410c">${fa(c.pending)}</td><td class="neg">${fa(c.unpaid)}</td><td><div class="row">${progress(r, 'green sm')}<b class="small">${pct(r)}</b></div></td><td><button class="btn ghost sm" data-cls="${c.id}" data-name="${gradeName(c.grade)} ${esc(c.name)}">فهرست</button></td></tr>`; }).join('')}</tbody></table></div></div>`;
+  setHead('حق عضویت و رسیدها', 'بررسی رسیدها، تعیین مبلغ و پیگیری وصول');
+  let tab = 'pending', rpage = 0;
+  const RP = 20;
+  const [d, an] = await Promise.all([api('/api/manager/fees'), api('/api/manager/analytics').catch(() => null)]);
+  const c = an?.collection;
+  const kp = (ico, l, v, s = '', tone = '') => `<div class="ad-kpi ${tone}"><div class="kt">${icon(ico, { size: 17 })}${l}</div><div class="kv">${v}</div><div class="ks">${s}</div></div>`;
+  el.innerHTML = `<div class="ad-dash">
+    ${c ? `<section class="ad-kpis ad-kpis-4" aria-label="خلاصهٔ وصول">${kp('banknote', 'وصول حق عضویت', c.pct_amount == null ? '—' : `${fa(c.pct_amount)}<small>٪</small>`, 'دریافتی ÷ قابل وصول')}${kp('wallet', 'دریافت‌شده', money(c.collected), 'پرداخت‌های تأییدشده')}${kp('receipt', 'قابل وصول', money(c.due), 'بر اساس مبلغ هر پایه')}${kp('clock', 'در انتظار تأیید', fa(c.pending), c.pending ? 'رسید در صف بررسی' : 'صف خالی است', c.pending ? 'warn' : '')}</section>` : ''}
+    <div class="ad-tabs" role="tablist" aria-label="بخش‌های حق عضویت"><button role="tab" aria-selected="true" data-pane="pnR">${icon('receipt', { size: 16 })} رسیدها</button><button role="tab" aria-selected="false" data-pane="pnS">${icon('sliders', { size: 16 })} مبلغ و مهلت</button><button role="tab" aria-selected="false" data-pane="pnC">${icon('layers', { size: 16 })} گزارش کلاس‌ها</button></div>
+    <section id="pnR" role="tabpanel"><div class="ad-card"><header><div><h3>رسیدهای کارت‌به‌کارت</h3><p>تصویر رسید را ببینید، تأیید یا با ذکر علت رد کنید.</p></div><div class="seg">${[['pending', 'در انتظار'], ['approved', 'تأییدشده'], ['rejected', 'ردشده'], ['reversed', 'برگشتی']].map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div></header><div id="rq"></div></div></section>
+    <section id="pnS" role="tabpanel" hidden><form id="feeForm" class="stack">
+      <div class="ad-grid">
+        <div class="ad-card ad-col-4"><header><div><h3>اشتراک سامانه</h3><p>جدا از حق عضویت و فعلاً خاموش</p></div></header>
+          <label class="row" style="gap:8px"><input type="checkbox" id="sysOn" ${d.system_fee_enabled ? 'checked' : ''}> <span>اعمال بر پرداخت دانش‌آموزان</span></label>
+          <div class="field"><label for="sysFee">مبلغ اشتراک (تومان)</label><input class="input ltr" id="sysFee" value="${d.system_fee}" inputmode="numeric"></div>
+          <p class="tiny muted" style="margin:0">تا وقتی خاموش است، به مبلغ پرداخت اضافه نمی‌شود. با روشن‌شدن، به حق عضویت هر پایه افزوده و جدا نمایش داده می‌شود.</p></div>
+        <div class="ad-card ad-col-8"><header><div><h3>قیمت‌گذاری یکجا</h3><p>یک مبلغ برای همهٔ پایه‌ها؛ هر پایه را بعداً می‌توانید جدا تغییر دهید.</p></div></header>
+          <div class="row" style="gap:8px"><input class="input ltr grow" id="allAmt" inputmode="numeric" placeholder="مثلاً 3500000" aria-label="مبلغ همهٔ پایه‌ها"><button type="button" class="btn soft" id="applyAll">اعمال به همهٔ پایه‌ها</button></div>
+          <p class="tiny muted" style="margin:0">پس از اعمال، «ذخیره تنظیمات» را بزنید.</p></div>
+      </div>
+      <div class="ad-grid">${d.settings.map((f) => `<div class="ad-card ad-col-4"><header><h3>پایهٔ ${gradeName(f.grade)}</h3></header><div class="field"><label>مبلغ حق عضویت (تومان)</label><input class="input ltr" data-amt="${f.grade}" value="${f.amount}" inputmode="numeric"></div><div class="field"><label>مهلت پرداخت (تاریخ قفل پنل)</label>${dateField(`lock${f.grade}`, f.lock_date, { minYear: 1404, maxYear: 1406 })}</div></div>`).join('')}</div>
+      <div class="row" style="justify-content:flex-end"><button class="btn">${icon('check', { size: 16 })} ذخیرهٔ تنظیمات</button></div></form></section>
+    <section id="pnC" role="tabpanel" hidden><div class="ad-card" style="padding:0"><div class="table-wrap"><table class="table ad-cards"><thead><tr><th>کلاس</th><th>پرداخت‌شده</th><th>در انتظار</th><th>پرداخت‌نشده</th><th style="min-width:160px">درصد وصول (تعداد)</th><th></th></tr></thead><tbody>
+    ${d.classes.map((cl) => { const t = cl.paid + cl.pending + cl.unpaid; const r = t ? (cl.paid / t) * 100 : 0; return `<tr><td class="ad-first"><b>${gradeName(cl.grade)} ${esc(cl.name)}</b></td><td data-l="پرداخت‌شده" class="pos">${fa(cl.paid)}</td><td data-l="در انتظار" style="color:var(--amber-ink)">${fa(cl.pending)}</td><td data-l="پرداخت‌نشده" class="neg">${fa(cl.unpaid)}</td><td data-l="وصول"><div class="row">${progress(r, 'green sm')}<b class="small">${pct(r)}</b></div></td><td class="ad-act"><button class="btn ghost sm" data-cls="${cl.id}" data-name="${gradeName(cl.grade)} ${esc(cl.name)}">فهرست</button></td></tr>`; }).join('')}</tbody></table></div></div></section>
+  </div>`;
+  on(el, 'click', '[data-pane]', (e, b) => { $$('[data-pane]', el).forEach((x) => x.setAttribute('aria-selected', String(x === b))); ['pnR', 'pnS', 'pnC'].forEach((id) => { $('#' + id, el).hidden = id !== b.dataset.pane; }); });
   const drawQueue = async () => {
-    const list = await api(`/api/manager/receipts?status=${tab}`);
-    $('#rq', el).innerHTML = list.length ? `<div class="grid c2">${list.map((p) => `<div class="card flat"><div class="row">${nameAvatar(p.full_name, 'sm')}<div class="grow"><b class="small">${esc(p.full_name)}</b><div class="tiny muted">${gradeName(p.grade)} ${esc(p.class_name || '')} • ${timeAgo(p.created_at)}</div></div><div style="text-align:end"><b class="small">${money(p.amount)}</b>${p.system_fee ? `<div class="tiny muted">شامل اشتراک سامانه ${money(p.system_fee)}</div>` : ''}<div><span class="badge ${p.invoice_id ? 'blue' : ''}">${p.invoice_id ? `فاکتور #${fa(p.invoice_id)}` : 'حق عضویت'}</span></div></div></div>
-      ${p.receipt_path ? `<a href="/uploads/${esc(p.receipt_path)}" target="_blank" aria-label="مشاهده تصویر رسید ${esc(p.full_name)}"><img src="/uploads/${esc(p.receipt_path)}" alt="رسید" loading="lazy" style="width:100%;max-height:220px;object-fit:contain;background:var(--bg);border-radius:12px;margin:10px 0"></a>` : ''}
-      ${p.status === 'pending' ? `<div class="row"><button class="btn green grow" data-ok="${p.id}">${icon('check-circle', { size: 16 })} تأیید</button><button class="btn red grow" data-no="${p.id}">${icon('x', { size: 16 })} رد</button></div>` : p.status === 'rejected' ? `<div class="small" style="color:var(--red)">علت: ${esc(p.reject_reason)}</div>` : p.status === 'reversed' ? `<div class="small"><span class="badge orange">برگشت‌خورده ${jdate(p.reversed_at)}</span> ${esc(p.reverse_reason || '')}</div>` : `<div class="row"><span class="badge green">تأیید شد ${jdate(p.reviewed_at)}</span><button class="btn sm ghost" style="margin-inline-start:auto" data-rev="${p.id}">برگشت رسید</button></div>`}</div>`).join('')}</div>` : empty(tab === 'pending' ? 'check-circle' : 'inbox', tab === 'pending' ? 'رسیدی در صف بررسی نیست' : 'موردی نیست');
+    const all_ = await api(`/api/manager/receipts?status=${tab}`);
+    rpage = Math.min(rpage, Math.max(0, Math.ceil(all_.length / RP) - 1));
+    const list = all_.slice(rpage * RP, rpage * RP + RP);
+    const act = (p) => (p.status === 'pending' ? `<div class="row" style="gap:6px;justify-content:flex-end"><button class="btn sm green" data-ok="${p.id}">${icon('check', { size: 15 })} تأیید</button><button class="btn sm ghost" style="color:var(--red)" data-no="${p.id}">${icon('x', { size: 15 })} رد</button></div>`
+      : p.status === 'rejected' ? `<span class="badge red">رد شد</span><div class="tiny muted">${esc(p.reject_reason || '')}</div>`
+      : p.status === 'reversed' ? `<span class="badge orange">برگشت‌خورده ${jdate(p.reversed_at)}</span><div class="tiny muted">${esc(p.reverse_reason || '')}</div>`
+      : `<div class="row" style="gap:8px;justify-content:flex-end"><span class="badge green">تأیید ${jdate(p.reviewed_at)}</span><button class="btn sm ghost" data-rev="${p.id}">برگشت</button></div>`);
+    $('#rq', el).innerHTML = list.length ? `<div class="table-wrap"><table class="table ad-cards"><thead><tr><th>دانش‌آموز</th><th>مبلغ</th><th>نوع</th><th>زمان</th><th>رسید</th><th style="text-align:end">وضعیت / اقدام</th></tr></thead><tbody>${list.map((p) => `<tr>
+      <td class="ad-first"><div class="ad-student">${nameAvatar(p.full_name, 'sm')}<span><b>${esc(p.full_name)}</b><small>${gradeName(p.grade)} ${esc(p.class_name || '')}</small></span></div></td>
+      <td data-l="مبلغ"><b>${money(p.amount)}</b>${p.system_fee ? `<div class="tiny muted">شامل اشتراک ${money(p.system_fee)}</div>` : ''}</td>
+      <td data-l="نوع"><span class="badge ${p.invoice_id ? 'blue' : ''}">${p.invoice_id ? `فاکتور #${fa(p.invoice_id)}` : 'حق عضویت'}</span></td>
+      <td data-l="زمان" class="small muted">${timeAgo(p.created_at)}</td>
+      <td data-l="رسید">${p.receipt_path ? `<button type="button" class="btn sm ghost" data-img="/uploads/${esc(p.receipt_path)}" data-who="${esc(p.full_name)}">${icon('eye', { size: 15 })} مشاهده</button>` : '<span class="muted small">بدون تصویر</span>'}</td>
+      <td class="ad-act" style="text-align:end">${act(p)}</td></tr>`).join('')}</tbody></table></div>${all_.length > RP ? `<div class="ad-pager" style="padding-inline:0"><span>${fa(rpage * RP + 1)} تا ${fa(rpage * RP + list.length)} از ${fa(all_.length)}${all_.length >= 200 ? ' (۲۰۰ مورد اخیر)' : ''}</span><span class="row" style="gap:6px"><button class="btn ghost sm" data-rp="-1" ${rpage === 0 ? 'disabled' : ''}>${icon('chevron-right', { size: 15 })} قبلی</button><button class="btn ghost sm" data-rp="1" ${(rpage + 1) * RP >= all_.length ? 'disabled' : ''}>بعدی ${icon('chevron-left', { size: 15 })}</button></span></div>` : ''}` : empty(tab === 'pending' ? 'check-circle' : 'inbox', tab === 'pending' ? 'رسیدی در صف بررسی نیست' : 'موردی در این بخش نیست');
   };
+  on(el, 'click', '[data-rp]', (e, b) => { rpage = Math.max(0, rpage + Number(b.dataset.rp)); drawQueue(); });
+  on(el, 'click', '[data-img]', (e, b) => modal({ title: `رسید ${esc(b.dataset.who)}`, wide: true, body: `<img src="${esc(b.dataset.img)}" alt="تصویر رسید ${esc(b.dataset.who)}" style="width:100%;max-height:70vh;object-fit:contain;background:var(--surface-2);border-radius:10px" onerror="this.replaceWith(Object.assign(document.createElement('p'),{className:'muted',textContent:'تصویر رسید قابل نمایش نیست.'}))">`, actions: [{ label: 'بستن', cls: 'ghost', value: true }, { label: 'باز کردن در تب جدید', cls: 'soft', onClick: () => { window.open(b.dataset.img, '_blank', 'noopener'); return false; } }] }));
   drawQueue();
-  on(el, 'click', '[data-tab]', (e, b) => { tab = b.dataset.tab; $$('[data-tab]', el).forEach((x) => x.classList.toggle('on', x === b)); drawQueue(); });
+  on(el, 'click', '[data-tab]', (e, b) => { tab = b.dataset.tab; rpage = 0; $$('[data-tab]', el).forEach((x) => x.classList.toggle('on', x === b)); drawQueue(); });
   on(el, 'click', '[data-rev]', (e, b) => modal({ title: 'برگشت رسید تأییدشده', body: '<p class="small muted" style="margin-top:0">رسید باطل و یک سند هزینه‌ی اصلاحی در حسابداری ثبت می‌شود. این کار برگشت‌پذیر نیست.</p><div class="field"><label for="revWhy">علت برگشت</label><input class="input" id="revWhy" maxlength="200" required></div>', actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ثبت برگشت', cls: 'red', onClick: async (m) => { const reason = m.querySelector('#revWhy').value.trim(); if (!reason) { toast('علت را بنویسید'); return false; } await post(`/api/manager/receipts/${b.dataset.rev}/reverse`, { reason }); toast('رسید برگشت خورد و سند اصلاحی ثبت شد', 'ok'); drawQueue(); } }] }));
   on(el, 'click', '[data-ok]', (e, b) => busy(b, async () => { await post(`/api/manager/receipts/${b.dataset.ok}/approve`); toast('رسید تأیید شد و در صندوق ثبت شد', 'ok'); drawQueue(); }));
   on(el, 'click', '[data-no]', (e, b) => modal({
@@ -456,6 +504,7 @@ async function announcements(el) {
       actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: ' ارسال اطلاعیه', onClick: async (m) => { await post('/api/manager/announcements', { ...formData($('#annForm', m)), target_type: type, target_value: $$('#tv input:checked', m).map((i) => Number(i.value)) }); toast('اطلاعیه ارسال شد', 'ok'); announcements(el); } }],
     });
   };
+  if (new URLSearchParams(location.hash.split('?')[1] || '').get('new')) setTimeout(() => $('#newAnn')?.click(), 50);
 }
 
 // ================= حسابداری =================
@@ -467,9 +516,9 @@ async function accounting(el, _p, me) {
   const load = async () => {
     if (period !== 'custom') [from, to] = ranges[period]();
     const d = await api(`/api/manager/accounting?from=${from}&to=${to}${type ? `&type=${type}` : ''}`);
-    el.innerHTML = `<div class="grid c3">${kpi('download', 'green', money(d.totals.income), 'کل درآمد')}${kpi('upload', 'red', money(d.totals.expense), 'کل هزینه')}${kpi('wallet', '', money(d.totals.balance), 'مانده صندوق')}</div>
-      <div class="grid c3" style="margin-top:18px"><div class="card span2"><div class="card-title"><span class="ib">${icon('chart', { size: 18 })}</span>مقایسه درآمد و هزینه (۶ ماه اخیر)</div>${barChart(d.months.map((m) => ({ label: m.label, values: [m.income, m.expense] })), [{ name: 'درآمد', color: '#0E9157' }, { name: 'هزینه', color: '#D8262F' }], { height: 250 })}</div>
-      <div class="card"><div class="card-title"><span class="ib red">${icon('bulb', { size: 18 })}</span>ترکیب هزینه‌های بازه</div>${d.categories.length ? donut(d.categories.map((c, i) => ({ name: c.category, value: c.total, color: ['#0B5F66', '#F2B33D', '#F2B33D', '#0E9157', '#2C5A7A', '#D8262F'][i % 6] })), { size: 130, label: '', sub: '' }) : empty('bulb', 'هزینه‌ای در این بازه نیست')}</div></div>
+    el.innerHTML = `<section class="ad-kpis ad-kpis-3" aria-label="خلاصهٔ مالی">${[['download', 'کل درآمد', money(d.totals.income), 'مجموع ورودی‌ها'], ['upload', 'کل هزینه', money(d.totals.expense), 'مجموع خروجی‌ها'], ['wallet', 'مانده صندوق', money(d.totals.balance), 'درآمد منهای هزینه']].map(([i, l, v, sub]) => `<div class="ad-kpi"><div class="kt">${icon(i, { size: 17 })}${l}</div><div class="kv sm">${v}</div><div class="ks">${sub}</div></div>`).join('')}</section>
+      <div class="ad-grid" style="margin-top:14px"><section class="ad-card ad-col-8"><header><div><h3>مقایسهٔ درآمد و هزینه</h3><p>شش ماه اخیر (تومان)</p></div></header><div id="chAcc"></div></section>
+      <section class="ad-card ad-col-4"><header><div><h3>ترکیب هزینه‌ها</h3><p>در بازهٔ انتخاب‌شده</p></div></header><div id="chCat"></div></section></div>
       <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('info', { size: 18 })}</span>دفتر کل تراکنش‌ها و دفتر واریزها</div>
         <div class="row wrap" style="margin-bottom:12px"><div class="seg">${[['day', 'روزانه'], ['week', 'هفتگی'], ['month', 'ماهانه'], ['custom', 'بازه دلخواه']].map(([k, l]) => `<button data-p="${k}" class="${k === period ? 'on' : ''}">${l}</button>`).join('')}</div>
         <div class="seg">${[['', 'همه'], ['income', 'واریزها'], ['expense', 'هزینه‌ها']].map(([k, l]) => `<button data-ty="${k}" class="${k === type ? 'on' : ''}">${l}</button>`).join('')}</div></div>
@@ -477,6 +526,8 @@ async function accounting(el, _p, me) {
         <div class="row wrap small" style="margin-bottom:10px"><span class="badge green">ورودی بازه: ${money(d.range.income)}</span><span class="badge red">خروجی بازه: ${money(d.range.expense)}</span><span class="badge gray">${jdate(d.from)} تا ${jdate(d.to)}</span></div>
         <div class="table-wrap" style="max-height:520px"><table class="table"><thead><tr><th>تاریخ</th><th>شرح</th><th>دسته</th><th>مبلغ</th><th></th></tr></thead><tbody>
         ${d.ledger.map((t) => `<tr><td class="tiny">${jshort(t.date)}</td><td class="small">${esc(t.title)}</td><td><span class="badge gray">${esc(t.category || '')}</span></td><td class="${t.type === 'income' ? 'pos' : 'neg'}">${t.type === 'income' ? '+' : '−'} ${money(t.amount)}</td><td>${t.ref?.startsWith('pay:') || t.ref?.startsWith('RSH') ? '' : `<button class="icon-btn" data-dt="${t.id}" aria-label="حذف">${icon('trash', { size: 16 })}</button>`}</td></tr>`).join('') || `<tr><td colspan="5">${empty('inbox', 'تراکنشی در این بازه نیست')}</td></tr>`}</tbody></table></div></div>`;
+    comboChart($('#chAcc', el), { labels: d.months.map((m) => m.label), bars: [{ name: 'درآمد', color: 'var(--c1)', values: d.months.map((m) => m.income) }, { name: 'هزینه', color: 'var(--c3)', values: d.months.map((m) => m.expense) }], line: { name: 'مانده ماهانه', color: 'var(--c4)', values: d.months.map((m) => m.income - m.expense) }, tipFmt: money, label: 'نمودار درآمد و هزینه' });
+    adDonut($('#chCat', el), { segments: d.categories.map((x, i) => ({ name: x.category, value: x.total, color: ['var(--c1)', 'var(--c3)', 'var(--c2)', 'var(--c5)', 'var(--c4)', 'var(--c6)'][i % 6] })), center: { value: fa(d.categories.length), label: 'دسته' }, label: 'ترکیب هزینه‌ها', emptyText: 'هزینه‌ای در این بازه نیست' });
     $('#applyR', el)?.addEventListener('click', () => { from = readDate(el, 'from') || from; to = readDate(el, 'to') || to; load(); });
   };
   on(el, 'click', '[data-p]', (e, b) => { period = b.dataset.p; load(); });
