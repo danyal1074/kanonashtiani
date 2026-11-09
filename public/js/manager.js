@@ -131,13 +131,14 @@ const readStudent = (m) => ({ ...formData($('#stForm', m)), national_code: en($(
 
 async function students(el) {
   let md = await meta();
-  const q = { q: '', grade: '', class_id: '', school: '', offset: 0 };
+  const q = { q: '', grade: '', class_id: '', school: '', gender: '', offset: 0 };
   let rows = [], total = 0;
   const sel = new Set();
   setHead('مدیریت دانش‌آموزان', 'ثبت‌نام، ویرایش، جستجو و فیلتر', `<button class="btn ghost sm" id="printCreds">${icon('receipt', { size: 16 })} چاپ کارت‌های ورود</button> <button class="btn ghost sm" id="importSt">ثبت‌نام گروهی (اکسل / CSV)</button> <button class="btn ghost sm" id="classesSt">کلاس‌ها</button> <button class="btn ghost sm" id="delAllSt" style="color:var(--red)">حذف همه</button> <button class="btn sm" id="addSt"> ثبت‌نام دانش‌آموز</button>`);
   el.innerHTML = `<div class="card" style="margin-bottom:16px"><div class="row wrap"><input class="input grow" id="q" placeholder=" جستجوی زنده نام یا کد ملی…" style="min-width:220px">
     <select class="input" id="fg" style="width:auto"><option value="">همه پایه‌ها</option>${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select>
     <select class="input" id="fc" style="width:auto"><option value="">همه کلاس‌ها</option></select>
+    <select class="input" id="fgender" style="width:auto"><option value="">همهٔ جنسیت‌ها</option><option value="m">پسر</option><option value="f">دختر</option></select>
     <select class="input" id="fs" style="width:auto;max-width:220px"><option value="">همه مدارس</option>${md.schools.map((s) => `<option>${esc(s)}</option>`).join('')}</select></div></div>
     <div class="card"><div class="row between" style="margin-bottom:10px"><b id="total"></b><div class="row wrap" style="gap:6px"><span class="small muted" id="bulkInfo"></span><button class="btn sm green" data-bulk="paid">حق عضویت: پرداخت شد</button><button class="btn sm ghost" data-bulk="unpaid">لغو پرداخت</button><button class="btn sm soft" data-bulk="move">انتقال به کلاس…</button><button class="btn sm red" data-bulk="delete">حذف…</button></div></div><div class="table-wrap"><table class="table"><thead><tr><th style="width:34px"><input type="checkbox" id="selAll" aria-label="انتخاب همهٔ ردیف‌های نمایش‌داده‌شده"></th><th>دانش‌آموز</th><th>کد ملی</th><th>پایه/کلاس</th><th>مدرسه</th><th>موبایل والدین</th><th>حق عضویت</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>
     <div class="center" style="margin-top:12px"><button class="btn ghost" id="more">نمایش بیشتر</button></div></div>`;
@@ -163,12 +164,13 @@ async function students(el) {
   $('#fg', el).onchange = (e) => { q.grade = e.target.value; q.class_id = ''; fillClasses(); load(); };
   $('#fc', el).onchange = (e) => { q.class_id = e.target.value; load(); };
   $('#fs', el).onchange = (e) => { q.school = e.target.value; load(); };
+  $('#fgender', el).onchange = (e) => { q.gender = e.target.value; load(); };
   $('#more', el).onclick = () => { q.offset = rows.length; load(true); };
   load();
 
   // ----- انتخاب و عملیات گروهی (روی انتخاب‌شده‌ها، یا اگر چیزی انتخاب نشده بود روی همهٔ نتایج فیلتر فعلی) -----
-  const filtered = () => !!(q.q || q.grade || q.class_id || q.school);
-  const target = () => (sel.size ? { ids: [...sel] } : { filter: { q: q.q, grade: q.grade, class_id: q.class_id, school: q.school } });
+  const filtered = () => !!(q.q || q.grade || q.class_id || q.school || q.gender);
+  const target = () => (sel.size ? { ids: [...sel] } : { filter: { q: q.q, grade: q.grade, class_id: q.class_id, school: q.school, gender: q.gender } });
   const targetLabel = () => (sel.size ? `${fa(sel.size)} دانش‌آموز انتخاب‌شده` : filtered() ? `همهٔ ${fa(total)} دانش‌آموزِ نتیجهٔ فیلتر` : `همهٔ ${fa(total)} دانش‌آموز`);
   function bulkInfo() { $('#bulkInfo', el).textContent = `عملیات روی: ${targetLabel()}`; }
   on(el, 'change', '[data-sel]', (e, b) => { const id = Number(b.dataset.sel); if (b.checked) sel.add(id); else sel.delete(id); bulkInfo(); });
@@ -210,7 +212,7 @@ async function students(el) {
 
   // ----- کلاس‌ها: چند کلاس برای هر پایه، تقسیم خودکار دانش‌آموزان -----
   $('#classesSt').onclick = () => {
-    const body = () => `<div class="stack">${md.grades.map((g) => { const cl = md.classes.filter((c) => c.grade === g); return `<div class="card flat" style="padding:10px"><div class="row between wrap" style="gap:8px"><b>پایه ${gradeName(g)}</b><span class="row wrap" style="gap:6px"><input class="input" data-newname="${g}" placeholder="نام کلاس جدید (مثلاً ب)" style="width:170px" maxlength="30"><button class="btn sm" data-addcls="${g}">افزودن کلاس</button>${cl.length > 1 ? `<button class="btn sm soft" data-dist="${g}">تقسیم خودکار بین ${fa(cl.length)} کلاس</button>` : ''}</span></div>
+    const body = () => `<div class="stack"><div class="row between wrap" style="gap:8px"><span class="small muted">تقسیم بر اساس جنسیت برای همهٔ پایه‌ها (کلاس‌های الف و ب در صورت نبودن ساخته می‌شوند)</span><button class="btn sm" data-gsplit="all">همهٔ پایه‌ها: پسر الف، دختر ب</button></div>${md.grades.map((g) => { const cl = md.classes.filter((c) => c.grade === g); return `<div class="card flat" style="padding:10px"><div class="row between wrap" style="gap:8px"><b>پایه ${gradeName(g)}</b><span class="row wrap" style="gap:6px"><input class="input" data-newname="${g}" placeholder="نام کلاس جدید (مثلاً ب)" style="width:170px" maxlength="30"><button class="btn sm" data-addcls="${g}">افزودن کلاس</button><button class="btn sm soft" data-gsplit="${g}">پسر الف، دختر ب</button>${cl.length > 1 ? `<button class="btn sm soft" data-dist="${g}">تقسیم خودکار بین ${fa(cl.length)} کلاس</button>` : ''}</span></div>
       <div class="row wrap" style="gap:6px;margin-top:8px">${cl.map((c) => `<span class="badge">${esc(c.name)} · ${fa(c.students)} نفر${c.students ? '' : ` <button class="icon-btn" data-delcls="${c.id}" aria-label="حذف کلاس ${esc(c.name)}">${icon('trash', { size: 14 })}</button>`}</span>`).join('') || '<span class="small muted">کلاسی نیست</span>'}</div></div>`; }).join('')}
       <p class="small muted" style="margin:0;line-height:2">برای هر پایه چند کلاس بسازید، سپس «تقسیم خودکار» دانش‌آموزان را بین کلاس‌ها پخش می‌کند. برای جابه‌جایی دلخواه، در فهرست دانش‌آموزان چند نفر را تیک بزنید و «انتقال به کلاس» را بزنید.</p></div>`;
     modal({ title: 'کلاس‌های هر پایه', wide: true, body: `<div id="clsBody">${body()}</div>`, actions: [{ label: 'بستن', value: true }], onOpen: (m) => {
@@ -221,6 +223,12 @@ async function students(el) {
         await post('/api/manager/classes', { grade: g, name }); toast('کلاس ساخته شد', 'ok'); await redraw();
       }));
       on(m, 'click', '[data-delcls]', (ev, b) => busy(b, async () => { await del(`/api/manager/classes/${b.dataset.delcls}`); toast('کلاس حذف شد', 'ok'); await redraw(); }));
+      on(m, 'click', '[data-gsplit]', (ev, b) => busy(b, async () => {
+        const g = b.dataset.gsplit, all_ = g === 'all';
+        if (!(await confirmBox(`${all_ ? 'در همهٔ پایه‌ها' : `در پایهٔ ${gradeName(Number(g))}`} همهٔ پسرها به کلاس «الف» و همهٔ دخترها به کلاس «ب» منتقل شوند؟ کلاس فعلی دانش‌آموزان تغییر می‌کند.`, 'انتقال'))) return;
+        const r = await post('/api/manager/classes/split-gender', all_ ? {} : { grade: Number(g) });
+        toast(`${fa(r.boys)} پسر در «الف» و ${fa(r.girls)} دختر در «ب» قرار گرفتند${r.classes_created ? ` (${fa(r.classes_created)} کلاس تازه ساخته شد)` : ''}`, 'ok', 6000); await redraw();
+      }));
       on(m, 'click', '[data-dist]', (ev, b) => busy(b, async () => {
         const g = Number(b.dataset.dist), cl = md.classes.filter((c) => c.grade === g);
         if (!(await confirmBox(`دانش‌آموزان پایهٔ ${gradeName(g)} به‌ترتیب حروف الفبا (دختر و پسر جداگانه) بین ${fa(cl.length)} کلاس پخش شوند؟ کلاس فعلی همهٔ آن‌ها تغییر می‌کند.`, 'تقسیم خودکار'))) return;

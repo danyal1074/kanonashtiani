@@ -129,6 +129,7 @@ export default function register(r) {
     if (q.grade) { where.push('s.grade=?'); p.push(Number(q.grade)); }
     if (q.class_id) { where.push('s.class_id=?'); p.push(Number(q.class_id)); }
     if (q.school) { where.push('s.school=?'); p.push(q.school); }
+    if (q.gender === 'm' || q.gender === 'f') { where.push('u.gender=?'); p.push(q.gender); }
     const w = where.join(' AND ');
     const total = get(`SELECT COUNT(*) n FROM users u JOIN students s ON s.user_id=u.id WHERE ${w}`, ...p).n;
     const limit = Math.min(100, Number(q.limit) || 30), offset = Math.max(0, Number(q.offset) || 0);
@@ -207,6 +208,7 @@ export default function register(r) {
     if (q.grade) { where.push('s.grade=?'); p.push(Number(q.grade)); }
     if (q.class_id) { where.push('s.class_id=?'); p.push(Number(q.class_id)); }
     if (q.school) { where.push('s.school=?'); p.push(String(q.school)); }
+    if (q.gender === 'm' || q.gender === 'f') { where.push('u.gender=?'); p.push(q.gender); }
     return all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE ${where.join(' AND ')}`, ...p).map((x) => x.id);
   };
   r.post('/api/manager/students/fee-paid', M, (ctx) => {
@@ -257,6 +259,29 @@ export default function register(r) {
       for (const g of groups) for (const x of g) { run('UPDATE students SET class_id=? WHERE user_id=?', classes[k++ % classes.length].id, x.id); n++; }
     });
     return { ok: true, moved: n };
+  });
+  // پسرها در یک کلاس (پیش‌فرض «الف») و دخترها در کلاس دیگر (پیش‌فرض «ب») — برای یک پایه یا همهٔ پایه‌ها؛ کلاس‌ها در صورت نبودن ساخته می‌شوند
+  r.post('/api/manager/classes/split-gender', M, (ctx) => {
+    const cid = ctx.user.center_id, boys = clampStr(ctx.body.boys_class, 30) || 'الف', girls = clampStr(ctx.body.girls_class, 30) || 'ب';
+    if (boys === girls) fail(400, 'نام کلاس پسرها و دخترها باید متفاوت باشد');
+    const grades = ctx.body.grade ? [Number(ctx.body.grade)] : GRADES;
+    if (grades.some((g) => !GRADES.includes(g))) fail(400, 'پایه نامعتبر است');
+    const out = { ok: true, boys: 0, girls: 0, classes_created: 0 };
+    tx(() => {
+      const cls = (g, name) => {
+        const ex = get('SELECT id FROM classes WHERE center_id=? AND grade=? AND name=?', cid, g, name);
+        if (ex) return ex.id;
+        out.classes_created++;
+        return Number(run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', cid, g, name).lastInsertRowid);
+      };
+      for (const g of grades) {
+        const st = all("SELECT u.id, u.gender FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND s.grade=?", cid, g);
+        if (!st.length) continue;
+        const bc = cls(g, boys), gc = cls(g, girls);
+        for (const x of st) { run('UPDATE students SET class_id=? WHERE user_id=?', x.gender === 'f' ? gc : bc, x.id); if (x.gender === 'f') out.girls++; else out.boys++; }
+      }
+    });
+    return out;
   });
   // «حذف همه» برای بخش‌های مختلف (با تأیید)
   r.post('/api/manager/bulk-delete', M, (ctx) => {
