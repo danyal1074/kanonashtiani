@@ -160,7 +160,8 @@ async function students(el) {
   const filterObj = () => ({ q: q.q, grade: q.grade, class_id: q.class_id, school: q.school, gender: q.gender, pay: q.pay });
   const target = () => (allResults ? { filter: filterObj() } : { ids: [...sel] });
   const count = () => (allResults ? total : sel.size);
-  const targetLabel = () => (allResults ? `همهٔ ${fa(total)} دانش‌آموزِ نتیجهٔ فیلتر` : `${fa(sel.size)} دانش‌آموز انتخاب‌شده`);
+  const hasFilter = () => !!(q.q || q.grade || q.class_id || q.school || q.gender || q.pay);
+  const targetLabel = () => (allResults ? (hasFilter() ? `همهٔ ${fa(total)} دانش‌آموزِ نتیجهٔ فیلتر` : `همهٔ ${fa(total)} دانش‌آموز کانون`) : `${fa(sel.size)} دانش‌آموز انتخاب‌شده`);
   function resetSel() { sel.clear(); allResults = false; }
   function bulkInfo() {
     const bar = $('#bulkBar', el), has = sel.size > 0 || allResults;
@@ -308,10 +309,12 @@ async function students(el) {
     const s = rows.find((x) => x.id === Number(b.dataset.del));
     if (await confirmBox(`«${esc(s.full_name)}» و همه سوابقش (امتیاز، آزمون، پرداخت) برای همیشه حذف شود؟`, 'حذف دانش‌آموز')) { await del(`/api/manager/students/${s.id}`); toast('حذف شد', 'ok'); metaCache = null; load(); }
   });
-  const closeDrawer = () => { $('.ad-drawer-back')?.remove(); $('.ad-drawer')?.remove(); };
+  let drawerKey = null, drawerOpener = null;
+  const closeDrawer = () => { $('.ad-drawer-back')?.remove(); $('.ad-drawer')?.remove(); if (drawerKey) { document.removeEventListener('keydown', drawerKey); drawerKey = null; } drawerOpener?.focus?.(); drawerOpener = null; };
   on(el, 'click', '[data-view]', async (e, td) => {
     const s = rows.find((x) => x.id === Number(td.dataset.view)); if (!s) return;
     closeDrawer();
+    drawerOpener = td;
     const back = document.createElement('div'); back.className = 'ad-drawer-back'; back.dataset.close = '1';
     const dr = document.createElement('aside'); dr.className = 'ad-drawer'; dr.setAttribute('role', 'dialog'); dr.setAttribute('aria-modal', 'true'); dr.setAttribute('aria-label', `پروفایل ${s.full_name}`);
     const kv = (k, v) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : '');
@@ -322,8 +325,15 @@ async function students(el) {
       <footer><button class="btn sm" data-d="edit">${icon('edit', { size: 15 })} ویرایش</button><button class="btn sm ghost" data-d="sms">${icon('message', { size: 15 })} پیامک به والدین</button><span class="grow"></span><button class="btn sm ghost" data-d="del" style="color:var(--red)">${icon('trash', { size: 15 })} حذف</button></footer>`;
     document.body.append(back, dr);
     dr.querySelector('[data-close]').focus();
-    const esc_ = (ev) => { if (ev.key === 'Escape') { closeDrawer(); document.removeEventListener('keydown', esc_); } };
-    document.addEventListener('keydown', esc_);
+    drawerKey = (ev) => {
+      if ($('.modal-back')) return; // وقتی مودال باز است فقط مودال می‌بندد
+      if (ev.key === 'Escape') return closeDrawer();
+      if (ev.key !== 'Tab') return;
+      const f = [...dr.querySelectorAll('button:not([disabled]),a[href],input,select,textarea')].filter((x) => x.offsetParent);
+      if (!f.length) return;
+      if (ev.shiftKey && document.activeElement === f[0]) { ev.preventDefault(); f[f.length - 1].focus(); } else if (!ev.shiftKey && document.activeElement === f[f.length - 1]) { ev.preventDefault(); f[0].focus(); }
+    };
+    document.addEventListener('keydown', drawerKey);
     back.onclick = () => closeDrawer();
     dr.addEventListener('click', (ev) => {
       if (ev.target.closest('[data-close]')) return closeDrawer();
@@ -350,7 +360,7 @@ async function students(el) {
 // ================= معلمان، کلاس‌ها، برنامه =================
 async function staff(el) {
   const md = await meta(true);
-  setHead('معلمان، کلاس‌ها و برنامه هفتگی', `${fa(md.teachers.length)} معلم • ${fa(md.classes.length)} کلاس`, '<button class="btn sm" id="addT"> معلم جدید</button> <button class="btn soft sm" id="addC"> کلاس جدید</button> <button class="btn ghost sm" id="delAllT" style="color:var(--red)">حذف همهٔ معلمان</button> <button class="btn ghost sm" id="delAllS" style="color:var(--red)">حذف همهٔ جلسات برنامه</button> <button class="btn ghost sm" id="delAllC" style="color:var(--red)">حذف کلاس‌های خالی</button>');
+  setHead('معلمان، کلاس‌ها و برنامه هفتگی', `${fa(md.teachers.length)} معلم • ${fa(md.classes.length)} کلاس`, '<button class="btn sm" id="addT"> معلم جدید</button> <button class="btn soft sm" id="addC"> کلاس جدید</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllT" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ معلمان…</button><button type="button" id="delAllS" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ جلسات برنامه…</button><button type="button" id="delAllC" class="danger">' + icon('trash', { size: 16 }) + ' حذف کلاس‌های خالی…</button></div></details>');
   $('#delAllT').onclick = () => deleteAll('teachers', 'معلمان', () => staff(el), 'برنامهٔ کلاسی آن‌ها هم از معلم جدا می‌شود.');
   $('#delAllS').onclick = () => deleteAll('schedule', 'جلسات برنامهٔ هفتگی', () => staff(el));
   $('#delAllC').onclick = () => deleteAll('classes', 'کلاس‌های خالی', () => staff(el), '(فقط کلاس‌هایی که دانش‌آموز و جلسه ندارند)');
@@ -456,7 +466,7 @@ async function fees(el) {
   }));
   on(el, 'click', '[data-cls]', async (e, b) => {
     const list = await api(`/api/manager/fees/class/${b.dataset.cls}`);
-    modal({ title: `کلاس ${b.dataset.name}`, body: `<div class="list">${list.map((s) => `<div class="list-item" data-row="${s.id}">${nameAvatar(s.full_name, 'sm')}<span class="grow">${esc(s.full_name)}</span><span class="badge ${PAY[s.st][1]}" data-badge>${PAY[s.st][0]}</span>${s.st === 'paid' ? '' : `<button class="btn sm soft" data-mp="${s.id}">ثبت پرداخت</button>`}</div>`).join('')}</div>`,
+    modal({ title: `کلاس ${esc(b.dataset.name)}`, body: `<div class="list">${list.map((s) => `<div class="list-item" data-row="${s.id}">${nameAvatar(s.full_name, 'sm')}<span class="grow">${esc(s.full_name)}</span><span class="badge ${PAY[s.st][1]}" data-badge>${PAY[s.st][0]}</span>${s.st === 'paid' ? '' : `<button class="btn sm soft" data-mp="${s.id}">ثبت پرداخت</button>`}</div>`).join('')}</div>`,
       onOpen: (m) => on(m, 'click', '[data-mp]', (ev, bt) => busy(bt, async () => { await post('/api/manager/students/fee-paid', { ids: [Number(bt.dataset.mp)], paid: true }); const row = bt.closest('[data-row]'); const bd = $('[data-badge]', row); bd.className = 'badge green'; bd.textContent = PAY.paid[0]; bt.remove(); toast('پرداخت ثبت شد', 'ok'); })) });
   });
   $('#applyAll', el).onclick = () => { const v = en($('#allAmt', el).value).replace(/\D/g, ''); if (!v) { toast('مبلغ را وارد کنید'); return; } $$('[data-amt]', el).forEach((i) => { i.value = v; }); toast('در همهٔ پایه‌ها نوشته شد؛ «ذخیره تنظیمات» را بزنید', 'ok'); };
@@ -472,10 +482,10 @@ async function fees(el) {
 // ================= اطلاعیه‌ها =================
 async function announcements(el) {
   const md = await meta();
-  setHead('اطلاعیه‌رسانی', 'ارسال به کل کانون، پایه یا کلاس‌های مشخص + گزارش دیده‌شدن', '<button class="btn sm" id="newAnn"> اطلاعیه جدید</button> <button class="btn ghost sm" id="delAllAnn" style="color:var(--red)">حذف همه</button>');
+  setHead('اطلاعیه‌رسانی', 'ارسال به کل کانون، پایه یا کلاس‌های مشخص + گزارش دیده‌شدن', '<button class="btn sm" id="newAnn"> اطلاعیه جدید</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllAnn" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ اطلاعیه‌ها…</button></div></details>');
   $('#delAllAnn').onclick = () => deleteAll('announcements', 'اطلاعیه‌ها', () => announcements(el));
   const list = await api('/api/manager/announcements');
-  const target = (a) => (a.target_type === 'all' ? ' کل کانون' : a.target_type === 'grade' ? `${icon('graduation', { size: 16 })} پایه ${a.target_value.map(gradeName).join('، ')}` : `${icon('logout', { size: 16 })} کلاس ${a.target_value.map((id) => { const c = md.classes.find((x) => x.id === id); return c ? `${gradeName(c.grade)} ${c.name}` : ''; }).join('، ')}`);
+  const target = (a) => (a.target_type === 'all' ? ' کل کانون' : a.target_type === 'grade' ? `${icon('graduation', { size: 16 })} پایه ${a.target_value.map(gradeName).join('، ')}` : `${icon('logout', { size: 16 })} کلاس ${a.target_value.map((id) => { const c = md.classes.find((x) => x.id === id); return c ? `${gradeName(c.grade)} ${esc(c.name)}` : ''; }).join('، ')}`);
   el.innerHTML = `<div class="stack">${list.map((a) => `<div class="card"><div class="row" style="align-items:flex-start"><span class="ib lg">${icon('megaphone', { size: 22 })}</span><div class="grow"><b>${esc(a.title)}</b><div class="tiny muted">${jdate(a.created_at)} • ${target(a)}</div><p class="small" style="margin:6px 0 0">${esc(a.body)}</p></div></div>
     <div class="row" style="margin-top:12px"><div class="grow"><div class="row between small"><span>${icon('eye', { size: 16 })} دیده‌شده: <b>${fa(a.seen)}</b> از ${fa(a.audience)} نفر</span><b>${pct(a.audience ? (a.seen / a.audience) * 100 : 0)}</b></div>${progress(a.audience ? (a.seen / a.audience) * 100 : 0, 'green')}</div>
     <button class="btn soft sm" data-rep="${a.id}">گزارش دیده‌شدن</button><button class="icon-btn" data-del="${a.id}" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></div>`).join('') || `<div class="card">${empty('inbox', 'اطلاعیه‌ای ارسال نشده')}</div>`}</div>`;
@@ -510,7 +520,7 @@ async function announcements(el) {
 // ================= حسابداری =================
 async function accounting(el, _p, me) {
   let period = 'month', type = '', from = addDays(me.today, -30), to = me.today;
-  setHead('حسابداری', 'درآمد، هزینه، مانده صندوق و دفتر کل', '<button class="btn sm" id="addExp"> ثبت سند هزینه</button> <button class="btn soft sm" id="addInc"> ثبت درآمد</button> <button class="btn ghost sm" id="delAllTx" style="color:var(--red)">حذف اسناد دستی</button>');
+  setHead('حسابداری', 'درآمد، هزینه، مانده صندوق و دفتر کل', '<button class="btn sm" id="addExp"> ثبت سند هزینه</button> <button class="btn soft sm" id="addInc"> ثبت درآمد</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllTx" class="danger">' + icon('trash', { size: 16 }) + ' حذف اسناد دستی…</button></div></details>');
   $('#delAllTx').onclick = () => deleteAll('transactions', 'اسناد دستی (هزینه/درآمد ثبت‌شده)', () => accounting(el, _p, me), 'اسناد مربوط به پرداخت حق عضویت و اصلاحیه‌ها حذف نمی‌شوند.');
   const ranges = { day: () => [me.today, me.today], week: () => [addDays(me.today, -6), me.today], month: () => [addDays(me.today, -29), me.today] };
   const load = async () => {
@@ -648,7 +658,7 @@ async function shopAdmin(el, _p, me) {
 
 // حساب‌های مستقل مشاور؛ تنها مدیر کانون به ساخت و ویرایش دسترسی دارد.
 async function counselors(el, params, me) {
-  setHead('مدیریت مشاوران', 'ساخت حساب مشاور تحصیلی برای دانش‌آموزان کانون', '<button class="btn sm" id="newCounselor">مشاور جدید</button> <button class="btn ghost sm" id="delAllCo" style="color:var(--red)">حذف همه</button>');
+  setHead('مدیریت مشاوران', 'ساخت حساب مشاور تحصیلی برای دانش‌آموزان کانون', '<button class="btn sm" id="newCounselor">مشاور جدید</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllCo" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ مشاوران…</button></div></details>');
   $('#delAllCo').onclick = () => deleteAll('counselors', 'مشاوران', () => counselors(el, params, me));
   const data = await api('/api/manager/counselors');
   const list = Array.isArray(data) ? data : data.counselors;

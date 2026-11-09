@@ -49,6 +49,7 @@ export function managerShellHtml(me, nav, bottom) {
   const concept = getConcept();
   return `
     ${me.impersonator ? `<div class="imp-bar" role="status">${icon('eye', { size: 18 })} در حال مشاهده پنل «${esc(me.user.full_name)}» <button class="btn sm ghost" id="stopImp">بازگشت</button></div>` : ''}
+    <a class="sr-only" href="#view" onclick="event.preventDefault();document.getElementById('view').focus()">پرش به محتوا</a>
     <div class="app theme-admin">
       <aside class="sidebar no-print" id="sidebar">
         <a class="ad-brand" href="#/home" aria-label="داشبورد"><span class="ad-logo">${logoHtml(c?.logo || '/img/logo-ashtiani.png')}</span><span class="ad-brand-t"><b>${esc(c?.name || 'کانون آشتیانی')}</b><small>پنل مدیریت</small></span></a>
@@ -81,7 +82,12 @@ export function prepareManager(me) {
   document.body.dataset.concept = getConcept();
   if (!wired) {
     wired = true;
-    document.addEventListener('click', (e) => { const b = e.target.closest?.('[data-concept-set]'); if (b) setConcept(b.dataset.conceptSet); });
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest?.('[data-concept-set]'); if (b) setConcept(b.dataset.conceptSet);
+      // منوی کشویی سربرگ: با کلیک بیرون یا انتخاب یک گزینه بسته شود
+      document.querySelectorAll('.ad-dd[open]').forEach((d) => { if (!d.contains(e.target) || e.target.closest('.ad-dd-menu button')) d.removeAttribute('open'); });
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelectorAll('.ad-dd[open]').forEach((d) => d.removeAttribute('open')); });
     document.addEventListener('submit', (e) => {
       if (e.target.id !== 'adSearch') return;
       e.preventDefault();

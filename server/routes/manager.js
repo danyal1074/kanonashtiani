@@ -67,7 +67,7 @@ export default function register(r) {
     const cid = ctx.user.center_id, grade = GRADES.includes(Number(ctx.query.grade)) ? Number(ctx.query.grade) : null;
     const days = [7, 14, 30].includes(Number(ctx.query.days)) ? Number(ctx.query.days) : 14;
     const key = `${cid}|${grade}|${days}`, hit = analyticsCache.get(key);
-    if (hit && Date.now() - hit.t < 15000) return hit.v;
+    if (hit && Date.now() - hit.t < 5000) return hit.v;
     const today = ymd(), gradeSql = grade ? ' AND s.grade=?' : '', gp = grade ? [grade] : [];
     const nowK = jm(today);
 
@@ -77,15 +77,21 @@ export default function register(r) {
     const feeBy = Object.fromEntries(all('SELECT grade, amount FROM fee_settings WHERE center_id=?', cid).map((f) => [f.grade, f.amount]));
     const studs = all(`SELECT u.id, s.grade, s.class_id, u.created_at, ${paymentStateSql()} st,
         COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL), 0) paid
-      FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1${gradeSql}`, cid, ...gp);
-    const sums = { due: 0, collected: 0, paid: 0, pending: 0, unpaid: 0 };
-    const byGradeMap = new Map(GRADES.map((g) => [g, { grade: g, paid: 0, pending: 0, unpaid: 0, due: 0, collected: 0 }]));
-    for (const s of studs) {
-      const fee = feeBy[s.grade] || 0, due = fee ? fee + sysFee : 0, got = Math.min(s.paid, due || s.paid);
-      sums.due += due; sums.collected += due ? got : 0; sums[s.st]++;
-      const g = byGradeMap.get(s.grade); g[s.st]++; g.due += due; g.collected += due ? got : 0;
-    }
-    const collection = { ...sums, students: studs.length, pct_amount: sums.due ? Math.round((sums.collected / sums.due) * 1000) / 10 : null, pct_students: studs.length ? Math.round((sums.paid / studs.length) * 1000) / 10 : null };
+      FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1`, cid);
+    const studsAll = studs, studsG = grade ? studs.filter((x) => x.grade === grade) : studs;
+    const summarize = (list) => {
+      const sums = { due: 0, collected: 0, paid: 0, pending: 0, unpaid: 0 };
+      const map = new Map(GRADES.map((g) => [g, { grade: g, paid: 0, pending: 0, unpaid: 0, due: 0, collected: 0 }]));
+      for (const s of list) {
+        const fee = feeBy[s.grade] || 0, due = fee ? fee + sysFee : 0, got = Math.min(s.paid, due || s.paid);
+        sums.due += due; sums.collected += due ? got : 0; sums[s.st]++;
+        const g = map.get(s.grade); g[s.st]++; g.due += due; g.collected += due ? got : 0;
+      }
+      return { ...sums, students: list.length, pct_amount: sums.due ? Math.round((sums.collected / sums.due) * 1000) / 10 : null, pct_students: list.length ? Math.round((sums.paid / list.length) * 1000) / 10 : null, map };
+    };
+    const kpiSum = summarize(studsAll), gSum = summarize(studsG);
+    const byGradeMap = gSum.map;
+    const collection = (({ map, ...rest }) => rest)(gSum);
 
     // مالی: شش ماه شمسی اخیر
     const fin = [];
@@ -108,7 +114,7 @@ export default function register(r) {
       .map((c) => ({ grade: c.grade, name: c.name, absent: c.absent, total: c.present + c.absent + c.excused, rate: Math.round((c.present / (c.present + c.absent + c.excused)) * 1000) / 10 }));
 
     // رشد دانش‌آموزان: ثبت‌نام جدید هر ماه شمسی و جمع تجمعی
-    const created = studs.map((s) => jm(s.created_at || today));
+    const created = studsG.map((s) => jm(s.created_at || today));
     const minK = Math.min(nowK, ...(created.length ? created : [nowK])), startK = Math.max(minK, nowK - 11);
     let cum = created.filter((k) => k < startK).length;
     const growth = [];
@@ -128,10 +134,11 @@ export default function register(r) {
     const pendingReceipts = get(`SELECT COUNT(*) n FROM payments p JOIN users u ON u.id=p.student_id WHERE u.center_id=? AND p.status='pending'`, cid).n;
     const absentToday = get(`SELECT COUNT(*) n FROM attendance a JOIN classes c ON c.id=a.class_id WHERE c.center_id=? AND a.date=? AND a.status='absent'`, cid, today).n;
     const unsentSms = get(`SELECT COUNT(*) n FROM attendance a JOIN classes c ON c.id=a.class_id WHERE c.center_id=? AND a.date=? AND a.status='absent' AND a.sms_sent=0`, cid, today).n;
-    const lockedNow = studs.filter((s) => s.st !== 'paid' && feeBy[s.grade] && (get('SELECT lock_date FROM fee_settings WHERE center_id=? AND grade=?', cid, s.grade)?.lock_date || '9999') < today).length;
+    const lockBy = Object.fromEntries(all('SELECT grade, lock_date FROM fee_settings WHERE center_id=?', cid).map((f) => [f.grade, f.lock_date || '9999']));
+    const lockedNow = studsAll.filter((s) => s.st !== 'paid' && feeBy[s.grade] && (lockBy[s.grade] || '9999') < today).length;
     const alerts = [];
     if (pendingReceipts) alerts.push({ tone: 'warn', text: `${pendingReceipts} رسید در انتظار بررسی است`, href: '#/fees' });
-    if (unsentSms) alerts.push({ tone: 'warn', text: `پیامک غیبت امروز برای ${unsentSms} دانش‌آموز ارسال نشده`, href: '#/home' });
+    if (unsentSms) alerts.push({ tone: 'warn', text: `پیامک غیبت امروز برای ${unsentSms} دانش‌آموز ارسال نشده`, href: '#absent' });
     if (lockedNow) alerts.push({ tone: 'danger', text: `${lockedNow} دانش‌آموز به‌دلیل پایان مهلت پرداخت قفل هستند`, href: '#/fees' });
     const classesNoStudents = get(`SELECT COUNT(*) n FROM classes c WHERE c.center_id=? AND NOT EXISTS (SELECT 1 FROM students s WHERE s.class_id=c.id)`, cid).n;
     if (classesNoStudents) alerts.push({ tone: 'info', text: `${classesNoStudents} کلاس هنوز دانش‌آموز ندارد`, href: '#/staff' });
@@ -144,8 +151,8 @@ export default function register(r) {
     const out = {
       generated: today, grade, days,
       kpi: {
-        students: studs.length, teachers: get(`SELECT COUNT(*) n FROM users WHERE center_id=? AND role='teacher' AND active=1`, cid).n,
-        classes: get(`SELECT COUNT(*) n FROM classes WHERE center_id=?`, cid).n, collection_pct: collection.pct_amount, pending_receipts: pendingReceipts, absent_today: absentToday,
+        students: studsAll.length, paid_students: kpiSum.paid, teachers: get(`SELECT COUNT(*) n FROM users WHERE center_id=? AND role='teacher' AND active=1`, cid).n,
+        classes: get(`SELECT COUNT(*) n FROM classes WHERE center_id=?`, cid).n, collection_pct: kpiSum.pct_amount, collection_pct_students: kpiSum.pct_students, pending_receipts: pendingReceipts, absent_today: absentToday,
       },
       collection, byGrade: [...byGradeMap.values()].filter((g) => !grade || g.grade === grade),
       finance: { months: fin, totals: { income: totals.inc, expense: totals.exp, balance: totals.inc - totals.exp } },
@@ -233,7 +240,7 @@ export default function register(r) {
     if (['paid', 'pending', 'unpaid'].includes(q.pay)) { where.push(`${paymentStateSql()}=?`); p.push(q.pay); }
     const w = where.join(' AND ');
     const total = get(`SELECT COUNT(*) n FROM users u JOIN students s ON s.user_id=u.id WHERE ${w}`, ...p).n;
-    const limit = Math.min(100, Number(q.limit) || 30), offset = Math.max(0, Number(q.offset) || 0);
+    const limit = Math.min(100, Math.max(1, Number(q.limit) || 30)), offset = Math.max(0, Number(q.offset) || 0);
     const rows = all(`SELECT u.id, u.full_name, u.national_code, u.gender, s.school, s.grade, s.class_id, c.name class_name, s.birth_date, s.parent_phone, s.phone2, s.father_name, s.mother_name, s.address, s.avatar,
       ${paymentStateSql()} pay FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE ${w} ORDER BY s.grade, c.name, u.full_name LIMIT ? OFFSET ?`, ...p, limit, offset);
     return { total, rows };

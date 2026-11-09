@@ -36,22 +36,22 @@ export async function adminHome(el, _p, me) {
     const kp = (ico, label, val, href, sub, tone = '') => `<a class="ad-kpi ${tone}" href="${href}"><div class="kt">${icon(ico, { size: 17 })}${label}</div><div class="kv">${val}</div><div class="ks">${sub}</div></a>`;
     body.innerHTML = `
       <section class="ad-kpis" aria-label="شاخص‌های کلیدی">
-        ${kp('graduation', 'دانش‌آموزان فعال', fa(k.students), '#/students', `${fa(c.paid)} نفر پرداخت‌کننده`)}
+        ${kp('graduation', 'دانش‌آموزان فعال', fa(k.students), '#/students', `${fa(c.paid)} نفر پرداخت‌کننده (کل کانون)`)}
         ${kp('school', 'معلمان فعال', fa(k.teachers), '#/staff', 'مدیریت معلمان')}
         ${kp('layers', 'کلاس‌ها', fa(k.classes), '#/staff', 'مدیریت کلاس‌ها')}
         ${kp('banknote', 'وصول حق عضویت', k.collection_pct == null ? '—' : `${fa(k.collection_pct)}<small>٪</small>`, '#/fees', c.pct_students == null ? '' : `${fa(c.pct_students)}٪ دانش‌آموزان پرداخت کرده‌اند`)}
         ${kp('receipt', 'رسیدهای در انتظار', fa(k.pending_receipts), '#/fees', k.pending_receipts ? 'نیازمند بررسی' : 'همه بررسی شده', k.pending_receipts ? 'warn' : '')}
         ${kp('user-x', 'غیبت‌های امروز', fa(k.absent_today), '#absent', k.absent_today ? 'پیامک به والدین' : 'بدون غیبت', k.absent_today ? 'bad' : '')}
       </section>
-      <div class="ad-filters" style="margin:14px 0 10px"><div class="grp"><b style="font-size:13px">نمودارها</b>${sel}${rng}</div><span class="small muted">${d.grade ? `فقط پایهٔ ${gradeName(d.grade)}` : 'همهٔ پایه‌ها'}</span></div>
+      <div class="ad-filters" style="margin:14px 0 10px"><div class="grp"><b style="font-size:13px">نمودارها</b>${sel}${rng}</div><span class="small muted">${d.grade ? `نمودارها فقط پایهٔ ${gradeName(d.grade)}؛ شاخص‌های بالا کل کانون` : 'همهٔ پایه‌ها'}</span></div>
       <div class="ad-grid">
-        ${card('ad-col-8', 'وضعیت مالی', 'درآمد، هزینه و مانده در شش ماه اخیر (تومان)', `<div id="chFin" class="ch"></div><div class="ad-sum"><div><small>مجموع درآمد</small><b>${money(d.finance.totals.income)}</b></div><div><small>مجموع هزینه</small><b>${money(d.finance.totals.expense)}</b></div><div><small>مانده صندوق</small><b>${money(d.finance.totals.balance)}</b></div></div>`)}
+        ${card('ad-col-8', 'وضعیت مالی', 'درآمد، هزینه و مانده در شش ماه اخیر (تومان)', `<div id="chFin" class="ch"></div><div class="ad-sum"><div><small>درآمد کل (از ابتدا)</small><b>${money(d.finance.totals.income)}</b></div><div><small>هزینهٔ کل (از ابتدا)</small><b>${money(d.finance.totals.expense)}</b></div><div><small>مانده صندوق (اکنون)</small><b>${money(d.finance.totals.balance)}</b></div></div>`)}
         ${card('ad-col-4', 'وصول حق عضویت', 'درصد وصول مبلغی = دریافتی ÷ قابل وصول', `<div id="chColl" class="ch"></div><div class="ad-sum"><div><small>دریافت‌شده</small><b>${money(c.collected)}</b></div><div><small>قابل وصول</small><b>${money(c.due)}</b></div></div>`)}
         ${card('ad-col-6', 'پرداخت‌ها به تفکیک پایه', 'تعداد دانش‌آموزان در هر وضعیت پرداخت', `<div id="chPay" class="ch"></div><div class="ad-sum"><div><small>پرداخت‌شده</small><b>${fa(g0.paid)}</b></div><div><small>در انتظار</small><b>${fa(g0.pending)}</b></div><div><small>پرداخت‌نشده</small><b>${fa(g0.unpaid)}</b></div></div>`)}
-        ${card('ad-col-6', 'روند حضور', `درصد حضور در ${fa(d.days)} روز اخیر`, '<div id="chAtt" class="ch"></div><div class="ad-sec" style="margin-top:6px">کمترین حضور بین کلاس‌ها (۳۰ روز)</div><div id="chAttCls"></div>')}
+        ${card('ad-col-6', 'روند حضور', `درصد حضور در ${fa(d.days)} روز اخیر · «با اطلاع» جزو حاضران نیست · محور از ۵۰٪ شروع می‌شود`, '<div id="chAtt" class="ch"></div><div class="ad-sec" style="margin-top:6px">کمترین حضور بین کلاس‌ها (۳۰ روز)</div><div id="chAttCls"></div>')}
         ${card('ad-col-4', 'رشد دانش‌آموزان', 'ثبت‌نام جدید و جمع دانش‌آموزان فعال', '<div id="chGrow" class="ch"></div>')}
         ${card('ad-col-4', 'عملکرد آموزشی', `میانگین درصد آزمون‌ها (${fa(d.academic.n)} نتیجه)`, '<div id="chAcad"></div><div class="ad-sec" style="margin:8px 0 4px">توزیع نتایج</div><div id="chDist"></div>')}
-        ${card('ad-col-4', 'هشدارهای مهم', '', d.alerts.length ? `<ul class="ad-alerts">${d.alerts.map((a) => `<li><span class="tag ${a.tone === 'warn' ? '' : a.tone}"></span><a href="${a.href}">${esc(a.text)}</a>${icon('chevron-left', { size: 15 })}</li>`).join('')}</ul>` : empty('check-circle', 'هشدار فعالی وجود ندارد'))}
+        ${card('ad-col-4', 'هشدارهای مهم', '', d.alerts.length ? `<ul class="ad-alerts">${d.alerts.map((a) => `<li><span class="tag ${a.tone === 'warn' ? '' : a.tone}"></span><a href="${a.href}">${esc(fa(a.text))}</a>${icon('chevron-left', { size: 15 })}</li>`).join('')}</ul>` : empty('check-circle', 'هشدار فعالی وجود ندارد'))}
         ${card('ad-col-6', 'غایبان امروز', 'پیامک به والدین با یک کلیک', absentHtml(dash), dash?.absents?.some((a) => a.status === 'absent' && !a.sms_sent) ? `<button class="btn sm soft" id="adSmsAll">ارسال به همه</button>` : '')}
         ${card('ad-col-6', 'فعالیت‌های اخیر', '', d.recent.length ? `<ul class="ad-feed">${d.recent.map((r) => `<li><span class="fi">${icon(ICON_OF[r.kind] || 'info', { size: 16 })}</span><a>${esc(r.text)}</a><small>${timeAgo(r.t)}</small></li>`).join('')}</ul>` : empty('inbox', 'هنوز فعالیتی ثبت نشده'))}
       </div>`;
@@ -80,8 +80,8 @@ export async function adminHome(el, _p, me) {
     hbars($('#chAttCls', body), { rows: [...d.attendance.byClass].sort((a, b) => a.rate - b.rate).slice(0, 5).map((x) => ({ label: `${gradeName(x.grade)} ${x.name}`, value: x.rate, color: x.rate < 80 ? 'var(--c4)' : x.rate < 90 ? 'var(--c3)' : 'var(--c5)' })), emptyText: 'داده‌ای برای مقایسه نیست' });
     lineChart($('#chGrow', body), { labels: d.growth.map((x) => x.label), series: [{ name: 'دانش‌آموزان فعال', color: 'var(--c1)', values: d.growth.map((x) => x.total) }], height: 250, fmt: (v) => fa(Math.round(v)), label: 'رشد دانش‌آموزان', emptyText: 'داده کافی نیست' });
     hbars($('#chAcad', body), { rows: d.academic.byGrade.map((x) => ({ label: `پایه ${gradeName(x.grade)}`, value: x.avg })), emptyText: 'هنوز نتیجهٔ آزمونی ثبت نشده است — داده کافی نیست' });
-    const tot = d.academic.distribution.reduce((s, x) => s + x.n, 0) || 1;
-    hbars($('#chDist', body), { rows: d.academic.distribution.map((x, i) => ({ label: x.label, value: (x.n / tot) * 100, color: ['var(--c4)', 'var(--c3)', 'var(--c2)', 'var(--c5)'][i] })), emptyText: '' });
+    const tot = d.academic.distribution.reduce((s, x) => s + x.n, 0);
+    hbars($('#chDist', body), { rows: tot ? d.academic.distribution.map((x, i) => ({ label: x.label, value: (x.n / tot) * 100, color: ['var(--c4)', 'var(--c3)', 'var(--c2)', 'var(--c5)'][i] })) : [], emptyText: 'توزیعی برای نمایش نیست' });
   }
 
   on(el, 'click', '[data-sms]', (e, b) => busy(b, async () => {

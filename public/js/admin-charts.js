@@ -10,7 +10,7 @@ export const palette = PAL;
 export const compact = (v) => {
   const a = Math.abs(v);
   if (a >= 1e9) return `${fa((v / 1e9).toFixed(1).replace(/\.0$/, ''))} میلیارد`;
-  if (a >= 1e6) return `${fa(Math.round(v / 1e6))} م`;
+  if (a >= 1e6) { const m = v / 1e6; return `${fa(a < 1e7 ? String(Math.round(m * 10) / 10).replace(/\.0$/, '') : Math.round(m))} م`; }
   if (a >= 1e3) return `${fa(Math.round(v / 1e3))} هزار`;
   return fa(Math.round(v));
 };
@@ -38,7 +38,9 @@ function showTip(html, x, y) {
   t.style.top = `${Math.max(8, y - h - 12)}px`;
 }
 const hideTip = () => { if (tip) tip.hidden = true; };
+const leave = (e) => { if (e.pointerType === 'mouse') hideTip(); };
 document.addEventListener('scroll', hideTip, { passive: true, capture: true });
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest?.('.ch')) hideTip(); }, true);
 
 function mount(host, draw, { empty, emptyText = 'داده‌ای برای نمایش نیست', height = 240, label = '' } = {}) {
   host.classList.add('ch');
@@ -59,6 +61,13 @@ function mount(host, draw, { empty, emptyText = 'داده‌ای برای نما
   host.__ro.observe(host);
 }
 
+// جدول متنی مخفی برای صفحه‌خوان (جایگزین دیداری نمودار)
+function srTable(host, caption, head, rows) {
+  const t = document.createElement('table');
+  t.className = 'sr-only';
+  t.innerHTML = `<caption>${esc(caption)}</caption><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(String(c))}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  host.append(t);
+}
 function legend(host, items) {
   const lg = document.createElement('div');
   lg.className = 'ch-legend';
@@ -67,7 +76,7 @@ function legend(host, items) {
 }
 
 // محورهای مشترک: خطوط افقی ظریف، برچسب عمودی سمت راست (آغاز خط در فارسی)، برچسب افقی از راست به چپ (قدیم → جدید)
-function axes(svg, w, h, { labels, max, min = 0, fmt = compact, ticks = 4, padL = 8, padR = 46, padT = 12, padB = 30 }) {
+function axes(svg, w, h, { labels, max, min = 0, fmt = compact, ticks = 4, padL = 8, padR = 58, padT = 12, padB = 30 }) {
   const iw = w - padL - padR, ih = h - padT - padB, n = labels.length;
   for (let i = 0; i <= ticks; i++) {
     const y = padT + ih - (ih * i) / ticks;
@@ -84,20 +93,21 @@ function axes(svg, w, h, { labels, max, min = 0, fmt = compact, ticks = 4, padL 
 export function comboChart(host, { labels, bars = [], line = null, fmt = compact, tipFmt = fmt, height = 260, label = '', emptyText }) {
   const all = [...bars.flatMap((b) => b.values), ...(line ? line.values : [])];
   mount(host, (svg, w, h) => {
-    const max = nice(Math.max(...all, 1)), min = Math.min(0, ...(line ? line.values : [0]));
-    const ax = axes(svg, w, h, { labels, max, fmt });
+    const max = nice(Math.max(...all, 1)), lo = Math.min(0, ...(line ? line.values : [0])), min = lo < 0 ? -nice(-lo) : 0;
+    const ax = axes(svg, w, h, { labels, max, min, fmt });
+    const zero = ax.y(0);
     const groupW = Math.min(46, ax.step * 0.72), bw = groupW / bars.length;
     const hit = [];
     labels.forEach((_, i) => {
       bars.forEach((b, j) => {
-        const v = b.values[i] || 0, bh = Math.max(v ? 2 : 0, (ax.ih * v) / max);
-        const r = el('rect', { x: ax.x(i) - groupW / 2 + j * bw + 1, y: ax.padT + ax.ih - bh, width: Math.max(2, bw - 2), height: bh, rx: Math.min(4, bw / 3), class: 'ch-bar', style: `fill:${b.color};animation-delay:${i * 40 + j * 20}ms` }, svg);
-        r.style.transformOrigin = `0 ${ax.padT + ax.ih}px`;
+        const v = b.values[i] || 0, bh = Math.max(v ? 2 : 0, ((ax.ih * v) / (max - min)));
+        const r = el('rect', { x: ax.x(i) - groupW / 2 + j * bw + 1, y: zero - bh, width: Math.max(2, bw - 2), height: bh, rx: Math.min(4, bw / 3), class: 'ch-bar', style: `fill:${b.color};animation-delay:${i * 40 + j * 20}ms` }, svg);
+        r.style.transformOrigin = `0 ${zero}px`;
       });
       hit.push(el('rect', { x: ax.x(i) - ax.step / 2, y: ax.padT, width: ax.step, height: ax.ih, class: 'ch-hit' }, svg));
     });
     if (line) {
-      const pts = line.values.map((v, i) => [ax.x(i), ax.padT + ax.ih - (ax.ih * Math.max(v, 0)) / max]);
+      const pts = line.values.map((v, i) => [ax.x(i), ax.y(v)]);
       const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
       const p = el('path', { d, class: 'ch-line', style: `stroke:${line.color}` }, svg);
       const len = p.getTotalLength?.() || 600; p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
@@ -107,9 +117,9 @@ export function comboChart(host, { labels, bars = [], line = null, fmt = compact
       const rows = [...bars.map((b) => `<div><i style="background:${b.color}"></i>${esc(b.name)}<b>${tipFmt(b.values[i] || 0)}</b></div>`), ...(line ? [`<div><i style="background:${line.color}"></i>${esc(line.name)}<b>${tipFmt(line.values[i] || 0)}</b></div>`] : [])].join('');
       showTip(`<strong>${esc(labels[i])}</strong>${rows}`, e.clientX, e.clientY);
     };
-    hit.forEach((r, i) => { r.addEventListener('pointermove', (e) => move(e, i)); r.addEventListener('pointerdown', (e) => move(e, i)); r.addEventListener('pointerleave', hideTip); });
+    hit.forEach((r, i) => { r.addEventListener('pointermove', (e) => move(e, i)); r.addEventListener('pointerdown', (e) => move(e, i)); r.addEventListener('pointerleave', leave); });
   }, { empty: !all.some(Boolean), height, label, emptyText });
-  if (all.some(Boolean)) legend(host, [...bars.map((b) => ({ name: b.name, color: b.color })), ...(line ? [{ name: line.name, color: line.color }] : [])]);
+  if (all.some(Boolean)) { legend(host, [...bars.map((b) => ({ name: b.name, color: b.color })), ...(line ? [{ name: line.name, color: line.color }] : [])]); srTable(host, label || 'نمودار', ['دوره', ...bars.map((b) => b.name), ...(line ? [line.name] : [])], labels.map((l, i) => [l, ...bars.map((b) => tipFmt(b.values[i] || 0)), ...(line ? [tipFmt(line.values[i] || 0)] : [])])); }
 }
 
 // ستونی انباشته (پرداخت‌شده/در انتظار/پرداخت‌نشده به‌تفکیک پایه)
@@ -131,10 +141,10 @@ export function stackedBars(host, { labels, series, fmt = (v) => fa(Math.round(v
     });
     hit.forEach((r, i) => {
       const f = (e) => showTip(`<strong>${esc(labels[i])}</strong>${series.map((s) => `<div><i style="background:${s.color}"></i>${esc(s.name)}<b>${fmt(s.values[i] || 0)}</b></div>`).join('')}<div class="sum">جمع<b>${fmt(totals[i])}</b></div>`, e.clientX, e.clientY);
-      r.addEventListener('pointermove', f); r.addEventListener('pointerdown', f); r.addEventListener('pointerleave', hideTip);
+      r.addEventListener('pointermove', f); r.addEventListener('pointerdown', f); r.addEventListener('pointerleave', leave);
     });
   }, { empty: !totals.some(Boolean), height, label, emptyText });
-  if (totals.some(Boolean)) legend(host, series.map((s) => ({ name: s.name, color: s.color })));
+  if (totals.some(Boolean)) { legend(host, series.map((s) => ({ name: s.name, color: s.color }))); srTable(host, label || 'نمودار', ['دسته', ...series.map((x) => x.name)], labels.map((l, i) => [l, ...series.map((x) => fmt(x.values[i] || 0))])); }
 }
 
 // خطی (با ناحیهٔ ملایم): روند حضور، رشد، میانگین نمره
@@ -156,10 +166,10 @@ export function lineChart(host, { labels, series, fmt = (v) => fa(Math.round(v *
     labels.forEach((_, i) => hit.push(el('rect', { x: ax.x(i) - ax.step / 2, y: ax.padT, width: ax.step, height: ax.ih, class: 'ch-hit' }, svg)));
     hit.forEach((r, i) => {
       const f = (e) => showTip(`<strong>${esc(labels[i])}</strong>${series.map((s) => `<div><i style="background:${s.color}"></i>${esc(s.name)}<b>${s.values[i] == null ? '—' : fmt(s.values[i])}</b></div>`).join('')}`, e.clientX, e.clientY);
-      r.addEventListener('pointermove', f); r.addEventListener('pointerdown', f); r.addEventListener('pointerleave', hideTip);
+      r.addEventListener('pointermove', f); r.addEventListener('pointerdown', f); r.addEventListener('pointerleave', leave);
     });
   }, { empty: !all.length, height, label, emptyText });
-  if (all.length && series.length > 1) legend(host, series.map((s) => ({ name: s.name, color: s.color })));
+  if (all.length) { if (series.length > 1) legend(host, series.map((s) => ({ name: s.name, color: s.color }))); srTable(host, label || 'نمودار', ['دوره', ...series.map((x) => x.name)], labels.map((l, i) => [l, ...series.map((x) => (x.values[i] == null ? '—' : fmt(x.values[i])))])); }
 }
 
 // حلقه (نسبت): وصول، حضور
@@ -176,13 +186,14 @@ export function donut(host, { segments, center, size = 168, label = '', emptyTex
     const c = el('circle', { cx: 50, cy: 50, r: R, class: 'ch-ring', style: `stroke:${s.color};stroke-dasharray:${Math.max(0, len - 1.5)} ${C};stroke-dashoffset:${-off};` }, svg);
     c.setAttribute('transform', 'rotate(-90 50 50)');
     const f = (e) => showTip(`<strong>${esc(s.name)}</strong><div>${fa(s.value)} (${fa(Math.round((s.value / total) * 100))}٪)</div>`, e.clientX, e.clientY);
-    c.addEventListener('pointermove', f); c.addEventListener('pointerdown', f); c.addEventListener('pointerleave', hideTip);
+    c.addEventListener('pointermove', f); c.addEventListener('pointerdown', f); c.addEventListener('pointerleave', leave);
     off += len;
   });
   const wrap = document.createElement('div'); wrap.className = 'ch-ring-wrap'; wrap.append(svg);
   if (center) wrap.insertAdjacentHTML('beforeend', `<div class="ch-center"><b>${center.value}</b><small>${esc(center.label)}</small></div>`);
   host.append(wrap);
   legend(host, segments.map((s) => ({ name: `${s.name} (${fa(s.value)})`, color: s.color })));
+  srTable(host, label || 'نمودار', ['وضعیت', 'تعداد'], segments.map((x) => [x.name, fa(x.value)]));
 }
 
 // نوار افقی ساده برای مقایسه (کلاس‌ها، پایه‌ها)
