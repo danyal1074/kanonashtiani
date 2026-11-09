@@ -1,7 +1,7 @@
 // پنل مدیر کانون
 import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, nameAvatar, progress, empty, jdate, jtime, jshort,
-  subjIcon, gradeName, dateField, readDate, fileToData, barChart, lineChart, donut, WEEKDAYS, addDays, formData, state, en, logoHtml, timeAgo, printOverlay, icon, hasIcon } from './core.js';
+  subjIcon, gradeName, dateField, readDate, fileToData, barChart, lineChart, donut, WEEKDAYS, addDays, formData, state, en, logoHtml, timeAgo, printOverlay, icon, hasIcon, JMONTHS } from './core.js';
 import { messagesView, accountView } from './common.js';
 import { studentDetailHtml } from './teacher.js';
 import { managerTimetable, KINDS, kindOf } from './timetable.js';
