@@ -7,6 +7,7 @@ import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normal
 import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
+import { syncStudentsLater } from '../classroom.js';
 import { sendSms, smsProvider } from '../sms.js';
 import { parseQuestions, examWithResults, performanceList, studentDetail } from './teacher.js';
 
@@ -162,6 +163,7 @@ export default function register(r) {
       run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar, profile_done) VALUES (?,?,?,?,?,?,?,?,?)', uid, d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, 'sprout', d.school && d.birth_date && d.address ? 1 : 0);
       return uid;
     });
+    syncStudentsLater([id]);
     return { ok: true, id, credentials: { student: `نام کاربری و رمز اولیه دانش‌آموز: کد ملی (${d.national_code})` } };
   });
   // ثبت‌نام گروهی از CSV؛ با dry_run فقط اعتبارسنجی و گزارش خطای هر سطر بدون ثبت
@@ -169,7 +171,7 @@ export default function register(r) {
     const csv = String(ctx.body.csv || ''), xlsx_b64 = String(ctx.body.xlsx_b64 || '');
     if (!csv.trim() && !xlsx_b64) fail(400, 'فایل خالی است');
     const dg = Number(ctx.body.default_grade), fg = Number(ctx.body.force_grade), defaults = { grade: GRADES.includes(dg) ? dg : null, forceGrade: GRADES.includes(fg) ? fg : null, lenient: !!ctx.body.lenient_nc, feeMonth: clampStr(ctx.body.fee_month, 20), gender: ctx.body.default_gender === 'f' ? 'f' : ctx.body.default_gender === 'm' ? 'm' : null };
-    try { return await importStudents(ctx.user.center_id, xlsx_b64 ? { xlsx_b64 } : csv, { dryRun: !!ctx.body.dry_run, defaults }); } catch (e) { fail(e.status || 400, e.message); }
+    try { const out = await importStudents(ctx.user.center_id, xlsx_b64 ? { xlsx_b64 } : csv, { dryRun: !!ctx.body.dry_run, defaults }); if (!ctx.body.dry_run) syncStudentsLater(null); return out; } catch (e) { fail(e.status || 400, e.message); }
   });
   r.put('/api/manager/students/:id', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);
@@ -178,6 +180,7 @@ export default function register(r) {
       run('UPDATE users SET full_name=?, national_code=?, gender=? WHERE id=?', d.full_name, d.national_code, d.gender, s.id);
       run('UPDATE students SET school=?, grade=?, class_id=?, birth_date=?, parent_phone=?, address=? WHERE user_id=?', d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, s.id);
     });
+    syncStudentsLater([s.id]);
     return { ok: true };
   });
   r.del('/api/manager/students/:id', M, (ctx) => {
@@ -225,6 +228,7 @@ export default function register(r) {
     if (!ids.length) fail(400, 'دانش‌آموزی انتخاب نشده است');
     let moved = 0;
     tx(() => { for (const id of ids) moved += run('UPDATE students SET class_id=?, grade=? WHERE user_id=?', c.id, c.grade, id).changes; });
+    syncStudentsLater(ids);
     return { ok: true, moved };
   });
   r.post('/api/manager/students/delete', M, (ctx) => {

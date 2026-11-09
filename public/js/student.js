@@ -32,6 +32,7 @@ import { api, post, put, esc, fa, hasIcon, AVATAR_ICONS, sgn, num, money, pct, $
 import { messagesView, announcementsView, passwordCard, bindPassword } from './common.js';
 import { gamesHub, mathRush, storyView } from './games.js';
 import { panelShop } from './shop.js';
+import { mountOnlineClasses } from './online-classes.js';
 import * as L from './legacy.js';
 
 export const nav = (me) => [
@@ -466,7 +467,8 @@ const baseRoutes = [
 ];
 
 export const routes = baseRoutes.map(r => ({ ...r, view: async (el, params, me) => {
-  if (isElementary(me) && elementary.views[r.path]) return elementary.views[r.path](el, params, me);
+  if (isElementary(me) && elementary.views[r.path]) { await elementary.views[r.path](el, params, me); if (r.path === '/classes') await mountOnlineClasses(el); return; }
   await r.view(el, params, me);
   if (isElementary(me)) elementary.decorateCore(el, r.path);
+  if (r.path === '/classes') await mountOnlineClasses(el);
 } }));

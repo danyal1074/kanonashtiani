@@ -6,6 +6,7 @@ import { all, get, run, tx } from '../db.js';
 import { fail, saveUpload, ymd, addDays, weekStart, faWeekday, nowIso, clampStr, parseBirthDate, normalizeIranianMobile } from '../util.js';
 import { totalPoints, levelOf, rankOf, studentRankings, addPoints, feeStatus, ensureLearningPath, saveExamResult, gradeExam } from '../logic.js';
 import { studentInfo, centerOf } from './common.js';
+import { classroomEnabled, listClasses, joinTicket, ClassroomError } from '../classroom.js';
 
 const S = { roles: ['student'] };
 
@@ -35,7 +36,33 @@ export function studentResults(sid) {
     FROM exam_results r JOIN exams e ON e.id=r.exam_id WHERE r.student_id=? ORDER BY r.created_at DESC`, sid);
 }
 
+// پیام فارسی مناسب برای خطاهای سامانهٔ کلاس آنلاین (جزئیات فنی فقط در لاگ سرور می‌ماند)
+function classroomFail(e) {
+  if (!(e instanceof ClassroomError)) throw e;
+  if (e.kind === 'http' && e.status === 409 && e.code === 'CLASS_NOT_LIVE') fail(409, 'این کلاس هنوز شروع نشده است؛ وقتی معلم کلاس را شروع کند می‌توانی وارد شوی');
+  if (e.kind === 'http' && e.status === 404) fail(404, 'این کلاس پیدا نشد یا برای تو تعریف نشده است');
+  console.warn('[classroom]', e.kind, e.status, e.code || '', e.message);
+  if (e.kind === 'not_configured') fail(503, 'کلاس آنلاین هنوز فعال نشده است');
+  fail(502, 'ارتباط با سامانهٔ کلاس آنلاین برقرار نشد؛ چند دقیقه بعد دوباره تلاش کن');
+}
+const ONLINE_URL_OK = (u) => { try { return /^https?:$/.test(new URL(u).protocol); } catch { return false; } };
+
 export default function register(r) {
+  // کلاس‌های آنلاین من: شناسهٔ دانش‌آموز فقط از نشست سرور گرفته می‌شود، نه از ورودی کلاینت
+  r.get('/api/student/online-classes', S, async (ctx) => {
+    if (!classroomEnabled()) return { enabled: false, classes: [] };
+    try { return { enabled: true, classes: await listClasses(ctx.user.id) }; } catch (e) { classroomFail(e); }
+  });
+  // «ورود به کلاس»: بلیت یک‌بارمصرف را هنگام کلیک می‌گیرد و نشانی ورود را برمی‌گرداند (مرورگر به آن می‌رود)
+  r.post('/api/student/online-classes/:classId/join', S, async (ctx) => {
+    const classId = String(ctx.params.classId);
+    if (!/^[0-9a-fA-F-]{36}$/.test(classId)) fail(404, 'این کلاس پیدا نشد');
+    try {
+      const out = await joinTicket(ctx.user.id, classId);
+      if (!ONLINE_URL_OK(out?.url)) fail(502, 'پاسخ نامعتبر از سامانهٔ کلاس آنلاین');
+      return { url: out.url };
+    } catch (e) { classroomFail(e); }
+  });
   r.get('/api/student/counselor-sessions', S, (ctx) => all(`
     SELECT cs.id,cs.title,cs.starts_at,cs.status,u.full_name counselor
     FROM counselor_sessions cs JOIN users u ON u.id=cs.counselor_id

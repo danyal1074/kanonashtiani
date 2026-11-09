@@ -10,3 +10,4 @@ demo-hosting/
 demo-static/
 /public/extracted_pages/
 /scratch/
+.env

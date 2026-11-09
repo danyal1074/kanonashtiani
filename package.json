@@ -18,6 +18,8 @@
     "smoke": "node scripts/smoke.mjs",
     "loadtest": "node scripts/loadtest.mjs",
     "review": "node scripts/review.mjs",
-    "test:counselor": "node scripts/test-counselor.mjs"
+    "test:counselor": "node scripts/test-counselor.mjs",
+    "test:classroom": "node scripts/test-classroom.mjs",
+    "sync:classroom": "node scripts/sync-classroom.mjs"
   }
 }
