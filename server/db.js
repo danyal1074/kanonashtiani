@@ -676,6 +676,8 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     if (!pc.includes('period')) database.exec('ALTER TABLE payments ADD COLUMN period TEXT');
     if (!pc.includes('manual')) database.exec('ALTER TABLE payments ADD COLUMN manual INTEGER NOT NULL DEFAULT 0');
   },
+  // صف حذف دانش‌آموزان برای «کلاس آنلاین»: اگر سرویس در دسترس نبود، بعداً دوباره تلاش می‌شود
+  (database) => { database.exec('CREATE TABLE IF NOT EXISTS classroom_removals (ext_id TEXT PRIMARY KEY, created_at TEXT DEFAULT (datetime(\'now\')))'); },
   // توکن‌های خروج‌شده: کوکی کپی‌شده پس از خروج دیگر معتبر نیست
   (database) => { database.exec('CREATE TABLE IF NOT EXISTS revoked_tokens (jti TEXT PRIMARY KEY, exp INTEGER NOT NULL)'); },
 ];

@@ -134,7 +134,7 @@ async function students(el) {
   const q = { q: '', grade: '', class_id: '', school: '', gender: '', offset: 0 };
   let rows = [], total = 0;
   const sel = new Set();
-  setHead('مدیریت دانش‌آموزان', 'ثبت‌نام، ویرایش، جستجو و فیلتر', `<button class="btn ghost sm" id="printCreds">${icon('receipt', { size: 16 })} چاپ کارت‌های ورود</button> <button class="btn ghost sm" id="importSt">ثبت‌نام گروهی (اکسل / CSV)</button> <button class="btn ghost sm" id="classesSt">کلاس‌ها</button> <button class="btn ghost sm" id="delAllSt" style="color:var(--red)">حذف همه</button> <button class="btn sm" id="addSt"> ثبت‌نام دانش‌آموز</button>`);
+  setHead('مدیریت دانش‌آموزان', 'ثبت‌نام، ویرایش، جستجو و فیلتر', `<button class="btn ghost sm" id="printCreds">${icon('receipt', { size: 16 })} چاپ کارت‌های ورود</button> <button class="btn ghost sm" id="importSt">ثبت‌نام گروهی (اکسل / CSV)</button> <button class="btn ghost sm" id="classesSt">کلاس‌ها</button> <button class="btn ghost sm" id="syncClassroom">همگام‌سازی کلاس آنلاین</button> <button class="btn ghost sm" id="delAllSt" style="color:var(--red)">حذف همه</button> <button class="btn sm" id="addSt"> ثبت‌نام دانش‌آموز</button>`);
   el.innerHTML = `<div class="card" style="margin-bottom:16px"><div class="row wrap"><input class="input grow" id="q" placeholder=" جستجوی زنده نام یا کد ملی…" style="min-width:220px">
     <select class="input" id="fg" style="width:auto"><option value="">همه پایه‌ها</option>${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select>
     <select class="input" id="fc" style="width:auto"><option value="">همه کلاس‌ها</option></select>
@@ -203,6 +203,10 @@ async function students(el) {
     toast(paid ? (r.unset ? 'پرداخت‌شده ثبت شد؛ مبلغ پایه هنوز تعیین نشده (بعداً در حسابداری کامل می‌شود)' : 'حق عضویت پرداخت‌شده ثبت شد و در حسابداری آمد') : 'پرداخت لغو شد', 'ok', 5000);
     load();
   }));
+  $('#syncClassroom').onclick = (e) => busy(e.currentTarget, async () => {
+    const r = await post('/api/manager/classroom/sync');
+    toast(`${fa(r.total)} دانش‌آموز با کلاس آنلاین همگام شد (جدید ${fa(r.created)}، به‌روز ${fa(r.updated)}${r.removed ? `، حذف‌شده ${fa(r.removed)}` : ''})`, 'ok', 6000);
+  });
   $('#delAllSt').onclick = () => { sel.clear(); deleteStudentsAll(); };
   const deleteStudentsAll = () => modal({ title: 'حذف همهٔ دانش‌آموزان', body: `<p class="small" style="margin-top:0;line-height:2">همهٔ دانش‌آموزان این کانون با همهٔ سوابقشان <b>برای همیشه</b> حذف می‌شوند (فیلتر فعلی نادیده گرفته می‌شود). اسناد حسابداری باقی می‌ماند.</p><div class="field"><label for="daWord">برای تأیید، کلمهٔ «حذف» را بنویسید</label><input class="input" id="daWord" autocomplete="off"></div>`,
     actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'حذف همه', cls: 'red', onClick: async (m) => {

@@ -16,7 +16,7 @@ const SECRET = crypto.randomBytes(48).toString('base64url');
 const CLASS_LIVE = '11111111-1111-4111-8111-111111111111', CLASS_SOON = '22222222-2222-4222-8222-222222222222';
 
 // ---------- سرور ساختگی کلاس آنلاین ----------
-const synced = new Map(), log = [];
+const synced = new Map(), removed = new Set(), log = [];
 const mock = http.createServer((req, res) => {
   const chunks = [];
   req.on('data', (c) => chunks.push(c));
@@ -36,9 +36,17 @@ const mock = http.createServer((req, res) => {
       for (const s of students) {
         assert.match(s.externalId, /^[A-Za-z0-9_.:-]{1,64}$/); assert.ok(s.name.length >= 2 && s.name.length <= 80);
         if (s.grade != null) assert.ok(s.grade >= 4 && s.grade <= 9);
+        assert.equal(typeof s.active, 'boolean');
+        if (s.classId != null) { assert.match(s.classId, /^[A-Za-z0-9_.:-]{1,64}$/); assert.ok(s.className.length >= 1 && s.className.length <= 80); }
         synced.has(s.externalId) ? updated++ : created++; synced.set(s.externalId, s);
       }
-      return send(200, { created, updated });
+      return send(200, { created, updated, disabled: 0 });
+    }
+    if (req.method === 'POST' && req.url === `${base}/students/remove`) {
+      const { externalIds } = JSON.parse(raw);
+      assert.ok(Array.isArray(externalIds) && externalIds.length >= 1 && externalIds.length <= 200);
+      for (const id of externalIds) { removed.add(id); synced.delete(id); }
+      return send(200, { disabled: externalIds.length });
     }
     let m = req.method === 'GET' && req.url.match(new RegExp(`^${base}/students/([^/]+)/classes$`));
     if (m) {
@@ -123,7 +131,23 @@ try {
   await call(mgr, 'PUT', `/api/manager/students/${created.id}`, { full_name: 'تست همگام ویرایش', national_code: NC, grade: cls.grade, class_id: cls.id });
   await sleep(1500);
   check('ویرایش دانش‌آموز همگام شد', synced.get(String(created.id))?.name === 'تست همگام ویرایش', synced.get(String(created.id))?.name);
+  // کلاس پنل: شناسه و نام نمایشی کلاس همراه دانش‌آموز می‌رود و با جابه‌جایی به‌روز می‌شود
+  const sc1 = synced.get(String(created.id));
+  check('کلاس پنل و فعال‌بودن همراه دانش‌آموز رفت', sc1?.classId === String(cls.id) && /^(چهارم|پنجم|ششم|هفتم|هشتم|نهم) /.test(sc1?.className || '') && sc1?.active === true, JSON.stringify(sc1));
+  const other = db.prepare('SELECT id, grade, name FROM classes WHERE center_id=1 AND id<>? LIMIT 1').get(cls.id);
+  const mv = await call(mgr, 'POST', '/api/manager/students/move', { ids: [created.id], class_id: other.id });
+  await sleep(1500);
+  check('جابه‌جایی به کلاس دیگر همگام شد', mv.status === 200 && synced.get(String(created.id))?.classId === String(other.id), JSON.stringify(synced.get(String(created.id))));
+  const dist = await call(mgr, 'POST', '/api/manager/classes/split-gender', {});
+  await sleep(2500);
+  check('تقسیم جنسیتی کلاس‌ها همگام شد', dist.status === 200 && [...synced.values()].some((x) => x.className && /ب$/.test(x.className)), String(dist.status));
+  // حذف: درخواست حذف به کلاس آنلاین می‌رود و از صف پاک می‌شود
+  const del1 = await call(mgr, 'DELETE', `/api/manager/students/${created.id}`);
+  await sleep(1500);
+  check('حذف دانش‌آموز به کلاس آنلاین اعلام شد', del1.status === 200 && removed.has(String(created.id)));
   db.close();
+  const q = (sql, ...a) => { const d2 = new DatabaseSync(path.join(baseEnv.ROSHD_DATA_DIR, 'roshd.db'), { readOnly: true }); try { return d2.prepare(sql).get(...a); } finally { d2.close(); } };
+  check('صف حذف پس از ارسال موفق خالی است', q('SELECT COUNT(*) n FROM classroom_removals').n === 0);
 
   // راز اشتباه: کلاس ۴۰۱ می‌دهد → پنل ۵۰۲ با پیام فارسی و بدون افشای جزئیات
   await stop(app);
@@ -137,6 +161,22 @@ try {
   app = await start({ ...baseEnv, CLASSROOM_API: 'http://127.0.0.1:9/api/v1', CLASSROOM_TIMEOUT_MS: '2000' });
   r = await call(await login('student', 'student'), 'POST', `/api/student/online-classes/${CLASS_LIVE}/join`, {});
   check('قطع ارتباط → ۵۰۲ و پیام فارسی', r.status === 502 && /ارتباط/.test((await r.json()).error));
+  // حذف هنگام قطع ارتباط: در صف ماندگار می‌ماند و بعداً با همگام‌سازی دستی ارسال می‌شود
+  const mgr2 = await login('manager', 'manager');
+  const victim = await (await call(mgr2, 'POST', '/api/manager/students', { full_name: 'قربانی صف', national_code: ncOk('223456789'), grade: cls.grade, class_id: cls.id })).json();
+  const del2 = await call(mgr2, 'DELETE', `/api/manager/students/${victim.id}`);
+  await sleep(3500);
+  check('حذف هنگام قطع ارتباط انجام شد و در صف ماند', del2.status === 200 && q('SELECT COUNT(*) n FROM classroom_removals WHERE ext_id=?', String(victim.id)).n === 1);
+  await stop(app);
+  app = await start(baseEnv);
+  const mgr3 = await login('manager', 'manager');
+  const st3 = await (await call(mgr3, 'GET', '/api/manager/classroom/status')).json();
+  check('وضعیت اتصال: فعال و یک حذف در صف', st3.enabled === true && st3.pending_removals === 1, JSON.stringify(st3));
+  const fs3 = await call(mgr3, 'POST', '/api/manager/classroom/sync', {});
+  const fsj = await fs3.json();
+  check('همگام‌سازی دستی، صف حذف را خالی کرد', fs3.status === 200 && fsj.removed === 1 && removed.has(String(victim.id)) && q('SELECT COUNT(*) n FROM classroom_removals').n === 0, JSON.stringify(fsj));
+  const stu5 = await login('student', 'student');
+  check('مدیر فقط: دانش‌آموز به همگام‌سازی دسترسی ندارد', (await call(stu5, 'POST', '/api/manager/classroom/sync', {})).status === 403);
 
   // تنظیم‌نشده → خاموش
   await stop(app);

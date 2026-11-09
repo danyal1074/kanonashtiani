@@ -9,6 +9,7 @@ import { feeStatus, runPenaltyJob } from './logic.js';
 import { metrics, snapshot } from './metrics.js';
 import { allow, purge as purgeBuckets } from './ratelimit.js';
 import { backupTick } from './backup.js';
+import { classroomEnabled, fullSync } from './classroom.js';
 import registerCommon from './routes/common.js';
 import registerStudent from './routes/student.js';
 import registerTeacher from './routes/teacher.js';
@@ -157,10 +158,13 @@ const timers = [
   setInterval(safe('wal', () => db.exec('PRAGMA wal_checkpoint(PASSIVE)')), 30 * 60e3),
   setInterval(safe('optimize', () => db.exec('PRAGMA optimize')), 6 * 3600e3),
   setInterval(safe('purge', () => purgeBuckets()), 60e3),
+  // همگام‌سازی کامل دانش‌آموزان و کلاس‌ها با «کلاس آنلاین» (جبران تغییرات جاافتاده)
+  setInterval(() => { if (classroomEnabled()) fullSync().catch((e) => console.warn('[classroom-sync]', e.message)); }, 6 * 3600e3),
   setInterval(safe('metrics', () => { const s = snapshot({ reset: true }); if (s.event_loop_ms.p99 > 250) console.warn('تأخیر حلقه رویداد بالاست', JSON.stringify(s.event_loop_ms)); }), 60e3),
 ];
 timers.forEach((t) => t.unref());
 setTimeout(safe('penalty', () => runPenaltyJob()), 3000).unref();
+setTimeout(() => { if (classroomEnabled()) fullSync().then((r) => console.log(`همگام‌سازی کلاس آنلاین: ${r.total} دانش‌آموز (جدید ${r.created}، به‌روز ${r.updated})`)).catch((e) => console.warn('[classroom-sync]', e.message)); }, 60e3).unref();
 
 // ---------- خاموش شدن تمیز و ثبت خطاهای پیش‌بینی‌نشده ----------
 let closing = false;

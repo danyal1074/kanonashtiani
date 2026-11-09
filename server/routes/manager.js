@@ -7,7 +7,7 @@ import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normal
 import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
-import { syncStudentsLater } from '../classroom.js';
+import { syncStudentsLater, removeStudentsLater, classroomEnabled, pendingRemovals, fullSync, ClassroomError } from '../classroom.js';
 import { sendSms, smsProvider } from '../sms.js';
 import { parseQuestions, examWithResults, performanceList, studentDetail } from './teacher.js';
 
@@ -191,6 +191,7 @@ export default function register(r) {
       // حذف والد بدون فرزند
       run(`DELETE FROM users WHERE role='parent' AND center_id=? AND NOT EXISTS (SELECT 1 FROM parent_children pc WHERE pc.parent_id=users.id)`, ctx.user.center_id);
     });
+    removeStudentsLater([s.id]);
     return { ok: true };
   });
   // ---------- عملیات گروهی روی دانش‌آموزان ----------
@@ -241,6 +242,7 @@ export default function register(r) {
       for (const id of ids) run('DELETE FROM users WHERE id=?', id);
       run(`DELETE FROM users WHERE role='parent' AND center_id=? AND NOT EXISTS (SELECT 1 FROM parent_children pc WHERE pc.parent_id=users.id)`, ctx.user.center_id);
     });
+    removeStudentsLater(ids);
     return { ok: true, deleted: ids.length };
   });
   // تقسیم دانش‌آموزان یک پایه بین چند کلاس (به‌ترتیب حروف الفبا، یکی در میان؛ دختر/پسر جداگانه متعادل می‌شوند)
@@ -258,6 +260,7 @@ export default function register(r) {
       let k = 0;
       for (const g of groups) for (const x of g) { run('UPDATE students SET class_id=? WHERE user_id=?', classes[k++ % classes.length].id, x.id); n++; }
     });
+    syncStudentsLater(st.map((x) => x.id));
     return { ok: true, moved: n };
   });
   // پسرها در یک کلاس (پیش‌فرض «الف») و دخترها در کلاس دیگر (پیش‌فرض «ب») — برای یک پایه یا همهٔ پایه‌ها؛ کلاس‌ها در صورت نبودن ساخته می‌شوند
@@ -281,7 +284,17 @@ export default function register(r) {
         for (const x of st) { run('UPDATE students SET class_id=? WHERE user_id=?', x.gender === 'f' ? gc : bc, x.id); if (x.gender === 'f') out.girls++; else out.boys++; }
       }
     });
+    syncStudentsLater(null);
     return out;
+  });
+  // وضعیت و همگام‌سازی دستی با «کلاس آنلاین»
+  r.get('/api/manager/classroom/status', M, () => ({ enabled: classroomEnabled(), pending_removals: pendingRemovals() }));
+  r.post('/api/manager/classroom/sync', M, async () => {
+    if (!classroomEnabled()) fail(503, 'اتصال به کلاس آنلاین هنوز تنظیم نشده است');
+    try { return { ok: true, ...(await fullSync()) }; } catch (e) {
+      console.warn('[classroom-sync]', e.message);
+      fail(502, e instanceof ClassroomError && e.kind === 'unreachable' ? 'ارتباط با کلاس آنلاین برقرار نشد؛ چند دقیقه بعد دوباره تلاش کنید' : 'همگام‌سازی با کلاس آنلاین ناموفق بود');
+    }
   });
   // «حذف همه» برای بخش‌های مختلف (با تأیید)
   r.post('/api/manager/bulk-delete', M, (ctx) => {
