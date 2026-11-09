@@ -50,14 +50,17 @@ export default function register(r) {
   r.post('/api/auth/login', { auth: false }, async (ctx) => {
     const role = ctx.body.role;
     const id = toEnDigits(clampStr(ctx.body.identifier, 64));
-    const pw = String(ctx.body.password || '');
+    let pw = String(ctx.body.password || '');
     if (!['student', 'teacher', 'manager', 'admin', 'counselor'].includes(role)) fail(400, 'نقش کاربری نامعتبر است');
     if (!id || !pw) fail(400, 'شناسه و رمز عبور را وارد کنید');
     const t = throttle(ctx.ip, id);
     let user;
     const cleanNc = normalizeNationalCode(id);
     user = get(`SELECT * FROM users WHERE role=? AND (national_code=? OR national_code=? OR username=?)`, role, id, cleanNc || id, id);
-    if (!user || !user.active || !(await verifyPasswordAsync(pw, user.pass_hash))) {
+    // رمز اولیهٔ دانش‌آموز کد ملی است؛ اگر با ارقام فارسی/عربی تایپ شد، با ارقام انگلیسی هم امتحان می‌شود
+    let okPw = !!user && !!user.active && await verifyPasswordAsync(pw, user.pass_hash);
+    if (!okPw && user?.active) { const en = toEnDigits(pw); if (en !== pw) { okPw = await verifyPasswordAsync(en, user.pass_hash); if (okPw) pw = en; } }
+    if (!okPw) {
       t.failed();
       fail(401, 'نام کاربری/کد ملی یا رمز عبور اشتباه است');
     }

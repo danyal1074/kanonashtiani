@@ -168,6 +168,7 @@ const impFull = await call(S.manager.ck, 'POST', '/api/manager/students/import',
 ` });
 check('ثبت‌نام گروهی با همهٔ ستون‌های اختیاری', impFull.status === 200 && impFull.data.created === 1, JSON.stringify(impFull.data).slice(0, 140));
 const gf = await login('student', nc4, nc4);
+check('ورود دانش‌آموز با ارقام فارسی (کد ملی) هم کار می‌کند', (await login('student', nc4.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]), nc4.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]))).status === 200);
 const meF = (await call(gf.ck, 'GET', '/api/me')).data;
 check('اطلاعات موجود در فایل در پروفایل ثبت شد (فهرست خالی‌ها تهی است)', meF.student.missing.length === 0, JSON.stringify(meF.student.missing));
 const impNoPhone = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت
