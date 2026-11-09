@@ -102,9 +102,6 @@ async function handle(req, res) {
       if (method !== 'GET') checkUnsafeRequest(req);
       if (route.auth !== false && !user) throw new HttpError(401, 'لطفاً دوباره وارد شوید');
       if (route.roles && !route.roles.includes(user.role)) throw new HttpError(403, 'به این بخش دسترسی ندارید');
-      if (user?.role === 'student' && user.profile_done === 0 && route.auth !== false && !['/api/me', '/api/me/password', '/api/student/complete-profile'].includes(pathname)) {
-        throw new HttpError(428, 'لطفاً ابتدا اطلاعات پروفایل خود را تکمیل کنید');
-      }
       if (user?.role === 'student' && route.auth !== false && !route.allowLocked && feeStatus(user.id)?.locked) {
         throw new HttpError(423, 'پنل شما به دلیل پرداخت نشدن حق عضویت قفل است');
       }

@@ -662,6 +662,12 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
   },
   // نسخه ۱۱: نقش مستقل مشاور، برنامه شخصی و جلسات مشاوره
   counselorMigration,
+  // اطلاعات اختیاری پروفایل دانش‌آموز: نام مادر و شمارهٔ تماس دوم
+  (database) => {
+    const cols = database.prepare('PRAGMA table_info(students)').all().map((c) => c.name);
+    if (!cols.includes('mother_name')) database.exec('ALTER TABLE students ADD COLUMN mother_name TEXT');
+    if (!cols.includes('phone2')) database.exec('ALTER TABLE students ADD COLUMN phone2 TEXT');
+  },
 ];
 
 export function migrate(database = db) {

@@ -84,6 +84,11 @@ export async function loginView(root, onDone) {
     $('#shopLink', root).href = `#/c/${center.slug}`;
   });
   ['#ident', '#pw'].forEach((s) => $(s, root).addEventListener('input', () => setErr('')));
+  // نمونهٔ نمایشی (دمو): حساب‌های ساختگی را معرفی می‌کند؛ در نسخهٔ واقعی چیزی نشان داده نمی‌شود
+  api('/api/public/mode').then((m) => {
+    if (!m?.demo || !$('#loginForm', root)) return;
+    $('#loginForm', root).insertAdjacentHTML('afterend', `<div role="note" style="margin-top:14px;padding:12px;border-radius:14px;background:#fff7e0;border:1px solid #f2d27a;color:#5b4300;font-size:13px;line-height:1.9"><b>نسخهٔ نمایشی — همهٔ اطلاعات ساختگی است.</b><br>دانش‌آموز: student ، دبستان: student5 ، معلم: teacher ، مشاور: counselor ، مدیر کانون: manager ، مدیر سامانه: admin<br>رمز همه: 123456</div>`);
+  }).catch(() => {});
   $('#loginForm', root).onsubmit = async (e) => {
     e.preventDefault();
     const ident = en($('#ident', root).value.trim()), pw = $('#pw', root).value;

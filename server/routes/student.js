@@ -217,21 +217,20 @@ export default function register(r) {
       ledger, positive: sum((x) => x.amount > 0), negative: sum((x) => x.amount < 0), schedule, materials, purchased,
     };
   });
-  // تکمیل اجباری پروفایل در اولین ورود (مدرسه، تاریخ تولد، نشانی؛ شمارهٔ تماس اختیاری برای اصلاح)
-  r.post('/api/student/complete-profile', { ...S, allowLocked: true }, (ctx) => {
-    const b = ctx.body;
-    const school = clampStr(b.school, 100), address = clampStr(b.address, 300);
-    if (!school) fail(400, 'نام مدرسه را وارد کنید');
-    if (!address || address.length < 5) fail(400, 'نشانی منزل را وارد کنید');
-    let birth;
-    try { birth = parseBirthDate(b.birth_date); } catch (e) { fail(400, e.message); }
-    if (!birth) fail(400, 'تاریخ تولد را وارد کنید');
-    const hasPhone = !!String(b.phone ?? '').trim();
-    const phone = hasPhone ? normalizeIranianMobile(b.phone) : null;
-    if (hasPhone && !phone) fail(400, 'شمارهٔ تماس باید ۱۱ رقم و با ۰۹ شروع شود');
-    tx(() => {
-      run('UPDATE students SET school=?, birth_date=?, address=?, parent_phone=COALESCE(?, parent_phone), father_name=COALESCE(?, father_name), profile_done=1 WHERE user_id=?', school, birth, address, phone, clampStr(b.father_name, 80) || null, ctx.user.id);
-    });
+  // تکمیل اختیاری اطلاعات پروفایل: هر فیلدی که فرستاده و پر باشد ذخیره می‌شود؛ خالی‌ها دست‌نخورده می‌مانند
+  r.put('/api/student/info', { ...S, allowLocked: true }, (ctx) => {
+    const b = ctx.body, set = [], vals = [];
+    const text = (key, col, max, label) => { const v = clampStr(b[key], max); if (String(b[key] ?? '').trim()) { if (v.length < 2) fail(400, `${label} را کامل وارد کنید`); set.push(`${col}=?`); vals.push(v); } };
+    text('school', 'school', 100, 'نام مدرسه'); text('address', 'address', 300, 'نشانی'); text('father_name', 'father_name', 80, 'نام پدر'); text('mother_name', 'mother_name', 80, 'نام مادر');
+    if (String(b.birth_date ?? '').trim()) { let birth; try { birth = parseBirthDate(b.birth_date); } catch (e) { fail(400, e.message); } set.push('birth_date=?'); vals.push(birth); }
+    for (const [key, col] of [['phone', 'parent_phone'], ['phone2', 'phone2']]) {
+      if (!String(b[key] ?? '').trim()) continue;
+      const p = normalizeIranianMobile(b[key]);
+      if (!p) fail(400, 'شمارهٔ تماس باید ۱۱ رقم و با ۰۹ شروع شود');
+      set.push(`${col}=?`); vals.push(p);
+    }
+    if (!set.length) fail(400, 'چیزی برای ذخیره نیست');
+    run(`UPDATE students SET ${set.join(', ')} WHERE user_id=?`, ...vals, ctx.user.id);
     return { ok: true };
   });
   r.get('/api/student/payment', { ...S, allowLocked: true }, (ctx) => {

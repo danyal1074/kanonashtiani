@@ -3,8 +3,8 @@ import { api, post, put, esc, fa, num, $, on, toast, busy, modal, confirmBox, se
 import { accountView } from './common.js';
 
 export const nav = () => [
-  { path: '/home', icon: 'building', label: 'کانون‌ها' },
-  { path: '/managers', icon: 'shield', label: 'مدیران کانون‌ها' },
+  { path: '/home', icon: 'building', label: 'کانون آشتیانی' },
+  { path: '/managers', icon: 'shield', label: 'مدیر کانون' },
   { path: '/users', icon: 'user', label: 'کاربران و پشتیبانی' },
   { path: '/backup', icon: 'database', label: 'پشتیبان‌گیری و بازیابی' },
   { path: '/account', icon: 'key', label: 'حساب کاربری' },
@@ -24,18 +24,11 @@ function statsBlock(c) {
 
 async function home(el) {
   const [d, stats] = await Promise.all([api('/api/admin/overview'), api('/api/admin/stats')]);
-  setHead('کانون‌ها', 'هر کانون لوگو، نام، مدیر و داده‌های جداگانه دارد', '<button class="btn sm" id="newC"> کانون جدید</button>');
+  setHead('کانون آشتیانی', 'سامانهٔ اختصاصی کانون آشتیانی؛ ابتدا از «مدیر کانون» حساب مدیر را بسازید', '');
   el.innerHTML = `<div class="grid c4">${kpiCard('users', '', num(d.totals.users), 'کل کاربران')}${kpiCard('backpack', 'sun', num(d.totals.students), 'دانش‌آموزان')}${kpiCard('file-check', 'green', num(d.totals.results), 'نتایج آزمون')}${kpiCard('timer', 'slate', num(d.totals.pomodoros), 'پومودوروهای ثبت‌شده')}</div>
     ${stats.map(statsBlock).join('')}
     <div class="grid c3" style="margin-top:18px">${d.centers.map((c) => `<div class="card"><div class="row"><div class="brand-logo" style="background:${esc(c.color)}">${logoHtml(c.logo)}</div><div class="grow"><b>${esc(c.name)}</b><div class="tiny muted">/${esc(c.slug)} • مدیر: ${esc(c.manager || '—')}</div></div></div>
       <div class="row wrap" style="margin-top:12px"><span class="badge">${icon('backpack', { size: 16 })} ${fa(c.students)}</span><span class="badge blue">${icon('board', { size: 16 })} ${fa(c.teachers)}</span><span class="grow"></span><a class="btn ghost sm" href="#/c/${esc(c.slug)}" target="_blank">صفحه عمومی</a><button class="btn soft sm" data-edit="${c.id}" aria-label="ویرایش کانون" title="ویرایش کانون">${icon('edit', { size: 16 })}</button></div></div>`).join('')}</div>`;
-  $('#newC').onclick = () => modal({
-    title: ' کانون جدید', wide: true,
-    body: `<form class="form-grid" id="cf"><div class="field"><label>نام کانون</label><input class="input" name="name" required></div><div class="field"><label>شناسه لاتین (آدرس صفحه)</label><input class="input ltr" name="slug" placeholder="my-center" required></div>
-      <div class="field"><label>شعار</label><input class="input" name="tagline"></div><div class="field"><label>رنگ</label><input class="input" type="color" name="color" aria-label="رنگ" value="#0B5F66"></div><div class="field"><label>لوگو (ایموجی موقت)</label><input class="input" name="logo" value="${icon('star', { size: 16 })}"></div>
-      <div class="field"><label>نام مدیر</label><input class="input" name="manager_name" required></div><div class="field"><label>نام کاربری مدیر</label><input class="input ltr" name="manager_username" required></div><div class="field"><label>رمز مدیر</label><input class="input ltr" type="password" name="manager_password" minlength="6" required></div></form>`,
-    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ایجاد کانون', onClick: async (m) => { await post('/api/admin/centers', formData($('#cf', m))); toast('کانون ایجاد شد؛ مدیر می‌تواند وارد شود', 'ok'); home(el); } }],
-  });
   on(el, 'click', '[data-edit]', (e, b) => {
     const c = d.centers.find((x) => x.id === Number(b.dataset.edit));
     modal({ title: `${icon('edit', { size: 16 })} ${esc(c.name)}`, body: `<form class="stack" id="ef"><div class="field"><label>نام</label><input class="input" name="name" value="${esc(c.name)}"></div><div class="field"><label>رنگ</label><input class="input" type="color" name="color" aria-label="رنگ" value="${esc(c.color)}"></div></form>`,
@@ -46,12 +39,12 @@ async function home(el) {
 
 async function managers(el) {
   const [list, centers] = await Promise.all([api('/api/admin/managers'), api('/api/admin/overview').then((o) => o.centers)]);
-  setHead('مدیران کانون‌ها', 'برای هر کانون یک یا چند مدیر تعریف کنید؛ مدیر با نام کاربری و رمز خودش وارد پنل کانون می‌شود', '<button class="btn sm" id="newM">مدیر جدید</button>');
+  setHead('مدیر کانون', 'حساب مدیر کانون را بسازید؛ مدیر با نام کاربری و رمز خودش وارد می‌شود و معلم‌ها، مشاورها و دانش‌آموزان را ثبت می‌کند', '<button class="btn sm" id="newM">مدیر جدید</button>');
   el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>نام</th><th>نام کاربری</th><th>موبایل</th><th>کانون</th><th>وضعیت</th><th></th></tr></thead><tbody>${list.map((m) => `<tr><td>${esc(m.full_name)}</td><td class="ltr">${esc(m.username)}</td><td class="num">${fa(m.mobile || '—')}</td><td class="small">${esc(m.center || '—')}</td>
     <td>${m.active ? '<span class="badge green">فعال</span>' : '<span class="badge red">غیرفعال</span>'}</td><td><div class="row" style="gap:4px"><button class="btn sm soft" data-em="${m.id}" aria-label="ویرایش مدیر" title="ویرایش">${icon('edit', { size: 16 })}</button><button class="btn sm ghost" data-pw="${m.id}" aria-label="بازنشانی رمز" title="بازنشانی رمز">${icon('key', { size: 16 })}</button><button class="btn sm ghost" data-tg="${m.id}" aria-label="${m.active ? 'غیرفعال کردن' : 'فعال کردن'}" title="${m.active ? 'غیرفعال کردن' : 'فعال کردن'}">${icon(m.active ? 'lock' : 'check', { size: 16 })}</button><button class="btn sm" data-imp="${m.id}">${icon('eye', { size: 16 })} ورود به پنل</button></div></td></tr>`).join('') || `<tr><td colspan="6">${empty('shield', 'هنوز مدیری تعریف نشده؛ با «مدیر جدید» اولین مدیر را بسازید')}</td></tr>`}</tbody></table></div></div>`;
   const form = (m = {}) => `<form class="form-grid" id="mf"><div class="field"><label>نام و نام خانوادگی</label><input class="input" name="full_name" value="${esc(m.full_name || '')}" required></div><div class="field"><label>نام کاربری (انگلیسی)</label><input class="input ltr" name="username" value="${esc(m.username || '')}" required></div>
     <div class="field"><label>موبایل</label><input class="input ltr" name="mobile" inputmode="numeric" value="${esc(m.mobile || '')}"></div>
-    ${m.id ? '' : `<div class="field"><label>کانون</label><select class="input" name="center_id">${centers.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div><div class="field"><label>رمز عبور (حداقل ۶ کاراکتر)</label><input class="input ltr" type="password" name="password" minlength="6" required></div>`}</form>`;
+    ${m.id ? '' : `<div class="field"><label>رمز عبور (حداقل ۶ کاراکتر)</label><input class="input ltr" type="password" name="password" minlength="6" required></div>`}</form>`;
   $('#newM').onclick = () => modal({ title: 'مدیر جدید', wide: true, body: form(),
     actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ایجاد مدیر', onClick: async (m) => { await post('/api/admin/managers', formData($('#mf', m))); toast('مدیر ایجاد شد؛ می‌تواند وارد شود', 'ok'); managers(el); } }] });
   on(el, 'click', '[data-em]', (e, b) => {

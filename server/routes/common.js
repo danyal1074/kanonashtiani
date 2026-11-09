@@ -35,6 +35,10 @@ export function studentInfo(id) {
   return get(`SELECT s.*, c.name class_name, u.full_name FROM students s JOIN users u ON u.id=s.user_id LEFT JOIN classes c ON c.id=s.class_id WHERE s.user_id=?`, id);
 }
 
+// اطلاعات اختیاری پروفایل که هنوز ثبت نشده‌اند (فقط برای یادآوری؛ هیچ‌چیز اجباری نیست)
+const PROFILE_FIELDS = [['school', 'نام مدرسه'], ['birth_date', 'تاریخ تولد'], ['address', 'نشانی'], ['father_name', 'نام پدر'], ['mother_name', 'نام مادر'], ['phone2', 'شماره تماس دوم']];
+export const profileMissing = (s) => PROFILE_FIELDS.filter(([k]) => !String(s?.[k] ?? '').trim()).map(([k, label]) => ({ key: k, label }));
+
 export function isBirthday(birth) {
   if (!birth) return false;
   const [, bm, bd] = jMonthOf(birth);
@@ -86,7 +90,7 @@ export default function register(r) {
     if (u.role === 'student') {
       const s = studentInfo(u.id);
       const total = totalPoints(u.id);
-      out.student = s ? { grade: s.grade, class_id: s.class_id, class_name: s.class_name, school: s.school, profile_done: !!s.profile_done, avatar: s.avatar, birthday: isBirthday(s.birth_date), points: total, level: levelOf(total) } : { grade: 7, class_id: null, class_name: null, school: '', avatar: 'sprout', birthday: false, points: total, level: levelOf(total) };
+      out.student = s ? { grade: s.grade, class_id: s.class_id, class_name: s.class_name, school: s.school, profile_done: true, missing: profileMissing(s), avatar: s.avatar, birthday: isBirthday(s.birth_date), points: total, level: levelOf(total) } : { grade: 7, class_id: null, class_name: null, school: '', avatar: 'sprout', birthday: false, points: total, level: levelOf(total) };
       out.fee = feeStatus(u.id);
     }
     if (u.role === 'parent') out.children = all(`SELECT u.id, u.full_name, s.grade, s.avatar, c.name class_name FROM parent_children pc JOIN users u ON u.id=pc.student_id JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE pc.parent_id=? ORDER BY s.grade`, u.id);
@@ -163,6 +167,8 @@ export default function register(r) {
   });
 
   // ---------- صفحه عمومی کانون و فروشگاه ----------
+  // حالت نمایشی: نمونهٔ دمو با داده‌های ساختگی؛ نسخهٔ واقعی false است
+  r.get('/api/public/mode', { auth: false }, () => ({ demo: process.env.ROSHD_DEMO === '1' }));
   r.get('/api/public/centers', { auth: false }, () => all('SELECT name, slug, logo, tagline, color FROM centers ORDER BY id'));
   r.get('/api/public/center/:slug', { auth: false }, (ctx) => {
     const c = get('SELECT id, name, slug, logo, tagline, about, color FROM centers WHERE slug=?', ctx.params.slug);

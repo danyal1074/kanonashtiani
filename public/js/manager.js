@@ -143,7 +143,7 @@ async function students(el) {
   };
   $('#importSt').onclick = () => modal({
     title: 'ثبت‌نام گروهی از فایل CSV', wide: true,
-    body: `<div class="stack"><p class="small muted" style="margin:0;line-height:2">فایل اکسل را با «Save As ← CSV UTF-8» ذخیره کنید. ستون‌های لازم: نام و نام خانوادگی، کد ملی، پایه (مثلاً چهارم)، جنسیت (دختر یا پسر). ستون‌های اختیاری: شماره تماس، کلاس (مثلاً «دختر ۱»؛ پیش‌فرض «الف»)، نام پدر، مدرسه، تاریخ تولد (شمسی)، نشانی، شهریه این ماه («پرداخت شده» یعنی شهریهٔ این ماه تسویه است). هر اطلاعاتی که در فایل نباشد، دانش‌آموز در اولین ورود تکمیل می‌کند.
+    body: `<div class="stack"><p class="small muted" style="margin:0;line-height:2">فایل اکسل را با «Save As ← CSV UTF-8» ذخیره کنید. ستون‌های لازم: نام و نام خانوادگی (در یک ستون)، کد ملی، شماره تماس، پایه (مثلاً چهارم)، جنسیت (دختر یا پسر). ستون‌های اختیاری: کلاس (مثلاً «دختر ۱»؛ پیش‌فرض «الف»)، نام پدر، نام مادر، مدرسه، تاریخ تولد (شمسی)، نشانی، شماره تماس دوم، شهریه این ماه («پرداخت شده» یعنی شهریهٔ این ماه تسویه است). هر اطلاعاتی که در فایل باشد در پروفایل ثبت می‌شود؛ جاهای خالی خالی می‌ماند و خود دانش‌آموز هر وقت خواست از پروفایلش تکمیل می‌کند (اجباری نیست).
       <a href="/samples/students-template.csv" download>دانلود فایل نمونه</a></p>
       <div class="field"><label for="csvFile">فایل CSV</label><input class="input" type="file" id="csvFile" accept=".csv,text/csv,.txt"></div><div id="csvOut" aria-live="polite"></div></div>`,
     actions: [{ label: 'بستن', cls: 'ghost', value: false },

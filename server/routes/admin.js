@@ -26,6 +26,8 @@ export default function register(r) {
   }));
 
   r.post('/api/admin/centers', A, (ctx) => {
+    // این سامانه اختصاصی «کانون آشتیانی» است؛ ساخت کانون دوم ممکن نیست
+    if (get('SELECT 1 FROM centers LIMIT 1')) fail(403, 'این سامانه اختصاصی کانون آشتیانی است و کانون دیگری ساخته نمی‌شود');
     const b = ctx.body, name = clampStr(b.name, 100), slug = clampStr(b.slug, 40).toLowerCase();
     const mUser = toEnDigits(clampStr(b.manager_username, 40)).toLowerCase();
     if (!name || !/^[a-z0-9-]{3,40}$/.test(slug)) fail(400, 'نام کانون و شناسه لاتین (slug) لازم است');
@@ -84,8 +86,8 @@ export default function register(r) {
   r.get('/api/admin/managers', A, () => all(`SELECT u.id, u.full_name, u.username, u.mobile, u.active, u.center_id, c.name center, u.created_at
     FROM users u LEFT JOIN centers c ON c.id=u.center_id WHERE u.role='manager' ORDER BY u.center_id, u.id`));
   r.post('/api/admin/managers', A, (ctx) => {
-    const b = ctx.body, m = managerBody(b, true), cid = Number(b.center_id);
-    if (!get('SELECT 1 FROM centers WHERE id=?', cid)) fail(400, 'کانون را انتخاب کنید');
+    const b = ctx.body, m = managerBody(b, true), cid = get('SELECT id FROM centers ORDER BY id LIMIT 1')?.id;
+    if (!cid) fail(400, 'کانونی ثبت نشده است');
     if (get(`SELECT 1 FROM users WHERE role='manager' AND username=?`, m.username)) fail(400, 'این نام کاربری قبلاً برای مدیر دیگری ثبت شده');
     run(`INSERT INTO users (center_id, role, username, mobile, pass_hash, full_name) VALUES (?,?,?,?,?,?)`, cid, 'manager', m.username, m.mobile, hashPassword(String(b.password)), m.full_name);
     return { ok: true };

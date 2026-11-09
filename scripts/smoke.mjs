@@ -108,11 +108,10 @@ check('ثبت‌نام دانش‌آموز', created.status === 200, JSON.string
 const li = await fetch(B + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'student', identifier: nc, password: nc }) });
 check('ورود دانش‌آموز تازه با رمز اولیه', li.status === 200);
 const fresh = { ck: li.headers.get('set-cookie').split(';')[0] };
-check('دانش‌آموز تازه تا تکمیل پروفایل مسدود است (۴۲۸)', (await call(fresh.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 })).status === 428);
+check('دانش‌آموز تازه بدون هیچ فرم اجباری وارد پنل می‌شود', (await call(fresh.ck, 'GET', '/api/student/dashboard')).status === 200);
 const pwChange = await call(fresh.ck, 'POST', '/api/me/password', { current: nc, next: 'StudentNew#123' });
 check('دانش‌آموز تازه می‌تواند اختیاری رمز را عوض کند', pwChange.status === 200);
 const freshAfterPw = { ck: pwChange.ck || (await login('student', nc, 'StudentNew#123')).ck };
-await call(freshAfterPw.ck, 'POST', '/api/student/complete-profile', { school: 'دبستان نمونه', birth_date: '1392/05/12', gender: 'f', address: 'تهران، خیابان نمونه' });
 // پومودورو: ثبت و جلوگیری از ثبت پشت‌سرهم بی‌فاصله
 const p1 = await call(freshAfterPw.ck, 'POST', '/api/student/pomodoro', { subject: 'ریاضی', minutes: 25 });
 check('ثبت پومودورو پس از تکمیل پروفایل', p1.status === 200);
@@ -151,17 +150,32 @@ check('ورود دانش‌آموز واردشده گروهی', gs.status === 20
 const feeG = (await call(S.manager.ck, 'GET', '/api/manager/fees')).data;
 check('شهریهٔ پرداخت‌شدهٔ فایل ثبت شد یا چون مبلغ پایه تعیین نشده کنار گذاشته شد', imp.data.fee_paid_recorded + imp.data.fee_paid_unset === 1, JSON.stringify([imp.data.fee_paid_recorded, imp.data.fee_paid_unset]));
 const meG = (await call(gs.ck, 'GET', '/api/me')).data;
-check('پروفایل ناقص و رمز اولیه در /api/me اعلام می‌شود', meG.student.profile_done === false && meG.must_change_password === true);
-check('تا تکمیل پروفایل بقیه مسیرها بسته است (۴۲۸)', [428].includes((await call(gs.ck, 'GET', '/api/student/dashboard')).status));
-check('تغییر رمز اجباری نیست: تکمیل پروفایل بدون تغییر رمز مجاز است (اعتبارسنجی ۴۰۰ نه ۴۲۸)', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'x' })).status === 400);
+check('اطلاعات خالی پروفایل فقط فهرست یادآوری است (اجباری نیست) و رمز اولیه اعلام می‌شود', Array.isArray(meG.student.missing) && meG.student.missing.some((m) => m.key === 'school') && meG.must_change_password === true);
+check('بدون تکمیل پروفایل هم پنل باز است', (await call(gs.ck, 'GET', '/api/student/dashboard')).status === 200);
+check('ثبت اطلاعات خالی رد می‌شود', (await call(gs.ck, 'PUT', '/api/student/info', {})).status === 400);
 check('رمز اولیه (کد ملی) به‌عنوان رمز جدید رد می‌شود', (await call(gs.ck, 'POST', '/api/me/password', { current: nc3, next: nc3 })).status === 400);
-check('تکمیل پروفایل بدون مدرسه رد می‌شود', (await call(gs.ck, 'POST', '/api/student/complete-profile', { school: '', birth_date: '1392/05/12', address: 'تهران، خیابان نمونه' })).status === 400);
-const cp = await call(gs.ck, 'POST', '/api/student/complete-profile', { school: 'دبستان نمونه', birth_date: '1392/05/12', father_name: 'پدر', address: 'تهران، خیابان نمونه ۱' });
-check('تکمیل پروفایل موفق', cp.status === 200, JSON.stringify(cp.data));
-check('پروفایل پس از تکمیل ثبت شده است', (await call(gs.ck, 'GET', '/api/me')).data.student.profile_done === true);
+check('مدرسهٔ بی‌معنی (یک حرف) رد می‌شود', (await call(gs.ck, 'PUT', '/api/student/info', { school: 'x' })).status === 400);
+const cp = await call(gs.ck, 'PUT', '/api/student/info', { school: 'دبستان نمونه', birth_date: '1392/05/12', father_name: 'پدر', address: 'تهران، خیابان نمونه ۱' });
+check('ثبت اختیاری اطلاعات پروفایل موفق', cp.status === 200, JSON.stringify(cp.data));
+const meG2 = (await call(gs.ck, 'GET', '/api/me')).data;
+check('فقط فیلدهای ثبت‌شده از فهرست خالی‌ها کم می‌شوند', !meG2.student.missing.some((m) => m.key === 'school') && meG2.student.missing.some((m) => m.key === 'mother_name'));
 check('پس از تکمیل پروفایل، بدون تغییر رمز هم پنل باز است', (await call(gs.ck, 'GET', '/api/student/dashboard')).status === 200);
 check('تغییر رمز با رمز فعلی اشتباه رد می‌شود', (await call(gs.ck, 'POST', '/api/me/password', { current: 'اشتباه-123', next: 'رمز-جدید-456' })).status === 400);
 check('تغییر رمز اختیاری با رمز فعلی درست انجام می‌شود', (await call(gs.ck, 'POST', '/api/me/password', { current: nc3, next: 'رمز-جدید-456' })).status === 200);
+const nc4 = (() => { const d = [4, 5, 6, 7, 8, 9, 1, 2, 3]; const s = d.reduce((a, x, i) => a + x * (10 - i), 0) % 11; return d.join('') + (s < 2 ? s : 11 - s); })();
+const impFull = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت,نام پدر,نام مادر,مدرسه,تاریخ تولد,نشانی,شماره تماس دوم
+علی کامل,${nc4},09124445566,نهم,پسر,حسن,مریم,مدرسه نمونه,1388/02/03,تهران خیابان نمونه,09351112233
+` });
+check('ثبت‌نام گروهی با همهٔ ستون‌های اختیاری', impFull.status === 200 && impFull.data.created === 1, JSON.stringify(impFull.data).slice(0, 140));
+const gf = await login('student', nc4, nc4);
+const meF = (await call(gf.ck, 'GET', '/api/me')).data;
+check('اطلاعات موجود در فایل در پروفایل ثبت شد (فهرست خالی‌ها تهی است)', meF.student.missing.length === 0, JSON.stringify(meF.student.missing));
+const impNoPhone = await call(S.manager.ck, 'POST', '/api/manager/students/import', { csv: `نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت
+بی‌شماره,${nc2},,نهم,پسر
+`, dry_run: true });
+check('شمارهٔ تماس خالی در ثبت‌نام گروهی رد می‌شود', impNoPhone.status === 200 && impNoPhone.data.errors.some((e) => /شماره تماس/.test(e.message)));
+check('ساخت کانون دوم ممنوع است (سامانهٔ اختصاصی آشتیانی)', (await call(S.admin.ck, 'POST', '/api/admin/centers', { name: 'کانون دیگر', slug: 'other-center', manager_username: 'other_mgr', manager_password: '123456' })).status === 403);
+check('حالت نمایشی در نسخهٔ واقعی خاموش است', (await call('', 'GET', '/api/public/mode')).data.demo === false);
 check('جدول هفتگی مدیر برمی‌گردد', Array.isArray((await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data));
 check('جدول هفتگی معلم برمی‌گردد', Array.isArray((await call(S.teacher.ck, 'GET', '/api/teacher/schedule')).data?.sessions));
 

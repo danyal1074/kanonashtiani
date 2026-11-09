@@ -17,13 +17,16 @@ const HEADERS = {
   full_name: ['نام و نام خانوادگی', 'نام و نام‌خانوادگی', 'نام و نام خانوادگی دانش‌آموز', 'نام و نام خانوادگی دانش آموز', 'نام ونام خانوادگی', 'نام', 'نام کامل', 'نام دانش‌آموز', 'نام دانش آموز', 'نام خانوادگی و نام', 'full_name', 'name'],
   national_code: ['کد ملی', 'کدملی', 'شماره ملی', 'شماره ملی دانش‌آموز', 'کدملی دانش‌آموز', 'کد ملی دانش آموز', 'national_code', 'nid'],
   gender: ['جنسیت', 'gender'],
+  last_name: ['نام خانوادگی', 'فامیلی', 'فامیل', 'family_name', 'last_name'],
+  mother_name: ['نام مادر', 'مادر', 'اسم مادر', 'mother_name'],
+  phone2: ['شماره تماس دوم', 'تلفن دوم', 'موبایل دوم', 'شماره دوم', 'تلفن ثابت', 'phone2'],
   father_name: ['نام پدر', 'پدر', 'اسم پدر', 'father_name', 'father'],
   fee_paid: ['شهریه', 'شهریه این ماه', 'وضعیت شهریه', 'شهریه پرداخت شده', 'پرداخت شهریه', 'وضعیت پرداخت', 'پرداخت', 'حق عضویت', 'fee_paid', 'paid'],
   school: ['مدرسه', 'نام مدرسه', 'school'],
   grade: ['پایه', 'پایه تحصیلی', 'مقطع', 'کلاس/پایه', 'grade'],
   class: ['کلاس', 'نام کلاس', 'کلاس بندی', 'class', 'class_name'],
   birth: ['تاریخ تولد', 'تولد', 'birth_date', 'birth'],
-  parent_phone: ['موبایل والدین', 'تلفن والدین', 'شماره والدین', 'موبایل ولی', 'موبایل', 'شماره همراه', 'تلفن همراه', 'شماره موبایل', 'موبایل پدر', 'موبایل مادر', 'تلفن تماس', 'شماره تماس والدین', 'parent_phone', 'mobile'],
+  parent_phone: ['شماره تماس', 'شماره تلفن', 'تلفن تماس', 'تلفن', 'تماس', 'موبایل', 'شماره موبایل', 'شماره همراه', 'تلفن همراه', 'موبایل والدین', 'تلفن والدین', 'شماره والدین', 'موبایل ولی', 'موبایل پدر', 'موبایل مادر', 'phone', 'mobile', 'parent_phone'],
   address: ['نشانی', 'آدرس', 'address'],
 };
 const norm = (s) => String(s ?? '').replace(/[‌‏‎]/g, ' ').replace(/ي/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -64,7 +67,8 @@ const GIRL_WORDS = ['دختر', 'دخترانه', 'f', 'female', 'زن', 'مون
 const BOY_WORDS = ['پسر', 'پسرانه', 'm', 'male', 'مرد', 'مذکر'];
 
 function cleanRow(raw) {
-  const full_name = clampStr(raw.full_name, 80);
+  // «نام و نام خانوادگی» در یک ستون است؛ اگر نام خانوادگی ستون جدا داشت، به نام اضافه می‌شود
+  const full_name = clampStr([raw.full_name, raw.last_name].filter((x) => String(x ?? '').trim()).join(' '), 80);
   if (!full_name) throw new Error('نام و نام خانوادگی خالی است');
 
   const nc = normalizeNationalCode(raw.national_code);
@@ -72,7 +76,9 @@ function cleanRow(raw) {
 
   const hasPhone = !!String(raw.parent_phone ?? '').trim();
   const phone = hasPhone ? normalizeIranianMobile(raw.parent_phone) : null;
-  if (hasPhone && !phone) throw new Error(`موبایل «${raw.parent_phone}» معتبر نیست (باید شماره همراه ۱۱ رقمی باشد یا خالی بماند)`);
+  if (!phone) throw new Error(hasPhone ? `شماره تماس «${raw.parent_phone}» معتبر نیست (شماره همراه ۱۱ رقمی با ۰۹)` : 'شماره تماس خالی است');
+  const has2 = !!String(raw.phone2 ?? '').trim();
+  const phone2 = has2 ? (normalizeIranianMobile(raw.phone2) || String(raw.phone2).replace(/\D/g, '').slice(0, 15)) : null;
 
   const gradeRaw = norm(raw.grade).replace(/پایه|کلاس|تحصیلی/g, '').trim();
   const grade = GRADES[gradeRaw] || Number(gradeRaw);
@@ -88,7 +94,7 @@ function cleanRow(raw) {
     birth_date = parseBirthDate(raw.birth);
   }
 
-  return { full_name, national_code: nc, parent_phone: phone, grade, gender, class_name: clampStr(raw.class, 30) || 'الف', father_name: clampStr(raw.father_name, 80) || null, fee_paid, school: clampStr(raw.school, 100), birth_date, address: clampStr(raw.address, 300) };
+  return { full_name, national_code: nc, parent_phone: phone, grade, gender, class_name: clampStr(raw.class, 30) || 'الف', father_name: clampStr(raw.father_name, 80) || null, mother_name: clampStr(raw.mother_name, 80) || null, phone2: phone2 || null, fee_paid, school: clampStr(raw.school, 100), birth_date, address: clampStr(raw.address, 300) };
 }
 
 // rows: آرایه سطرها (اولین سطر عنوان ستون‌ها). dryRun: فقط بررسی، بدون ثبت.
@@ -97,7 +103,7 @@ export async function importStudents(centerId, csvText, { dryRun = false } = {})
   if (table.length < 2) throw new Error('فایل خالی است یا سطر عنوان ندارد');
   if (table.length - 1 > MAX_ROWS) throw new Error(`حداکثر ${MAX_ROWS} دانش‌آموز در هر بار`);
   const col = mapColumns(table[0]);
-  const missing = ['full_name', 'national_code', 'grade', 'gender'].filter((k) => !(k in col));
+  const missing = ['full_name', 'national_code', 'parent_phone', 'grade', 'gender'].filter((k) => !(k in col));
   if (missing.length) throw new Error(`ستون‌های لازم پیدا نشد: ${missing.map((k) => HEADERS[k][0]).join('، ')}`);
 
   const errors = [], good = [], seen = new Set();
@@ -131,7 +137,7 @@ export async function importStudents(centerId, csvText, { dryRun = false } = {})
       let cid = classIds.get(key);
       if (!cid) { cid = Number(run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', centerId, d.grade, d.class_name).lastInsertRowid); classIds.set(key, cid); summary.classes_created++; }
       const uid = Number(run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`, centerId, 'student', d.national_code, studentHash.get(d.national_code), d.full_name, d.gender).lastInsertRowid);
-      run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar, profile_done, father_name) VALUES (?,?,?,?,?,?,?,?,?,?)', uid, d.school, d.grade, cid, d.birth_date, d.parent_phone, d.address, 'sprout', d.school && d.birth_date && d.address ? 1 : 0, d.father_name);
+      run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar, profile_done, father_name, mother_name, phone2) VALUES (?,?,?,?,?,?,?,?,1,?,?,?)', uid, d.school, d.grade, cid, d.birth_date, d.parent_phone, d.address, 'sprout', d.father_name, d.mother_name, d.phone2);
       if (d.fee_paid) {
         // شهریهٔ پرداخت‌شدهٔ این ماه: یک پرداخت تأییدشده بدون رسید (سند حسابداری ساخته نمی‌شود)
         const fee = feeBy.get(d.grade) || 0, total = fee ? fee + sysFee : 0;
@@ -143,4 +149,4 @@ export async function importStudents(centerId, csvText, { dryRun = false } = {})
   return summary;
 }
 
-export const CSV_TEMPLATE = '﻿نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت,کلاس,نام پدر,مدرسه,نشانی,شهریه این ماه\n"علی رضایی",0012345679,09121234567,چهارم,پسر,الف,محمد,دبستان نمونه,"تهران، خیابان نمونه",پرداخت شده\n';
+export const CSV_TEMPLATE = '﻿نام و نام خانوادگی,کد ملی,شماره تماس,پایه,جنسیت,کلاس,نام پدر,نام مادر,مدرسه,تاریخ تولد,نشانی,شماره تماس دوم,شهریه این ماه\n"علی رضایی",0012345679,09121234567,چهارم,پسر,الف,محمد,زهرا,دبستان نمونه,1393/05/12,"تهران، خیابان نمونه",09351112233,پرداخت شده\n"سارا احمدی",0499370899,09123334455,نهم,دختر,,,,,,,,\n';
