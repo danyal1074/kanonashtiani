@@ -6,6 +6,7 @@ import zlib from 'node:zlib';
 import { all, get, run, tx } from './db.js';
 import { hashPasswordAsync, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, clampStr, toEnDigits } from './util.js';
 import { markFeePaid } from './logic.js';
+import { ymd, jMonthOf, JMONTHS } from './util.js';
 
 export const MAX_ROWS = 20000;
 
@@ -18,6 +19,9 @@ export const FIELD_LABELS = {
   grade: 'پایه', class: 'کلاس', gender: 'جنسیت', father_name: 'نام پدر', mother_name: 'نام مادر', school: 'مدرسه', birth: 'تاریخ تولد', address: 'نشانی', fee_paid: 'شهریه / حق عضویت پرداخت‌شده',
 };
 
+// نویسه‌های نامرئی (جهت‌نما، فاصلهٔ صفرعرض، BOM، فاصلهٔ سخت) که اکسل فارسی در سلول‌ها می‌گذارد
+const INVIS = /[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g;
+const cleanCell = (v) => String(v ?? '').replace(INVIS, '').replace(/\u00a0/g, ' ').trim();
 const norm = (s) => toEnDigits(String(s ?? '')).replace(/[‌‏‎ـ]/g, ' ').replace(/ي/g, 'ی').replace(/ك/g, 'ک').replace(/[ً-ْ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 const hnorm = (s) => norm(s).replace(/[:()[\]*_\-/\\.,،؛;|]+/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -122,7 +126,9 @@ const RULES = [
   ['grade', /پایه|مقطع|grade|سال\s*تحصیلی/],
   ['class', /کلاس|class|گروه|شعبه/],
 ];
-const classifyHeader = (h) => { const n = hnorm(h); if (!n) return null; for (const [k, re] of RULES) if (re.test(n)) return k; return null; };
+const MONTH_RE = new RegExp(`(^|\\s)(${JMONTHS.map((m) => hnorm(m)).join('|')})(\\s|$)`);
+const monthOf = (h) => { const n = hnorm(h).replace(/\d+/g, ' ').replace(/شهریه|حق عضویت|پرداخت|ماه|وضعیت/g, ' ').replace(/\s+/g, ' ').trim(); return JMONTHS.findIndex((m) => hnorm(m) === n); };
+const classifyHeader = (h) => { const n = hnorm(h); if (!n) return null; if (monthOf(h) >= 0) return 'month'; for (const [k, re] of RULES) if (re.test(n)) return k; return null; };
 
 function parseGrade(s) {
   const n = norm(s).replace(/پایه|تحصیلی/g, ' ').replace(/\s+/g, ' ').trim();
@@ -147,7 +153,7 @@ function paidOf(v) {
 const looksBirth = (v) => /^\d{2,4}\s*[/\-.]\s*\d{1,2}\s*[/\-.]\s*\d{1,4}$/.test(toEnDigits(String(v).trim()));
 
 // خروجی: { idx: {field: ستون}, how: {field: 'header'|'content'}, headers, start }
-function detectColumns(table) {
+function detectColumns(table, feeMonthIdx) {
   const width = Math.max(1, ...table.slice(0, 50).map((r) => r.length));
   // ردیف عنوان: ردیفی (از ده ردیف اول) که بیشترین عنوان آشنا را دارد
   let best = { row: -1, score: 0 };
@@ -155,20 +161,28 @@ function detectColumns(table) {
     const score = new Set(table[r].map(classifyHeader).filter(Boolean)).size;
     if (score > best.score) best = { row: r, score };
   }
-  const idx = {}, how = {}, used = new Set();
-  let headers, start = 0;
+  const idx = {}, how = {}, used = new Set(), monthCols = [];
+  let headers, start = 0, feeMonthUsed = null;
   const row0IsData = table[0].some((c) => isValidNationalCode(normalizeNationalCode(c)));
   if (best.score >= 2 || (best.score === 1 && !row0IsData)) {
     headers = table[best.row].map((h) => String(h ?? '').trim());
     start = best.row + 1;
-    const phones = [];
+    const phones = [], months = new Map();
     headers.forEach((h, i) => {
       const k = classifyHeader(h);
       if (!k) return;
+      if (k === 'month') { months.set(monthOf(h), i); return; }
       if (k === 'phone') { phones.push(i); return; }
       if (k in idx) return;
       idx[k] = i; how[k] = 'header'; used.add(i);
     });
+    // ستون‌های ماه (فروردین … اسفند): ستون ماهِ انتخاب‌شده (پیش‌فرض ماه جاری) وضعیت پرداخت است
+    if (months.size) {
+      monthCols.push(...[...months.entries()].map(([m]) => JMONTHS[m]));
+      const mi = months.has(feeMonthIdx) ? feeMonthIdx : null;
+      if (mi !== null && !('fee_paid' in idx)) { idx.fee_paid = months.get(mi); how.fee_paid = 'header'; used.add(months.get(mi)); feeMonthUsed = JMONTHS[mi]; }
+      for (const i of months.values()) used.add(i);
+    }
     // چند ستون تلفن: ستونی که «دوم/ثابت/منزل» دارد شماره دوم است
     const second = phones.filter((i) => /دوم|2|ثابت|منزل|دیگر|ثانویه|اضطراری/.test(hnorm(headers[i])));
     const firsts = phones.filter((i) => !second.includes(i));
@@ -194,21 +208,33 @@ function detectColumns(table) {
   pick('gender', (v) => genderOf(v) !== null, 0.7);
   pick('grade', (v) => !!parseGrade(v), 0.7);
   pick('birth', looksBirth, 0.6);
-  pick('fee_paid', (v) => paidOf(v) !== null && !/^\d{5,}$/.test(toEnDigits(v).trim()), 0.6);
+  if (!monthCols.length) pick('fee_paid', (v) => paidOf(v) !== null && !/^\d{5,}$/.test(toEnDigits(v).trim()), 0.6);
   pick('full_name', (v) => /^[^\d]{4,}$/.test(v) && /\s/.test(v.trim()), 0.7);
-  return { idx, how, headers, start };
+  return { idx, how, headers, start, monthCols, feeMonthUsed };
 }
 
 // ---------- پاک‌سازی یک سطر ----------
+// تاریخ تولد با هر شکلی: ۱۳۹۴/۷/۱ ، 94/7/1 ، ۱۳۹۴-۰۷-۰۱ ، ۱۳۹۴.۷.۱ ، ۱۳۹۴۰۷۰۱ ، شمارهٔ ترتیبی اکسل
+function birthText(v) {
+  let t = toEnDigits(cleanCell(v)).replace(/[٫٬،,.\-\\\s]+/g, '/').replace(/^\/+|\/+$/g, '');
+  if (/^\d{5}$/.test(t)) return serialToDate(Number(t));
+  if (/^\d{8}$/.test(t)) t = `${t.slice(0, 4)}/${t.slice(4, 6)}/${t.slice(6)}`;
+  const m2 = /^(\d{2})\/(\d{1,2})\/(\d{1,2})$/.exec(t);
+  if (m2) { const yy = Number(m2[1]); t = `${yy >= 50 ? 13 : 14}${m2[1]}/${m2[2]}/${m2[3]}`; }
+  return t;
+}
 const serialToDate = (n) => { const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000); return `${d.getUTCFullYear()}/${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
 
 function cleanRow(raw, defaults) {
   const full_name = clampStr([raw.full_name, raw.last_name].filter((x) => String(x ?? '').trim()).join(' '), 80);
   if (!full_name) throw new Error('نام و نام خانوادگی خالی است');
   const nc = normalizeNationalCode(raw.national_code);
-  if (!isValidNationalCode(nc)) throw new Error(`کد ملی «${raw.national_code ?? ''}» معتبر نیست`);
-
   const warns = [];
+  if (!isValidNationalCode(nc)) {
+    if (defaults.lenient && /^\d{10}$/.test(nc)) warns.push(`کد ملی ${nc} ارقام کنترلی درست ندارد (طبق انتخاب شما ثبت شد؛ بررسی کنید)`);
+    else throw new Error(String(raw.national_code ?? '').trim() ? `کد ملی «${raw.national_code}» معتبر نیست (ارقام کنترلی یا تعداد ارقام)` : 'کد ملی خالی است');
+  }
+
   const phoneRaw = String(raw.parent_phone ?? '').trim();
   const parent_phone = phoneRaw ? normalizeIranianMobile(phoneRaw) : null;
   if (phoneRaw && !parent_phone) warns.push('شماره تماس معتبر نبود و ثبت نشد');
@@ -221,7 +247,7 @@ function cleanRow(raw, defaults) {
   let classText = cg ? cg.rest : norm(raw.class);
   if (!gp && cg) gp = cg;
   if (!classText && gp?.rest) classText = gp.rest;
-  const grade = gp?.grade || defaults.grade || null;
+  const grade = defaults.forceGrade || gp?.grade || defaults.grade || null;
   if (![4, 5, 6, 7, 8, 9].includes(grade)) throw new Error(String(raw.grade || raw.class || '').trim() ? `پایه «${raw.grade || raw.class}» شناخته نشد (چهارم تا نهم)` : 'پایه مشخص نیست');
   const class_name = clampStr(classText, 30) || null;
 
@@ -230,9 +256,9 @@ function cleanRow(raw, defaults) {
   if (!gender) { gender = defaults.gender || 'm'; genderGuessed = !defaults.gender; }
 
   let birth_date = null;
-  const braw = toEnDigits(String(raw.birth ?? '').trim());
+  const braw = cleanCell(raw.birth);
   if (braw) {
-    try { birth_date = parseBirthDate(/^\d{5}$/.test(braw) ? serialToDate(Number(braw)) : braw); } catch { warns.push('تاریخ تولد معتبر نبود'); }
+    try { birth_date = parseBirthDate(birthText(braw)); } catch { warns.push(`تاریخ تولد «${braw}» معتبر نبود و ثبت نشد`); }
   }
   return {
     full_name, national_code: nc, parent_phone, phone2, grade, gender, genderGuessed, warns,
@@ -249,7 +275,10 @@ export async function importStudents(centerId, input, { dryRun = false, defaults
   else if (input?.xlsx_b64) table = parseXlsx(Buffer.from(String(input.xlsx_b64), 'base64'));
   else table = parseCsv(input?.csv || '');
   if (table.length < 1) throw new Error('فایل خالی است');
-  const { idx, how, headers, start } = detectColumns(table);
+  const curMonth = jMonthOf(ymd()), curYear = curMonth[0];
+  const fm = JMONTHS.indexOf(String(defaults.feeMonth || '').trim());
+  const feeMonthIdx = fm >= 0 ? fm : curMonth[1] - 1;
+  const { idx, how, headers, start, monthCols, feeMonthUsed } = detectColumns(table, feeMonthIdx);
   if (!('national_code' in idx)) throw new Error('ستون کد ملی پیدا نشد. ستونی با عنوان «کد ملی» یا ستونی که کد ملی ۱۰ رقمی دارد لازم است');
   if (!('full_name' in idx)) throw new Error('ستون نام و نام خانوادگی پیدا نشد. ستونی با عنوان «نام و نام خانوادگی» لازم است');
   const dataRows = table.slice(start);
@@ -262,7 +291,7 @@ export async function importStudents(centerId, input, { dryRun = false, defaults
   let genderGuessed = 0;
   dataRows.forEach((cells, i) => {
     const line = start + i + 1;
-    const raw = Object.fromEntries(Object.entries(idx).map(([k, c]) => [k, cells[c]]));
+    const raw = Object.fromEntries(Object.entries(idx).map(([k, c]) => [k, cleanCell(cells[c])]));
     try {
       const d = cleanRow(raw, defaults);
       if (seen.has(d.national_code)) throw new Error(`کد ملی ${d.national_code} در همین فایل تکراری است`);
@@ -277,7 +306,7 @@ export async function importStudents(centerId, input, { dryRun = false, defaults
   });
 
   const summary = {
-    total: dataRows.length, valid: news.length, will_update: updates.length, errors, error_count: errors.filter((e) => !e.warning).length, mapping, unmapped,
+    total: dataRows.length, valid: news.length, will_update: updates.length, errors, error_count: errors.filter((e) => !e.warning).length, mapping, unmapped, month_columns: monthCols, fee_month: feeMonthUsed,
     gender_guessed: genderGuessed, created: 0, updated: 0, classes_created: 0, fee_paid_recorded: 0, fee_paid_unset: 0, dry_run: dryRun,
     paid_in_file: [...news, ...updates].filter((d) => d.fee_paid === true).length,
   };
@@ -296,7 +325,7 @@ export async function importStudents(centerId, input, { dryRun = false, defaults
       return cid;
     };
     const markPaid = (uid) => {
-      const r = markFeePaid(centerId, uid);
+      const r = markFeePaid(centerId, uid, { period: feeMonthUsed ? `${feeMonthUsed} ${curYear}` : undefined });
       if (r?.result === 'paid') summary.fee_paid_recorded++;
       else if (r?.result === 'unset') { summary.fee_paid_recorded++; summary.fee_paid_unset++; }
       return r?.result === 'paid' || r?.result === 'unset';

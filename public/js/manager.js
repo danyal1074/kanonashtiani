@@ -240,8 +240,10 @@ async function students(el) {
     body: `<div class="stack"><p class="small muted" style="margin:0;line-height:2">هر فایل اکسل (xlsx) یا CSV را بدهید؛ سامانه ستون‌ها را خودش از روی عنوان و محتوا تشخیص می‌دهد (نام و نام خانوادگی در یک ستون، کد ملی، شماره تماس، پایه، جنسیت، کلاس، نام پدر و مادر، مدرسه، تاریخ تولد، نشانی، شهریه پرداخت‌شده و …) و پیش از ثبت نشانتان می‌دهد. فقط <b>نام و نام خانوادگی</b> و <b>کد ملی</b> لازم است؛ هر اطلاعات دیگری در فایل باشد در پروفایل ثبت می‌شود و جاهای خالی اجباری نیستند. نام کاربری و رمز اولیهٔ همه کد ملی است. اگر دانش‌آموزی قبلاً ثبت شده باشد دوباره ساخته نمی‌شود، ولی کلاس، وضعیت پرداخت و اطلاعات خالی‌اش با فایل به‌روز می‌شود.
       <a href="/samples/students-template.csv" download>دانلود فایل نمونه</a></p>
       <div class="field"><label for="csvFile">فایل اکسل یا CSV</label><input class="input" type="file" id="csvFile" accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div>
-      <div class="form-grid"><div class="field"><label for="impGrade">اگر ستون پایه در فایل نیست، همه در پایهٔ</label><select class="input" id="impGrade"><option value="">— (از فایل)</option>${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div>
-        <div class="field"><label for="impGender">اگر جنسیت در فایل نیست یا خالی است</label><select class="input" id="impGender"><option value="">پسر (در گزارش هشدار داده می‌شود)</option><option value="f">دختر</option><option value="m">پسر</option></select></div></div>
+      <div class="form-grid"><div class="field"><label for="impGrade">این فایل مربوط به کدام پایه است؟</label><select class="input" id="impGrade"><option value="">— از روی ستون پایهٔ فایل تشخیص بده</option>${md.grades.map((g) => `<option value="${g}">فقط پایهٔ ${gradeName(g)} (همهٔ ردیف‌ها در این پایه ثبت شوند)</option>`).join('')}</select></div>
+        <div class="field"><label for="impGender">اگر جنسیت در فایل نیست یا خالی است</label><select class="input" id="impGender"><option value="">پسر (در گزارش هشدار داده می‌شود)</option><option value="f">دختر</option><option value="m">پسر</option></select></div>
+        <div class="field"><label for="impMonth">اگر فایل ستون ماه‌ها دارد، پرداخت کدام ماه؟</label><select class="input" id="impMonth"><option value="">ماه جاری</option>${JMONTHS.map((m) => `<option>${m}</option>`).join('')}</select></div></div>
+      <label class="row" style="gap:8px"><input type="checkbox" id="impLenient"> <span class="small">کد ملی‌هایی که ارقام کنترلی‌شان درست نیست (اما ۱۰ رقم‌اند) هم ثبت شوند؛ با هشدار</span></label>
       <div id="csvOut" aria-live="polite"></div></div>`,
     actions: [{ label: 'بستن', cls: 'ghost', value: false },
       { label: 'بررسی بدون ثبت', cls: 'soft', onClick: (m) => runImport(m, true) },
@@ -250,10 +252,11 @@ async function students(el) {
   async function runImport(m, dry) {
     const f = $('#csvFile', m).files[0];
     if (!f) throw new Error('ابتدا فایل را انتخاب کنید');
-    const r = await post('/api/manager/students/import', { ...(await readImportFile(f)), dry_run: dry, default_grade: $('#impGrade', m).value, default_gender: $('#impGender', m).value });
+    const r = await post('/api/manager/students/import', { ...(await readImportFile(f)), dry_run: dry, force_grade: $('#impGrade', m).value, default_gender: $('#impGender', m).value, fee_month: $('#impMonth', m).value, lenient_nc: $('#impLenient', m).checked });
     const bad = r.errors.filter((e) => !e.warning), warn = r.errors.filter((e) => e.warning);
     $('#csvOut', m).innerHTML = `<div class="stack" style="gap:var(--s-3)">
       <div class="table-wrap" style="max-height:200px"><table class="table"><thead><tr><th>ستون فایل</th><th>تشخیص سامانه</th><th></th></tr></thead><tbody>${r.mapping.map((x) => `<tr><td>${esc(x.header)}</td><td><b>${esc(x.label)}</b></td><td class="tiny muted">${x.how === 'header' ? 'از روی عنوان' : 'از روی محتوا'}</td></tr>`).join('')}</tbody></table></div>
+      ${r.fee_month ? `<div class="tiny">ستون‌های ماه در فایل پیدا شد؛ وضعیت پرداخت از ستون <b>${esc(r.fee_month)}</b> خوانده شد.</div>` : ''}
       ${r.unmapped.length ? `<div class="tiny muted">ستون‌های نادیده‌گرفته‌شده: ${r.unmapped.map(esc).join('، ')}</div>` : ''}
       <div class="row wrap" style="gap:var(--s-2)"><span class="badge">${fa(r.total)} ردیف</span>
         <span class="badge green">${dry ? 'دانش‌آموز جدید' : 'ثبت‌شده'}: ${fa(dry ? r.valid : r.created)}</span>

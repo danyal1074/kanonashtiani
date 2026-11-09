@@ -168,7 +168,7 @@ export default function register(r) {
   r.post('/api/manager/students/import', M, async (ctx) => {
     const csv = String(ctx.body.csv || ''), xlsx_b64 = String(ctx.body.xlsx_b64 || '');
     if (!csv.trim() && !xlsx_b64) fail(400, 'فایل خالی است');
-    const dg = Number(ctx.body.default_grade), defaults = { grade: GRADES.includes(dg) ? dg : null, gender: ctx.body.default_gender === 'f' ? 'f' : ctx.body.default_gender === 'm' ? 'm' : null };
+    const dg = Number(ctx.body.default_grade), fg = Number(ctx.body.force_grade), defaults = { grade: GRADES.includes(dg) ? dg : null, forceGrade: GRADES.includes(fg) ? fg : null, lenient: !!ctx.body.lenient_nc, feeMonth: clampStr(ctx.body.fee_month, 20), gender: ctx.body.default_gender === 'f' ? 'f' : ctx.body.default_gender === 'm' ? 'm' : null };
     try { return await importStudents(ctx.user.center_id, xlsx_b64 ? { xlsx_b64 } : csv, { dryRun: !!ctx.body.dry_run, defaults }); } catch (e) { fail(e.status || 400, e.message); }
   });
   r.put('/api/manager/students/:id', M, (ctx) => {
