@@ -1,4 +1,4 @@
-// رندر public/teaser.html به ویدیوی MP4 (۱۰۸۰×۱۹۲۰، ۳۰ فریم) همراه با موسیقی.
+// رندر صفحه‌ی تیزر به ویدیوی MP4 (اندازه‌ی بوم صفحه، ۳۰ فریم) همراه با موسیقی.
 // پیش‌نیاز: playwright + ffmpeg، و یک سرور ایستا روی پوشه public:
 //   python3 -m http.server 8765 -d public &
 //   node scripts/teaser/render-video.cjs http://localhost:8765/teaser.html public/teaser/teaser.mp4
@@ -9,7 +9,7 @@ const [url = 'http://localhost:8765/teaser.html', out = 'public/teaser/teaser.mp
 const FPS = 30;
 (async () => {
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1920 } });
   await page.goto(url + '?render');
   await page.evaluate(() => window.teaserReady);
   const dur = await page.evaluate(() => window.TEASER_DURATION);
