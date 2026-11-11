@@ -47,9 +47,22 @@ function classroomFail(e) {
 }
 const ONLINE_URL_OK = (u) => { try { return /^https?:$/.test(new URL(u).protocol); } catch { return false; } };
 
+// فقط در نسخهٔ نمایشی (دمو) و وقتی سامانهٔ کلاس واقعی وصل نیست: کلاس‌های ساختگی برای ضبط ویدیوی آموزشی
+const demoMock = () => process.env.ROSHD_DEMO === '1' && !classroomEnabled();
+function demoClasses() {
+  const at = (h, m = 0, d = 0) => { const t = new Date(); t.setDate(t.getDate() + d); t.setHours(h, m, 0, 0); return t.toISOString(); };
+  return [
+    { classId: '00000000-0000-4000-8000-000000000001', title: 'ریاضی ششم: کسرها و اعداد اعشاری', subject: 'ریاضی', topic: 'جمع کسرها با مخرج‌های مختلف', grade: 6, teacherName: 'خانم احمدی', scheduledAt: at(new Date().getHours(), 0), durationMinutes: 60, live: true },
+    { classId: '00000000-0000-4000-8000-000000000002', title: 'علوم ششم: ماده و تغییرات آن', subject: 'علوم', topic: 'تغییر فیزیکی و شیمیایی', grade: 6, teacherName: 'آقای کریمی', scheduledAt: at(17, 0), durationMinutes: 45, live: false },
+    { classId: '00000000-0000-4000-8000-000000000003', title: 'زبان انگلیسی: مکالمهٔ روزمره', subject: 'زبان انگلیسی', topic: 'Daily routines', grade: 6, teacherName: 'خانم رضایی', scheduledAt: at(16, 30, 1), durationMinutes: 45, live: false },
+    { classId: '00000000-0000-4000-8000-000000000004', title: 'کارگاه رفع اشکال فارسی', subject: 'فارسی', topic: 'نگارش و انشا', grade: 6, teacherName: 'خانم موسوی', scheduledAt: at(18, 0, 2), durationMinutes: 60, live: false },
+  ];
+}
+
 export default function register(r) {
   // کلاس‌های آنلاین من: شناسهٔ دانش‌آموز فقط از نشست سرور گرفته می‌شود، نه از ورودی کلاینت
   r.get('/api/student/online-classes', S, async (ctx) => {
+    if (demoMock()) return { enabled: true, classes: demoClasses() };
     if (!classroomEnabled()) return { enabled: false, classes: [] };
     try { return { enabled: true, classes: await listClasses(ctx.user.id) }; } catch (e) { classroomFail(e); }
   });
@@ -57,6 +70,12 @@ export default function register(r) {
   r.post('/api/student/online-classes/:classId/join', S, async (ctx) => {
     const classId = String(ctx.params.classId);
     if (!/^[0-9a-fA-F-]{36}$/.test(classId)) fail(404, 'این کلاس پیدا نشد');
+    if (demoMock()) {
+      const c = demoClasses().find((x) => x.classId === classId);
+      if (!c) fail(404, 'این کلاس پیدا نشد');
+      if (!c.live) fail(409, 'این کلاس هنوز شروع نشده است؛ وقتی معلم کلاس را شروع کند می‌توانی وارد شوی');
+      return { url: '/demo-class.html' };
+    }
     try {
       const out = await joinTicket(ctx.user.id, classId);
       if (!ONLINE_URL_OK(out?.url)) fail(502, 'پاسخ نامعتبر از سامانهٔ کلاس آنلاین');
