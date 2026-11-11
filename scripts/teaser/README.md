@@ -51,3 +51,20 @@ python3 scripts/teaser/make-music-2.py /tmp/music2.wav
 ffmpeg -y -i /tmp/music2.wav -b:a 192k public/teaser2/teaser-music.mp3
 node scripts/teaser/render-video.cjs http://localhost:8765/teaser2.html public/teaser2/teaser.mp4
 ```
+
+---
+
+# تیزر سوم: «ماجراجویی بزرگ» (۳۸ ثانیه)
+
+ظاهر بازی‌های قدیمی پیکسلی (۸-بیتی): یه دانش‌آموز کوله‌به‌دوش تو مرحله می‌دوه، می‌پره، به جعبه‌های «؟» می‌زنه و ۵ آیتم جمع می‌کنه. آیتم‌ها در مخفی رو باز می‌کنن و «به‌زودی! مرحله‌ی جدید» میاد. موسیقی چیپ‌تیون با صدای سکه، پرش و پاورآپ.
+
+| آیتم | جایزه | اشاره به |
+|---|---|---|
+| ساعت جادویی | +۱۰ تمرکز | مطالعه و پومودورو |
+| کتاب بی‌پایان | +۱۰ دانش | کتابخانه |
+| سکه‌ی طلایی | +۵۰ امتیاز | سکه و فروشگاه |
+| نقشه‌ی گنج | مسیر مخفی باز شد! | مسیر یادگیری / نقشه راه |
+| جام قهرمانی | +۱۰۰ افتخار | کارنامه و نتایج |
+
+- `public/teaser3.html` (`/teaser3.html`)، `public/teaser3/teaser.mp4`، `public/teaser3/teaser-music.mp3`
+- موسیقی: `python3 scripts/teaser/make-music-3.py /tmp/music3.wav`

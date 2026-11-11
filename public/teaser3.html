@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ماجراجویی بزرگ</title>
+<meta name="description" content="۵ آیتم مخفی… یه در مرموز… و یه مرحله‌ی جدید که به‌زودی باز می‌شه!">
+<meta name="theme-color" content="#6ec6ff">
+<style>
+  @font-face { font-family: Vazirmatn; src: url('fonts/Vazirmatn.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+  :root { --sky: #6ec6ff; --ink: #222034; --yel: #ffd60a; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: var(--sky); color: #fff; font-family: Vazirmatn, Tahoma, sans-serif; overflow: hidden;
+    background-image: linear-gradient(45deg, rgba(255,255,255,.08) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.08) 75%), linear-gradient(45deg, rgba(255,255,255,.08) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.08) 75%);
+    background-size: 24px 24px; background-position: 0 0, 12px 12px; }
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  canvas#c { height: 100%; max-height: 100dvh; max-width: 100vw; aspect-ratio: 9 / 16; display: block; image-rendering: pixelated; outline: 6px solid var(--ink); }
+  .ui { position: fixed; inset: 0; display: grid; place-items: center; z-index: 5; transition: opacity .3s steps(3); }
+  .ui.hide { opacity: 0; pointer-events: none; }
+  .btn { font: inherit; font-weight: 900; font-size: 22px; color: var(--ink); background: var(--yel); border: 0; padding: 12px 26px; cursor: pointer; text-decoration: none; display: inline-block;
+    box-shadow: 0 -6px 0 0 var(--ink), 0 6px 0 0 var(--ink), -6px 0 0 0 var(--ink), 6px 0 0 0 var(--ink), 0 12px 0 0 rgba(0,0,0,.25); animation: blink 1s steps(2) infinite; }
+  .btn.sm { font-size: 16px; padding: 8px 16px; animation: none; background: #fff; }
+  .card { text-align: center; } .card p { margin-top: 22px; font-weight: 700; text-shadow: 3px 3px 0 var(--ink); }
+  .row { display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; }
+  @keyframes blink { 50% { filter: brightness(1.15); transform: translateY(-3px); } }
+  @media (prefers-reduced-motion: reduce) { .btn { animation: none; } }
+  #end { place-items: end center; padding-bottom: max(34px, env(safe-area-inset-bottom)); }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" width="1080" height="1920"></canvas></div>
+<div class="ui" id="start"><div class="card"><button class="btn" id="play">▶ شروع بازی</button><p>صدا رو زیاد کن 🔊</p></div></div>
+<div class="ui hide" id="end"><div class="row"><button class="btn sm" id="replay">↻ دوباره</button><a class="btn sm" href="teaser3/teaser.mp4" download="kanon-big-adventure.mp4">⬇ دانلود ویدیو</a></div></div>
+<audio id="music" src="teaser3/teaser-music.mp3" preload="auto"></audio>
+
+<script>
+(() => {
+'use strict';
+// timeline (هماهنگ با scripts/teaser/make-music-3.py)
+const DUR = 38, W = 1080, H = 1920, PX = 6, LW = 180, LH = 320;
+const T = { run: 6, stop: 27.6, open: 30, end: 36 };
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const lo = document.createElement('canvas'); lo.width = LW; lo.height = LH; const l = lo.getContext('2d');
+const logo = new Image(); logo.src = 'img/logo-ashtiani.png';
+const tiny = document.createElement('canvas'); const tctx = tiny.getContext('2d');
+
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lin = (t, a, b) => clamp((t - a) / (b - a));
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const fa = n => String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+const step = (x, n) => Math.round(x / n) * n;
+
+// ---------- sprites ----------
+const PAL = { k: '#222034', h: '#5a3420', s: '#f9c89b', e: '#222034', t: '#2ec4b6', a: '#ff8c42', p: '#3b5dc9', o: '#e63946', w: '#ffffff',
+  r: '#e63946', y: '#ffd60a', n: '#f6e2b3', g: '#2a9d8f', x: '#e63946', b: '#8d5524', l: '#c3a6ff', v: '#9b5de5', u: '#a1887f', d: '#6d4c41', c: '#ffe8a3' };
+const fix = rows => rows.map(r => (r + '............').slice(0, 12));
+const TOP = ['....kkkkk...', '...khhhhhk..', '..khhhhhhhk.', '..ksshhhhhk.', '..kesshhhk..', '..ksssshkak.', '...kssskaak.', '..kttttkaak.', '.kstttttkak.', '..kttttttk..', '..kppppppk..'];
+const CHAR = {
+  run1: fix([...TOP, '..kpppkppk..', '.kppk..kppk.', '.kpk....kpk.', 'koo.....koo.', 'kkk.....kkk.']),
+  run2: fix([...TOP, '...kppppk...', '...kpkkpk...', '...koo.koo..', '...kkk.kkk..', '............']),
+  jump: fix([...TOP.slice(0, 7), '.skttttkaak.', '.ktttttkak..', '..kttttttk..', '..kppppppk..', '.kppk.kppk..', 'kook...kook.', 'kkk.....kkk.', '............', '............']),
+  idle: fix([...TOP, '..kppkkppk..', '..kpk..kpk..', '..kpk..kpk..', '..koo..koo..', '..kkk..kkk..']),
+};
+const BLOCK = ['kkkkkkkkkkkk', 'kllllllllllk', 'klvvvyyyvvvk', 'klvvyvvvyvvk', 'klvvyvvvvvvk', 'klvvvyvvvvvk', 'klvvvvyvvvvk', 'klvvvvyvvvvk', 'klvvvvvvvvvk', 'klvvvvyvvvvk', 'kvvvvvvvvvvk', 'kkkkkkkkkkkk'];
+const USED = ['kkkkkkkkkkkk', 'kuuuuuuuuuuk', 'kudddddddduk', 'kuduuuuuuduk', 'kuduuuuuuduk', 'kuduuuuuuduk', 'kuduuuuuuduk', 'kuduuuuuuduk', 'kuduuuuuuduk', 'kudddddddduk', 'kuuuuuuuuuuk', 'kkkkkkkkkkkk'];
+const ITEMS = [
+  ['...kkkk...', '..krrrrk..', '.krwwwwrk.', 'krwwwkwwrk', 'krwwwkwwrk', 'krwwwkkkrk', 'krwwwwwwrk', '.krwwwwrk.', '..krrrrk..', '.kk.kk.kk.'],
+  ['..kkkkkkk.', '.krrrrrrk.', 'krrrrrrrk.', 'krrcccrrk.', 'krrrrrrrk.', 'krrcccrrk.', 'krrrrrrrkw', 'krrrrrrrkw', 'kkkkkkkkkw', '.wwwwwwww.'],
+  ['...kkkk...', '..kyyyyk..', '.kyywwyyk.', 'kyyywyyyyk', 'kyyywyyyyk', 'kyyywyyyyk', 'kyyywyyyyk', '.kyyyyyyk.', '..kyyyyk..', '...kkkk...'],
+  ['kkkkkkkkkk', 'knnnnnnnnk', 'knbnnnnnnk', 'knnbnnngnk', 'knnnbbnnnk', 'knnnnnbnnk', 'kngnnnnbnk', 'knnnnnnxnk', 'knnnnnnnnk', 'kkkkkkkkkk'],
+  ['kkkkkkkkkk', 'kyyyyyyyyk', 'kyywyyyyyk', '.kyyyyyyk.', '..kyyyyk..', '...kyyk...', '....kk....', '...kyyk...', '..kkkkkk..', '..kbbbbk..'],
+];
+const ITEM_TXT = [
+  { name: 'ساعت جادویی', bonus: '+۱۰ تمرکز' },
+  { name: 'کتاب بی‌پایان', bonus: '+۱۰ دانش' },
+  { name: 'سکه‌ی طلایی', bonus: '+۵۰ امتیاز' },
+  { name: 'نقشه‌ی گنج', bonus: 'مسیر مخفی باز شد!' },
+  { name: 'جام قهرمانی', bonus: '+۱۰۰ افتخار' },
+];
+function spr(c, rows, x, y, ps, flip = false) {
+  for (let j = 0; j < rows.length; j++) for (let i = 0; i < rows[j].length; i++) {
+    const ch = rows[j][flip ? rows[j].length - 1 - i : i]; if (ch === '.') continue;
+    c.fillStyle = PAL[ch]; c.fillRect(Math.round(x + i * ps), Math.round(y + j * ps), ps, ps);
+  }
+}
+
+// ---------- world geometry (lo-res units) ----------
+const GY = 268, CXL = 124, V = 50;
+const HIT = [0, 1, 2, 3, 4].map(i => T.run + 4 * i + 1.5);
+const scroll = t => V * (clamp(t, T.run, T.stop) - T.run);
+const BLK_W = HIT.map(th => CXL - 12 - V * (th - T.run));             // block left x (world)
+const COINS = HIT.flatMap(th => [th + 1.1, th + 1.5]);
+const COIN_W = COINS.map(tc => CXL - 3 - V * (tc - T.run));
+const DOOR_W = 30 - V * (T.stop - T.run);                              // door left x (world)
+const BLK_Y = GY - 32 - 30 - 24;
+
+function jumpY(t) { for (const th of HIT) { const u = t - (th - .35); if (u >= 0 && u < .7) return 30 * (1 - Math.pow((u - .35) / .35, 2)); } return 0; }
+function charFrame(t) {
+  if (t >= T.open + .2 && t < T.end) { const u = (t - T.open) % .5; return { f: u < .25 ? CHAR.jump : CHAR.idle, y: u < .25 ? 14 * Math.sin(u / .25 * Math.PI) : 0 }; }
+  if (t < T.run || t >= T.stop) return { f: CHAR.idle, y: (t < T.run && Math.floor(t * 2) % 2) ? 1 : 0 };
+  const j = jumpY(t); if (j > 0) return { f: CHAR.jump, y: j };
+  return { f: Math.floor(t * 10) % 2 ? CHAR.run1 : CHAR.run2, y: 0 };
+}
+
+function cloud(c, x, y, s) { c.fillStyle = '#fff'; c.fillRect(x, y + 4 * s, 28 * s, 6 * s); c.fillRect(x + 4 * s, y, 12 * s, 10 * s); c.fillRect(x + 12 * s, y - 3 * s, 10 * s, 13 * s);
+  c.fillStyle = '#d6efff'; c.fillRect(x, y + 9 * s, 28 * s, 1 * s); }
+function world(c, t, bright = 0) {
+  const sx = scroll(t);
+  const bands = ['#6ec6ff', '#7fcdff', '#90d4ff', '#a3dcff', '#b6e4ff', '#c9ecff'];
+  bands.forEach((b, i) => { c.fillStyle = b; c.fillRect(0, i * 40, LW, 40); });
+  c.fillStyle = '#c9ecff'; c.fillRect(0, 240, LW, 40);
+  // sun
+  c.fillStyle = '#fff3b0'; c.fillRect(20, 70, 22, 22); c.fillStyle = '#ffe066'; c.fillRect(24, 74, 14, 14);
+  // clouds (slow parallax)
+  for (let i = 0; i < 6; i++) { const x = ((hash(i) * 260 + sx * .15 + t * 2) % 260) - 50; cloud(c, Math.round(x), 50 + i * 30 + (i % 2) * 8, 1 + (i % 2)); }
+  // hills (mid parallax)
+  for (let i = -1; i < 6; i++) { const x = Math.round(((i * 60 + sx * .4) % 360) - 60), h = 30 + (i & 1) * 18;
+    c.fillStyle = '#5cc56b'; for (let k = 0; k < h; k += 4) c.fillRect(x + k * .6, GY - k, 60 - k * 1.2, 4);
+    c.fillStyle = '#7bd389'; c.fillRect(x + h * .6, GY - h, 6, 4); }
+  // ground
+  c.fillStyle = '#3fbf3f'; c.fillRect(0, GY, LW, 6); c.fillStyle = '#7ae07a'; for (let x = -16; x < LW + 16; x += 8) c.fillRect(Math.round(x + (sx % 8)), GY, 4, 2);
+  c.fillStyle = '#c47a3a'; c.fillRect(0, GY + 6, LW, LH - GY - 6);
+  c.fillStyle = '#a8612a'; for (let y = GY + 10; y < LH; y += 10) for (let x = -20; x < LW + 20; x += 20) c.fillRect(Math.round(x + (sx % 20) + ((y / 10) % 2) * 10), y, 6, 4);
+  // flowers / bushes on the ground line
+  for (let i = 0; i < 30; i++) { const x = Math.round(((i * 47 + sx) % 400) - 60); if (x < -10 || x > LW) continue;
+    if (i % 3 === 0) { c.fillStyle = '#2f9e44'; c.fillRect(x, GY - 6, 14, 6); c.fillRect(x + 3, GY - 9, 8, 3); }
+    else { c.fillStyle = '#2f9e44'; c.fillRect(x, GY - 4, 1, 4); c.fillStyle = ['#ff70a6', '#ffd60a', '#fff'][i % 3]; c.fillRect(x - 1, GY - 6, 3, 2); } }
+  // blocks
+  HIT.forEach((th, i) => { const x = Math.round(BLK_W[i] + sx); if (x < -30 || x > LW + 10) return;
+    const bump = t >= th && t < th + .15 ? -3 : 0; spr(c, t >= th ? USED : BLOCK, x, BLK_Y + bump, 2); });
+  // coins
+  COINS.forEach((tc, i) => { if (t >= tc) return; const x = Math.round(COIN_W[i] + sx); if (x < -10 || x > LW) return;
+    const w = Math.abs(Math.cos(t * 6 + i)); c.fillStyle = '#222034'; c.fillRect(x + 3 - Math.ceil(3 * w) - 1, GY - 22, Math.ceil(6 * w) + 2, 10); c.fillStyle = '#ffd60a'; c.fillRect(x + 3 - Math.ceil(3 * w), GY - 21, Math.ceil(6 * w), 8); });
+  // the secret door
+  const dx = Math.round(DOOR_W + sx);
+  if (dx > -80 && dx < LW) door(c, t, dx);
+  // character
+  const cf = charFrame(t); spr(c, cf.f, CXL - 12, GY - 32 - Math.round(cf.y), 2);
+  if (bright > 0) { c.fillStyle = `rgba(255,248,200,${bright})`; c.fillRect(0, 0, LW, LH); }
+}
+function door(c, t, x) {
+  const top = GY - 120;
+  c.fillStyle = '#8e9aaf'; c.fillRect(x - 14, top - 10, 92, 130);
+  c.fillStyle = '#6c7a93'; for (let y = top - 10; y < GY; y += 8) for (let k = 0; k < 92; k += 16) c.fillRect(x - 14 + k + ((y / 8) % 2) * 8, y, 1, 8), c.fillRect(x - 14, y, 92, 1);
+  for (let k = 0; k < 92; k += 12) { c.fillStyle = '#8e9aaf'; c.fillRect(x - 14 + k, top - 18, 8, 8); }
+  const open = lin(t, T.open, T.open + .6), half = 32;
+  // light behind
+  c.fillStyle = '#fff6c2'; c.fillRect(x, top + 10, 64, GY - top - 10);
+  c.fillStyle = '#ffe066'; c.fillRect(x + 8, top + 18, 48, GY - top - 18);
+  // two door halves slide apart
+  const off = Math.round(open * half);
+  [[x - off, 0], [x + half + off, 1]].forEach(([hx, side]) => {
+    c.save(); c.beginPath(); c.rect(x, top + 10, 64, GY - top - 10); c.clip();
+    c.fillStyle = '#6d4c41'; c.fillRect(hx, top + 10, half, GY - top - 10);
+    c.fillStyle = '#5d4037'; for (let k = 4; k < half; k += 8) c.fillRect(hx + k, top + 10, 2, GY - top - 10);
+    c.fillStyle = '#ffd60a'; c.fillRect(hx + (side ? 2 : half - 6), top + 60, 4, 6);
+    c.restore(); });
+  // lock with "؟" + slots filled by items
+  if (open === 0) {
+    const shake = t > 29.55 && t < 30 ? Math.round(Math.sin(t * 90) * 2) : 0;
+    c.fillStyle = '#222034'; c.fillRect(x + 22 + shake, top + 38, 20, 18); c.fillStyle = '#ffd60a'; c.fillRect(x + 24 + shake, top + 40, 16, 14);
+    c.fillStyle = '#222034'; c.fillRect(x + 31 + shake, top + 43, 2, 6);
+    for (let i = 0; i < 5; i++) { const got = t >= 28.0 + i * .3 + .3; c.fillStyle = got ? '#ffd60a' : '#3e2723'; c.fillRect(x + 8 + i * 10, top + 22, 6, 6); }
+  }
+  c.fillStyle = '#222034'; c.fillRect(x - 2, top + 8, 68, 2);
+}
+
+// ---------- hi-res overlay (text, HUD) ----------
+function ptxt(s, x, y, size, col = '#fff', o = {}) {
+  if (o.alpha === 0 || !s) return;
+  const c = ctx; c.save(); c.globalAlpha = o.alpha ?? 1;
+  c.font = `900 ${size}px Vazirmatn`; c.textAlign = o.align || 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+  const u = Math.max(4, Math.round(size / 14));
+  c.fillStyle = 'rgba(0,0,0,.25)'; c.fillText(s, x + u * 2, y + u * 3);
+  c.fillStyle = o.outline || '#222034';
+  for (let dx = -u; dx <= u; dx += u) for (let dy = -u; dy <= u + u; dy += u) c.fillText(s, x + dx, y + dy);
+  c.fillStyle = col; c.fillText(s, x, y);
+  c.restore();
+}
+const typed = (s, p) => { const ch = [...s]; return ch.slice(0, Math.ceil(ch.length * clamp(p))).join(''); };
+function pbox(x, y, w, h, fill = '#3b5dc9') {
+  const c = ctx, u = 12;
+  c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(x + u, y + u, w, h);
+  c.fillStyle = '#222034'; c.fillRect(x + u, y, w - 2 * u, h); c.fillRect(x, y + u, w, h - 2 * u);
+  c.fillStyle = '#fff'; c.fillRect(x + u * 2, y + u, w - 4 * u, h - 2 * u); c.fillRect(x + u, y + u * 2, w - 2 * u, h - 4 * u);
+  c.fillStyle = fill; c.fillRect(x + u * 2, y + u * 2, w - 4 * u, h - 4 * u);
+}
+const SLOT_X = i => 90 + i * 112, SLOT_Y = 150;
+function hud(t) {
+  if (t < T.run - .1 || t >= T.open + .3) return;
+  pbox(40, 90, 1000, 150, '#222034');
+  for (let i = 0; i < 5; i++) {
+    const x = SLOT_X(i), y = SLOT_Y;
+    ctx.fillStyle = '#3b3a5a'; ctx.fillRect(x, y - 6, 96, 96 - 12);
+    const arrive = HIT[i] + 1.4, used = 28.0 + i * .3;
+    if (t >= arrive && t < used) spr(ctx, ITEMS[i], x + 18, y + 3, 6);
+  }
+  let score = 0; COINS.forEach(tc => { if (t >= tc) score += 10; }); HIT.forEach(th => { if (t >= th + .1) score += 100; });
+  ptxt('امتیاز', 870, 145, 40, '#ffd60a');
+  ptxt(fa(String(score).padStart(5, '0')), 870, 200, 46, '#fff');
+}
+function flyingItems(t) {
+  HIT.forEach((th, i) => {
+    const u = t - th; if (u < 0 || u > 1.4) return;
+    const sx = (BLK_W[i] + scroll(t) + 2) * PX, sy = (BLK_Y - 22) * PX;
+    if (u < .35) { const k = u / .35; spr(ctx, ITEMS[i], sx, sy + (1 - k) * 60 - Math.sin(k * Math.PI) * 40, 12); return; }
+    if (u < .8) { spr(ctx, ITEMS[i], sx, sy + Math.sin(u * 20) * 6, 12); return; }
+    const k = (u - .8) / .6, e = k * k * (3 - 2 * k);
+    const tx = SLOT_X(i) + 18, ty = SLOT_Y + 3;
+    spr(ctx, ITEMS[i], sx + (tx - sx) * e, sy + (ty - sy) * e - Math.sin(e * Math.PI) * 200, 12 - 6 * e);
+  });
+  // items fly from slots into the door
+  for (let i = 0; i < 5; i++) { const t0 = 28.0 + i * .3, u = t - t0; if (u < 0 || u > .3) continue;
+    const dx = (DOOR_W + scroll(t) + 8 + i * 10) * PX, dy = (GY - 120 + 22) * PX, e = u / .3;
+    spr(ctx, ITEMS[i], SLOT_X(i) + 18 + (dx - SLOT_X(i) - 18) * e, SLOT_Y + (dy - SLOT_Y) * e - Math.sin(e * Math.PI) * 300, 6); }
+}
+function caption(t) {
+  HIT.forEach((th, i) => {
+    const u = t - th - .15; if (u < 0 || u > 2.6) return;
+    const s = u < .12 ? u / .12 : u > 2.45 ? (2.6 - u) / .15 : 1;
+    const h = 330 * s; pbox(100, 470 + (330 - h) / 2, 880, Math.max(48, h));
+    if (s < 1) return;
+    ptxt(`آیتم ${fa(i + 1)} از ۵ پیدا شد!`, CX, 545, 44, '#ffd60a');
+    ptxt(typed(ITEM_TXT[i].name, lin(u, .15, .6)), CX, 640, 84, '#fff');
+    ptxt(ITEM_TXT[i].bonus, CX, 740, 54, '#7ae07a', { alpha: u > .7 ? (Math.floor(u * 6) % 2 || u > 1.2 ? 1 : .3) : 0 });
+  });
+}
+const CX = W / 2;
+
+function overlayIntro(t) {
+  pbox(90, 300, 900, 560, '#9b5de5');
+  ptxt('ماجراجویی بزرگ', CX, 430, 104, '#ffd60a');
+  ptxt('یه بازی تازه داره میاد…', CX, 560, 56, '#fff', { alpha: lin(t, .3, .5) });
+  if (t < 2) {
+    ptxt('سکه بنداز!', CX, 720, 64, '#fff', { alpha: Math.floor(t * 3) % 2 ? 1 : .35 });
+    const k = lin(t, .6, 1.0); if (t < 1.0) spr(ctx, ITEMS[2], CX - 60, 1000 + k * 120, 12);
+  } else if (t < 4) {
+    ptxt('بازیکن ۱:', CX + 70, 720, 64, '#fff', { alpha: lin(t, 2.0, 2.1) });
+    ptxt('تو!', CX - 170, 720, 80, '#ffd60a', { alpha: lin(t, 2.75, 2.8) });
+  }
+  if (t >= 4) {
+    const k = Math.min(3, Math.floor((t - 4) / .5)), u = ((t - 4) % .5) / .5, s = 1.6 - .6 * Math.min(1, u * 3);
+    const txt = ['۳', '۲', '۱', 'برو!'][k];
+    ctx.save(); ctx.translate(CX, 1120); ctx.scale(s, s); ptxt(txt, 0, 0, k < 3 ? 200 : 170, k < 3 ? '#fff' : '#ffd60a'); ctx.restore();
+    if (k < 3) ptxt('آماده باش…', CX, 720, 64, '#fff');
+  }
+}
+function overlayDoor(t) {
+  const u = t - T.stop; if (u < 0 || t >= T.open + .3) return;
+  pbox(100, 470, 880, 330, '#e63946');
+  ptxt(typed('همه‌ی آیتم‌ها پیدا شد!', lin(u, .2, .8)), CX, 580, 66, '#fff');
+  ptxt(t < 29.2 ? '' : typed('یه در مخفی داره باز می‌شه…', lin(t, 29.2, 29.8)), CX, 700, 52, '#ffd60a');
+}
+
+// pixel fireworks
+function fireworks(t) {
+  [[30.0, 260, 640, '#ffd60a'], [30.2, 820, 520, '#ff70a6'], [32.0, 200, 1100, '#2ec4b6'], [32.1, 880, 1000, '#ffd60a'], [34.0, 300, 420, '#ff8c42'], [34.1, 800, 380, '#9b5de5']]
+    .forEach(([t0, x, y, col], j) => { const u = t - t0; if (u < 0 || u > 1.2) return;
+      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, d = 40 + u * 360, fall = u * u * 200;
+        ctx.globalAlpha = 1 - u / 1.2; ctx.fillStyle = i % 2 ? col : '#fff';
+        ctx.fillRect(step(x + Math.cos(a) * d, 12), step(y + Math.sin(a) * d + fall, 12), 24, 24); }
+      ctx.globalAlpha = 1; });
+}
+function overlayReveal(t) {
+  const p = t - T.open; if (p < .6) return;
+  // rays
+  ctx.save(); ctx.translate(CX, 700); ctx.rotate(Math.floor(t * 4) * .05);
+  for (let i = 0; i < 12; i++) { ctx.rotate(Math.PI / 6); ctx.fillStyle = i % 2 ? 'rgba(255,214,10,.35)' : 'rgba(255,255,255,.35)'; ctx.fillRect(-36, -1400, 72, 1400); }
+  ctx.restore();
+  fireworks(t);
+  const bounce = Math.abs(Math.sin((t - T.open) * Math.PI * 2)) * 24;
+  const s = p < .9 ? (p - .6) / .3 * 1.2 : p < 1.05 ? 1.2 - (p - .9) / .15 * .2 : 1;
+  ctx.save(); ctx.translate(CX, 520 - bounce); ctx.scale(s, s); ptxt('به‌زودی!', 0, 0, 210, '#ffd60a'); ctx.restore();
+  ptxt('مرحله‌ی جدید', CX, 760, 92, '#fff', { alpha: p > 1.2 ? 1 : 0 });
+  ptxt('برای دانش‌آموزای کانون', CX, 870, 62, '#fff', { alpha: p > 1.7 ? 1 : 0, outline: '#3b5dc9' });
+  // logo: pixelated → sharp
+  if (p > 2) {
+    const k = lin(p, 2.0, 3.6), n = Math.round(8 + Math.pow(k, 2) * 300), sz = 330, x = CX - sz / 2, y = 1000;
+    pbox(x - 36, y - 36, sz + 72, sz + 72, '#ffffff');
+    if (logo.complete && logo.naturalWidth) { tiny.width = n; tiny.height = n; tctx.imageSmoothingEnabled = true; tctx.drawImage(logo, 0, 0, n, n);
+      ctx.imageSmoothingEnabled = k > .98; ctx.drawImage(tiny, x, y, sz, sz); ctx.imageSmoothingEnabled = false; }
+  }
+  ptxt('کانون نخبه‌پروری شهید کاظم آشتیانی', CX, 1430, 42, '#fff', { alpha: p > 3.4 ? 1 : 0 });
+  if (p > 4) ptxt('آماده‌ای قهرمان؟', CX, 1745, 74, '#ffd60a', { alpha: Math.floor(t * 4) % 4 ? 1 : .5, outline: '#e63946' });
+  if (t >= T.end + .2) ptxt('ادامه دارد…', CX, 1860, 48, '#fff', { alpha: Math.floor(t * 3) % 2 ? 1 : .2 });
+}
+
+function render(t) {
+  t = clamp(t, 0, DUR);
+  l.imageSmoothingEnabled = false; ctx.imageSmoothingEnabled = false;
+  const bright = t < T.open ? 0 : t < T.open + .6 ? lin(t, T.open + .3, T.open + .6) : Math.max(0, 1 - (t - T.open - .6) * 2) * 1;
+  world(l, t, bright);
+  if (t >= T.open + .6) { l.fillStyle = 'rgba(255,240,180,.0)'; }
+  ctx.drawImage(lo, 0, 0, W, H);
+  if (t >= T.open + .6) { ctx.fillStyle = 'rgba(80,60,180,.18)'; ctx.fillRect(0, 0, W, 1560); }
+  if (t < T.run) overlayIntro(t);
+  hud(t); flyingItems(t); caption(t); overlayDoor(t);
+  if (t >= T.open) overlayReveal(t);
+  // fade at the very end
+  if (t > DUR - .8) { ctx.fillStyle = `rgba(110,198,255,${lin(t, DUR - .8, DUR)})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- player ----------
+const RENDER = new URLSearchParams(location.search).has('render');
+const audio = document.getElementById('music');
+window.teaserReady = Promise.all([document.fonts.load('900 40px Vazirmatn').then(() => document.fonts.ready),
+  new Promise(r => { if (logo.complete) r(); else { logo.onload = r; logo.onerror = r; } })]);
+window.renderAt = t => { render(t); return cv.toDataURL('image/jpeg', .92); };
+window.TEASER_DURATION = DUR;
+if (RENDER) { document.querySelectorAll('.ui').forEach(e => e.remove()); cv.style.cssText = 'height:auto;width:1080px;max-width:none;max-height:none;outline:none'; return; }
+window.teaserReady.then(() => render(1.5));
+const start = document.getElementById('start'), end = document.getElementById('end'); let raf = 0;
+function loop() { const t = audio.currentTime; render(t); if (audio.ended || t >= DUR - .05) { end.classList.remove('hide'); return; } raf = requestAnimationFrame(loop); }
+function play() { start.classList.add('hide'); end.classList.add('hide'); audio.currentTime = 0; audio.play().catch(() => {}); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop); }
+document.getElementById('play').onclick = play; document.getElementById('replay').onclick = play;
+})();
+</script>
+</body>
+</html>
