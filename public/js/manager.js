@@ -114,7 +114,7 @@ async function students(el) {
   const fillClasses = () => { $('#fc', el).innerHTML = `<option value="">همه کلاس‌ها</option>${md.classes.filter((c) => !q.grade || c.grade === Number(q.grade)).map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}`; };
   fillClasses();
   const rowHtml = (s) => `<tr><td class="click" data-view="${s.id}"><b>${esc(s.full_name)}</b></td><td class="num">${fa(s.national_code)}</td><td>${gradeName(s.grade)} ${esc(s.class_name || '—')}</td><td class="small">${esc(s.school || '')}</td><td class="num">${fa(s.parent_phone)}</td>
-    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td><td><div class="row" style="gap:4px"><button class="icon-btn" data-sms="${s.id}" title="ارسال پیامک" aria-label="ارسال پیامک">${icon('message', { size: 16 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
+    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td><td><div class="row" style="gap:4px"><button class="icon-btn" data-imp="${s.id}" title="ورود به پنل دانش‌آموز" aria-label="ورود به پنل دانش‌آموز">${icon('eye', { size: 16 })}</button><button class="icon-btn" data-sms="${s.id}" title="ارسال پیامک" aria-label="ارسال پیامک">${icon('message', { size: 16 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
   let seq = 0;
   const load = async (append) => {
     const my = ++seq;
@@ -181,6 +181,7 @@ async function students(el) {
     const s = rows.find((x) => x.id === Number(b.dataset.edit));
     modal({ title: `${icon('edit', { size: 16 })} ویرایش ${esc(s.full_name)}`, wide: true, body: studentForm(md, s) + '<button class="btn ghost sm" id="resetPw" style="margin-top:12px"> بازنشانی رمز به کد ملی</button>', onOpen: (m) => { bindStudentForm(m, md, s); $('#resetPw', m).onclick = (ev) => busy(ev.target, async () => { await post(`/api/manager/students/${s.id}/reset-password`); toast('رمز به کد ملی بازنشانی شد', 'ok'); }); }, actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: ' ذخیره', onClick: (m) => save(m, s.id) }] });
   });
+  on(el, 'click', '[data-imp]', (e, b) => busy(b, async () => { await post(`/api/manager/students/${b.dataset.imp}/impersonate`); location.hash = '#/home'; location.reload(); }));
   on(el, 'click', '[data-del]', async (e, b) => {
     const s = rows.find((x) => x.id === Number(b.dataset.del));
     if (await confirmBox(`«${esc(s.full_name)}» و همه سوابقش (امتیاز، آزمون، پرداخت) برای همیشه حذف شود؟`, 'حذف دانش‌آموز')) { await del(`/api/manager/students/${s.id}`); toast('حذف شد', 'ok'); metaCache = null; load(); }
