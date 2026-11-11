@@ -570,6 +570,11 @@ check('تحلیل داشبورد فقط برای مدیر است', (await call(S
 check('شمارندهٔ اعلان رسیدها', (await call(S.manager.ck, 'GET', '/api/manager/badges')).data.pending_receipts >= 0);
 check('فیلتر وضعیت پرداخت در فهرست دانش‌آموزان', (await call(S.manager.ck, 'GET', '/api/manager/students?pay=paid&limit=100')).data.rows.every((x) => x.pay === 'paid'));
 
+check('پیش‌فرض ظاهر پنل مدیر «جدید» است', (await call(S.manager.ck, 'GET', '/api/me')).data.ui_look === 'new');
+check('مدیر ظاهر کلاسیک را انتخاب می‌کند و ماندگار است', (await call(S.manager.ck, 'PUT', '/api/me/look', { look: 'classic' })).status === 200 && (await call(S.manager.ck, 'GET', '/api/me')).data.ui_look === 'classic');
+check('ظاهر نامعتبر رد می‌شود و دانش‌آموز نمی‌تواند ظاهر مدیر را عوض کند', (await call(S.manager.ck, 'PUT', '/api/me/look', { look: 'x' })).status === 400 && (await call(S.student.ck, 'PUT', '/api/me/look', { look: 'new' })).status === 403);
+await call(S.manager.ck, 'PUT', '/api/me/look', { look: 'new' });
+
 app.kill();
 await new Promise((r) => setTimeout(r, 300));
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* */ }

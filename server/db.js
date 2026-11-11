@@ -682,6 +682,11 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
   () => {},
   // صف حذف دانش‌آموزان برای «کلاس آنلاین»: اگر سرویس در دسترس نبود، بعداً دوباره تلاش می‌شود
   (database) => { database.exec('CREATE TABLE IF NOT EXISTS classroom_removals (ext_id TEXT PRIMARY KEY, created_at TEXT DEFAULT (datetime(\'now\')))'); },
+  // ظاهر پنل مدیر به‌ازای هر کاربر: 'new' یا 'classic' (خالی = پیش‌فرض سامانه)
+  (database) => {
+    const cols = database.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    if (!cols.includes('ui_look')) database.exec('ALTER TABLE users ADD COLUMN ui_look TEXT');
+  },
 ];
 
 export function migrate(database = db) {

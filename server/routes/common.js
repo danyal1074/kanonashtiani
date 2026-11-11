@@ -90,6 +90,13 @@ export default function register(r) {
     return { ok: true };
   });
 
+  // انتخاب ظاهر پنل مدیر (فقط برای خود مدیر)؛ مقدار دیگری پذیرفته نمی‌شود
+  r.put('/api/me/look', { roles: ['manager'], allowLocked: true }, (ctx) => {
+    const look = ctx.body.look === 'classic' ? 'classic' : ctx.body.look === 'new' ? 'new' : null;
+    if (!look) fail(400, 'ظاهر نامعتبر است');
+    run('UPDATE users SET ui_look=? WHERE id=?', look, ctx.user.id);
+    return { ok: true, look };
+  });
   r.get('/api/me', { allowLocked: true }, (ctx) => {
     const u = ctx.user;
     const out = { user: u, impersonator: ctx.impersonator, center: u.center_id ? centerOf(u.center_id) : null, today: ymd(), must_change_password: !!u.must_change_password };
@@ -102,6 +109,8 @@ export default function register(r) {
     if (u.role === 'parent') out.children = all(`SELECT u.id, u.full_name, s.grade, s.avatar, c.name class_name FROM parent_children pc JOIN users u ON u.id=pc.student_id JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE pc.parent_id=? ORDER BY s.grade`, u.id);
     out.unseen = u.role === 'manager' || u.role === 'admin' ? [] : announcementsFor(u).filter((a) => !a.seen_at).reverse();
     out.unread = get('SELECT COUNT(*) n FROM messages WHERE to_id=? AND read_at IS NULL', u.id).n;
+    // ظاهر پنل مدیر: انتخاب خود کاربر؛ بدون انتخاب، ظاهر جدید
+    if (u.role === 'manager') out.ui_look = get('SELECT ui_look FROM users WHERE id=?', u.id)?.ui_look === 'classic' ? 'classic' : 'new';
     return out;
   });
 

@@ -1,5 +1,6 @@
 // پوستهٔ تازهٔ پنل مدیر کانون: منوی گروه‌بندی‌شده، نوار بالا با جست‌وجو و اعلان، منوی موبایل.
 import { esc, icon, nameAvatar, logoHtml, api, fa, ROLE_NAMES } from './core.js';
+import { lookToggleHtml } from './look.js';
 
 // طرح نهایی: «B آموزشی» (انتخاب مدیر). صفت data-concept برای انتخابگرهای CSS ثابت می‌ماند.
 const CONCEPT = 'b';
@@ -48,6 +49,7 @@ export function managerShellHtml(me, nav, bottom) {
         <a class="ad-brand" href="#/home" aria-label="داشبورد"><span class="ad-logo">${logoHtml(c?.logo || '/img/logo-ashtiani.png')}</span><span class="ad-brand-t"><b>${esc(c?.name || 'کانون آشتیانی')}</b><small>پنل مدیریت</small></span></a>
         <nav class="ad-nav" aria-label="منوی اصلی">${navHtml}</nav>
         <div class="ad-foot">
+          ${lookToggleHtml('new')}
           <div class="ad-foot-nav">${[byPath.get('/settings'), byPath.get('/account')].filter(Boolean).map(item).join('')}
             <button class="nav-item" id="logoutBtn" type="button"><span class="ni">${icon('logout', { size: 19 })}</span><span class="nl">خروج</span></button></div>
         </div>
