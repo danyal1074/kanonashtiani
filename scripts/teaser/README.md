@@ -25,3 +25,29 @@ python3 -m http.server 8765 -d public &
 node scripts/teaser/render-video.cjs http://localhost:8765/teaser.html public/teaser/teaser.mp4
 ```
 متن‌ها در آرایه‌ی `HINTS` و تابع‌های `scene*` داخل `public/teaser.html` هستند.
+
+---
+
+# تیزر دوم: «دفترچه‌ی راز» (۳۸ ثانیه)
+
+ظاهر کاملاً متفاوت: کاغذ دفتر خط‌دار، نقاشی‌هایی که با مداد کشیده می‌شن، رنگ‌آمیزی با مداد شمعی، کاغذ یادداشت و چسب، ورق خوردن صفحه‌ها.
+به‌جای «سرنخ»، ۵ «چیستان» می‌پرسه که جوابشون گفته نمی‌شه. آخرش قفل باز می‌شه و «به‌زودی!» میاد.
+
+| چیستان | متن | اشاره به |
+|---|---|---|
+| ۱ | چیه که هم کلاسه… هم تو خونه‌ست؟ | کلاس آنلاین |
+| ۲ | چیه که قصه می‌گه، بازی می‌کنه… ولی آدم نیست؟ | بازی و داستان |
+| ۳ | چیه که هر بار تلاش کنی، جیبت پرتر می‌شه؟ | سکه و فروشگاه |
+| ۴ | چیه که می‌دونه فردا باید چی بخونی؟ | برنامه و مسیر یادگیری |
+| ۵ | چیه که پر از کتابه… ولی تو جیبت جا می‌شه؟ | کتابخانه |
+
+موسیقی: پیتزیکاتوی یواشکی، بعد ماریمبا و سوت شاد، صدای مداد و ورق (`scripts/teaser/make-music-2.py`).
+
+- `public/teaser2.html`: نسخه‌ی وب (`/teaser2.html`)
+- `public/teaser2/teaser.mp4` و `public/teaser2/teaser-music.mp3`
+
+```bash
+python3 scripts/teaser/make-music-2.py /tmp/music2.wav
+ffmpeg -y -i /tmp/music2.wav -b:a 192k public/teaser2/teaser-music.mp3
+node scripts/teaser/render-video.cjs http://localhost:8765/teaser2.html public/teaser2/teaser.mp4
+```

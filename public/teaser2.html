@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>دفترچه‌ی راز</title>
+<meta name="description" content="۵ تا چیستان… و یه راز که به‌زودی باز می‌شه!">
+<meta name="theme-color" content="#fdf6e3">
+<style>
+  @font-face { font-family: Vazirmatn; src: url('fonts/Vazirmatn.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+  :root { --paper: #fdf6e3; --ink: #2b3a67; --red: #e63946; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; color: var(--ink); font-family: Vazirmatn, Tahoma, sans-serif; overflow: hidden;
+    background: #e9dcc0 repeating-linear-gradient(45deg, rgba(255,255,255,.12) 0 12px, transparent 12px 24px); }
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  canvas#c { height: 100%; max-height: 100dvh; max-width: 100vw; aspect-ratio: 9 / 16; display: block; box-shadow: 0 12px 40px rgba(60,40,10,.35); transform: rotate(-.6deg); }
+  .ui { position: fixed; inset: 0; display: grid; place-items: center; z-index: 5; transition: opacity .5s; }
+  .ui.hide { opacity: 0; pointer-events: none; }
+  .note { background: #ffe66d; padding: 22px 26px 18px; transform: rotate(-3deg); box-shadow: 0 8px 18px rgba(0,0,0,.2); text-align: center; position: relative; }
+  .note::before { content: ''; position: absolute; top: -14px; left: 50%; width: 110px; height: 28px; margin-left: -55px; background: rgba(255,255,255,.6); transform: rotate(4deg); }
+  .note p { font-size: 14px; font-weight: 600; margin-top: 10px; }
+  .btn { font: inherit; font-weight: 900; font-size: 22px; color: var(--ink); background: #fff; border: 3px solid var(--ink); border-radius: 14px 10px 16px 9px; padding: 10px 28px; cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn:hover { background: #fff7d1; }
+  .btn.sm { font-size: 15px; padding: 8px 18px; }
+  .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  #end { place-items: end center; padding-bottom: max(28px, env(safe-area-inset-bottom)); }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" width="1080" height="1920"></canvas></div>
+<div class="ui" id="start"><div class="note"><button class="btn" id="play">▶ باز کن!</button><p>صدا رو زیاد کن 🔊</p></div></div>
+<div class="ui hide" id="end"><div class="note row"><button class="btn sm" id="replay">↻ دوباره</button><a class="btn sm" href="teaser2/teaser.mp4" download="kanon-secret-notebook.mp4">⬇ دانلود ویدیو</a></div></div>
+<audio id="music" src="teaser2/teaser-music.mp3" preload="auto"></audio>
+
+<script>
+(() => {
+'use strict';
+// timeline (هماهنگ با scripts/teaser/make-music-2.py): ۱۲۰ BPM، هر میزان ۲ ثانیه
+const BEAT = .5, DUR = 38, W = 1080, H = 1920, CX = W / 2;
+const T = { riddles: 6, build: 26, reveal: 30, end: 36 };
+const INK = '#2b3a67', RED = '#e63946', BLUE = '#3a86ff', GREEN = '#2a9d8f', ORANGE = '#f77f00', PINK = '#ff70a6', YEL = '#ffd60a', PURPLE = '#8338ec';
+const NOTE = ['#ffe66d', '#ffb3c6', '#a0e7e5', '#caffbf', '#ffd6a5'];
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const pageBuf = document.createElement('canvas'); pageBuf.width = W; pageBuf.height = H; const pctx = pageBuf.getContext('2d');
+const logo = new Image(); logo.src = 'img/logo-ashtiani.png';
+
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lin = (t, a, b) => clamp((t - a) / (b - a));
+const eo = x => 1 - Math.pow(1 - x, 3);
+const back = x => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+
+// ---------- hand-drawn stroke toolkit ----------
+let BOIL = 0;   // changes 10×/s => "boiling" hand-animated lines
+function dense(pts, closed) {
+  const out = []; const P = closed ? [...pts, pts[0]] : pts;
+  for (let i = 0; i < P.length - 1; i++) {
+    const [x1, y1] = P[i], [x2, y2] = P[i + 1], n = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 12));
+    for (let k = 0; k < n; k++) out.push([x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n]);
+  }
+  out.push(P[P.length - 1]); return out;
+}
+const circ = (x, y, r, a0 = 0, a1 = Math.PI * 2, ry = r) => { const n = Math.max(12, Math.ceil(Math.abs(a1 - a0) * Math.max(r, ry) / 12)); return Array.from({ length: n + 1 }, (_, i) => { const a = a0 + (a1 - a0) * i / n; return [x + Math.cos(a) * r, y + Math.sin(a) * ry]; }); };
+const line = (x1, y1, x2, y2) => dense([[x1, y1], [x2, y2]]);
+const rect = (x, y, w, h) => dense([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], true);
+const poly = (p, closed) => dense(p, closed);
+const S = (pts, col = INK, w = 9, fill) => ({ pts, col, w, fill });
+
+function wob(i, k) { return (hash(i * 13.7 + BOIL * 7.3 + k) - .5) * 4; }
+function strokePath(c, pts, n, seed) {
+  c.beginPath();
+  for (let i = 0; i < n; i++) { const [x, y] = pts[i]; const X = x + wob(i + seed, 1), Y = y + wob(i + seed, 2); i ? c.lineTo(X, Y) : c.moveTo(X, Y); }
+}
+// crayon hatch fill clipped to the shape
+function crayon(c, pts, col, p, seed) {
+  if (p <= 0) return;
+  const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  c.save(); c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.clip();
+  c.strokeStyle = col; c.globalAlpha *= .85; c.lineWidth = 16; c.lineCap = 'round'; c.lineJoin = 'round';
+  const gap = 14, n = Math.ceil((x1 - x0 + y1 - y0) / gap), m = Math.floor(n * p);
+  c.beginPath();
+  for (let i = 0; i < m; i++) { const d = i * gap; const ax = x0 + d, by = y0 + d;
+    const j = (hash(i + seed + BOIL) - .5) * 6;
+    if (i % 2) { c.moveTo(Math.min(ax, x1) + j, ax > x1 ? y0 + (ax - x1) : y0); c.lineTo(x0, Math.min(by, y1) + j); }
+    else { c.moveTo(x0 + j, Math.min(by, y1)); c.lineTo(Math.min(ax, x1), ax > x1 ? y0 + (ax - x1) : y0); } }
+  c.stroke(); c.restore();
+}
+// draw a doodle (list of strokes) up to progress p, pencil at the tip
+function doodle(c, strokes, p, o = {}) {
+  const total = strokes.reduce((s, k) => s + k.pts.length, 0); let budget = Math.floor(total * clamp(p)), tip = null, seed = 0;
+  c.save(); if (o.x != null) { c.translate(o.x, o.y); c.scale(o.s || 1, o.s || 1); if (o.rot) c.rotate(o.rot); }
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  // fills first (under the lines), they colour in after each outline is done
+  let acc = 0;
+  for (const k of strokes) { const done = clamp((budget - acc) / k.pts.length); if (k.fill) crayon(c, k.pts, k.fill, o.fillAll ? 1 : done >= 1 ? clamp((p - (acc + k.pts.length) / total) * 6 + .2) : 0, acc); acc += k.pts.length; }
+  for (const k of strokes) {
+    seed += 31; if (budget <= 0) break;
+    const n = Math.min(k.pts.length, budget); budget -= n;
+    c.strokeStyle = k.col; c.lineWidth = k.w; strokePath(c, k.pts, n, seed); c.stroke();
+    if (n < k.pts.length || budget === 0) tip = k.pts[n - 1];
+  }
+  if (tip && p < 1 && o.pencil !== false) pencil(c, tip[0], tip[1]);
+  c.restore();
+}
+function pencil(c, x, y) {
+  c.save(); c.translate(x, y); c.rotate(-.75); c.lineWidth = 4; c.strokeStyle = INK;
+  c.fillStyle = '#f4d58d'; c.beginPath(); c.moveTo(0, 0); c.lineTo(18, -40); c.lineTo(-18, -40); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = INK; c.beginPath(); c.moveTo(0, 0); c.lineTo(6, -13); c.lineTo(-6, -13); c.closePath(); c.fill();
+  c.fillStyle = '#ffb703'; c.fillRect(-18, -230, 36, 190); c.strokeRect(-18, -230, 36, 190);
+  c.fillStyle = '#adb5bd'; c.fillRect(-18, -255, 36, 25); c.strokeRect(-18, -255, 36, 25);
+  c.fillStyle = '#ff8fab'; c.fillRect(-18, -285, 36, 30); c.strokeRect(-18, -285, 36, 30);
+  c.restore();
+}
+
+// handwritten-ish text: written right→left (wipe), with a marker highlight behind
+function write(c, s, x, y, size, p, o = {}) {
+  if (p <= 0 || !s) return;
+  c.save(); c.translate(x, y); c.rotate(o.rot ?? (hash(s.length) - .5) * .05);
+  c.font = `${o.weight || 900} ${size}px Vazirmatn`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+  const w = c.measureText(s).width;
+  if (o.hl) { c.fillStyle = o.hl; c.globalAlpha = .75; const hw = (w + 40) * eo(clamp(p * 1.3)); c.beginPath(); c.roundRect(w / 2 + 20 - hw, -size * .32, hw, size * .72, 10); c.fill(); c.globalAlpha = 1; }
+  c.beginPath(); const vis = (w + 20) * clamp(p); c.rect(w / 2 + 10 - vis, -size, vis, size * 2); c.clip();
+  c.fillStyle = o.col || INK; c.fillText(s, 0, 0);
+  c.restore();
+}
+function sticky(c, x, y, w, h, col, rot, s = 1) {
+  c.save(); c.translate(x, y); c.rotate(rot); c.scale(s, s);
+  c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(-w / 2 + 8, -h / 2 + 12, w, h);
+  c.fillStyle = col; c.fillRect(-w / 2, -h / 2, w, h);
+  c.fillStyle = 'rgba(0,0,0,.06)'; c.beginPath(); c.moveTo(w / 2, h / 2 - 40); c.lineTo(w / 2, h / 2); c.lineTo(w / 2 - 40, h / 2); c.fill();
+  tape(c, 0, -h / 2, 150, -.06);
+  c.restore();
+}
+function tape(c, x, y, w, rot) { c.save(); c.translate(x, y); c.rotate(rot); c.fillStyle = 'rgba(255,255,255,.55)'; c.strokeStyle = 'rgba(0,0,0,.08)'; c.lineWidth = 2; c.fillRect(-w / 2, -20, w, 40); c.strokeRect(-w / 2, -20, w, 40); c.restore(); }
+
+// ---------- paper ----------
+const grain = (() => { const g = document.createElement('canvas'); g.width = 256; g.height = 256; const x = g.getContext('2d'), im = x.createImageData(256, 256);
+  for (let i = 0; i < im.data.length; i += 4) { const v = 120 + hash(i * .31) * 80; im.data[i] = v; im.data[i + 1] = v * .95; im.data[i + 2] = v * .8; im.data[i + 3] = 14; } x.putImageData(im, 0, 0); return g; })();
+function paper(c, tint = '#fdf6e3') {
+  c.fillStyle = tint; c.fillRect(0, 0, W, H);
+  c.fillStyle = c.createPattern(grain, 'repeat'); c.fillRect(0, 0, W, H);
+  c.strokeStyle = 'rgba(58,134,255,.22)'; c.lineWidth = 3;
+  for (let y = 260; y < H; y += 72) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  c.strokeStyle = 'rgba(230,57,70,.45)'; c.lineWidth = 4; c.beginPath(); c.moveTo(W - 120, 0); c.lineTo(W - 120, H); c.stroke();
+  // spiral binding
+  for (let i = 0; i < 12; i++) { const x = 70 + i * 86; c.fillStyle = '#d9cfb8'; c.beginPath(); c.arc(x, 70, 18, 0, 7); c.fill();
+    c.strokeStyle = '#8d99ae'; c.lineWidth = 9; c.beginPath(); c.arc(x, 40, 30, Math.PI * .15, Math.PI * .85); c.stroke(); }
+}
+function cornerDoodles(c, t) {
+  BOIL = Math.floor(t * 10);
+  doodle(c, [S(starPts(0, 0, 40), YEL, 7, YEL)], 1, { x: 120, y: 1780, rot: .2, fillAll: true, pencil: false });
+  doodle(c, [S(heartPts(0, 0, 34), PINK, 7, PINK)], 1, { x: 960 - 60, y: 1810, rot: -.2, fillAll: true, pencil: false });
+}
+
+// ---------- shapes ----------
+function starPts(x, y, r) { const p = []; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; p.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr]); } return poly(p, true); }
+function heartPts(x, y, r) { const p = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 2; p.push([x + r * 16 * Math.pow(Math.sin(a), 3) / 16, y - r * (13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)) / 16]); } return p; }
+function lockDoodle(open = 0) {
+  const sh = -open * 90;
+  return [
+    S(circ(0, -110 + sh, 110, Math.PI, Math.PI * 2).concat(line(110, -110 + sh, 110, -20 + sh * (open ? 1.6 : 1))), INK, 14),
+    S(line(-110, -110 + sh, -110, -20), INK, 14),
+    S(poly([[-170, -30], [170, -30], [170, 200], [-170, 200]], true), INK, 12, YEL),
+    S(circ(0, 60, 30), INK, 10),
+    S(line(0, 85, 0, 140), INK, 12),
+  ];
+}
+const RIDDLES = [
+  { q1: 'چیه که هم کلاسه…', q2: 'هم تو خونه‌ست؟', col: BLUE, hl: '#a0e7e5', d: () => [
+      S(poly([[-260, 0], [0, -200], [260, 0]]), INK, 12), S(rect(-220, 0, 440, 300), INK, 12, '#ffd6a5'),
+      S(rect(-150, 50, 300, 190), INK, 10, '#bde0fe'), S(line(-190, 250, 190, 250), INK, 10),
+      S(circ(0, 125, 40), INK, 8, YEL), S(circ(-14, 115, 3), INK, 8), S(circ(14, 115, 3), INK, 8), S(circ(0, 130, 18, .3, Math.PI - .3), INK, 6),
+      S(circ(170, -160, 30, -2.4, -.7), BLUE, 9), S(circ(170, -160, 60, -2.4, -.7), BLUE, 9), S(circ(170, -160, 90, -2.4, -.7), BLUE, 9) ] },
+  { q1: 'چیه که قصه می‌گه،', q2: 'بازی می‌کنه… ولی آدم نیست؟', col: PURPLE, hl: '#cdb4db', d: () => [
+      S(poly([[-260, -40], [-20, -10], [-20, 230], [-260, 200]], true), INK, 11, '#ffc8dd'),
+      S(poly([[260, -40], [20, -10], [20, 230], [260, 200]], true), INK, 11, '#bde0fe'),
+      S(line(-220, 40, -60, 55), INK, 6), S(line(-220, 90, -60, 105), INK, 6), S(line(220, 40, 60, 55), INK, 6),
+      S(poly([[-170, -110], [170, -110], [210, -250], [-210, -250]], true), INK, 11, '#caffbf'),
+      S(line(-130, -180, -70, -180), INK, 10), S(line(-100, -210, -100, -150), INK, 10),
+      S(circ(90, -195, 16), INK, 8, RED), S(circ(140, -165, 16), INK, 8, BLUE),
+      S(starPts(-250, -330, 30), ORANGE, 7, YEL), S(starPts(250, -320, 24), ORANGE, 7, YEL) ] },
+  { q1: 'چیه که هر بار تلاش کنی،', q2: 'جیبت پرتر می‌شه؟', col: ORANGE, hl: '#ffd6a5', d: () => [
+      S(circ(0, 60, 230, 0, Math.PI * 2, 170), INK, 12, '#ffafcc'),
+      S(circ(210, 50, 45, 0, Math.PI * 2, 55), INK, 10, '#ff8fab'), S(circ(200, 35, 7), INK, 8), S(circ(222, 60, 7), INK, 8),
+      S(poly([[-60, -100], [-20, -170], [10, -95]]), INK, 10), S(circ(110, -30, 9), INK, 10),
+      S(line(-120, 220, -120, 280), INK, 14), S(line(100, 220, 100, 280), INK, 14),
+      S(line(-50, -110, 50, -110), INK, 12),
+      S(circ(0, -260, 50), INK, 10, YEL), S(line(0, -285, 0, -235), ORANGE, 8),
+      S(circ(-200, -230, 36), INK, 9, YEL), S(circ(210, -300, 30), INK, 9, YEL) ] },
+  { q1: 'چیه که می‌دونه', q2: 'فردا باید چی بخونی؟', col: GREEN, hl: '#caffbf', d: () => [
+      S(rect(-240, -120, 480, 380), INK, 12, '#fff'), S(rect(-240, -120, 480, 80), INK, 12, RED),
+      S(line(-130, -150, -130, -90), INK, 14), S(line(130, -150, 130, -90), INK, 14),
+      ...[0, 1, 2].flatMap(r => [0, 1, 2, 3].map(k => S(rect(-215 + k * 115, -20 + r * 92, 90, 70), INK, 6))),
+      S(poly([[-200, 30], [-175, 55], [-135, 5]]), GREEN, 10), S(poly([[-85, 30], [-60, 55], [-20, 5]]), GREEN, 10),
+      S(circ(130, 120 - 30, 34), RED, 9),
+      S(circ(0, -310, 70), INK, 11, YEL), S(rect(-35, -245, 70, 40), INK, 10),
+      S(line(-120, -360, -95, -345), ORANGE, 8), S(line(120, -360, 95, -345), ORANGE, 8), S(line(0, -410, 0, -390), ORANGE, 8) ] },
+  { q1: 'چیه که پر از کتابه…', q2: 'ولی تو جیبت جا می‌شه؟', col: RED, hl: '#ffb3c6', d: () => [
+      S(poly([[-150, -260], [150, -260], [150, 300], [-150, 300]], true), INK, 13, '#e2eafc'),
+      S(line(-30, 265, 30, 265), INK, 10),
+      S(rect(-100, 40, 50, 190), INK, 8, RED), S(rect(-40, 70, 45, 160), INK, 8, BLUE), S(rect(15, 20, 50, 210), INK, 8, GREEN),
+      S(poly([[75, 230], [95, 60], [130, 64], [110, 234]], true), INK, 8, ORANGE),
+      S(line(-120, 232, 125, 232), INK, 9),
+      S(circ(-40, -150, 50, Math.PI * .9, Math.PI * 2.1).concat(circ(40, -170, 60, Math.PI, Math.PI * 2.05)).concat(line(100, -165, 100, -110)).concat(line(100, -110, -90, -110)), BLUE, 9) ,
+      S(starPts(-230, -150, 26), ORANGE, 7, YEL), S(starPts(240, 40, 30), ORANGE, 7, YEL) ] },
+];
+RIDDLES.forEach(r => r.strokes = r.d());
+const LOCK = lockDoodle(0), LOCK_OPEN = lockDoodle(1);
+const NUM = ['۱', '۲', '۳', '۴', '۵'];
+
+// ---------- scenes ----------
+const DY = 860;
+function sceneIntro(c, t) {
+  paper(c); cornerDoodles(c, t);
+  BOIL = Math.floor(t * 10);
+  const wig = Math.sin(t * Math.PI * 4) * .04 * (t > 2);
+  doodle(c, LOCK, lin(t, .25, 1.95), { x: CX, y: DY + 60, s: 1.3, rot: wig });
+  write(c, 'هیسسس!', CX, 420, 140, lin(t, 2.0, 2.4), { col: RED, rot: -.06 });
+  write(c, 'یه راز داریم…', CX, 1290, 86, lin(t, 2.8, 3.6), { hl: '#ffe66d' });
+  write(c, 'می‌تونی حدسش بزنی؟', CX, 1420, 70, lin(t, 4.0, 4.9), { col: BLUE });
+  // finger on lips doodle: small "shh" face
+  doodle(c, [S(circ(0, 0, 70), INK, 8, '#ffd6a5'), S(circ(-24, -12, 5), INK, 8), S(circ(24, -12, 5), INK, 8), S(line(0, 10, 0, 50), INK, 12), S(circ(0, 32, 16, 0, Math.PI * 2, 6), RED, 7)],
+    lin(t, 2.0, 2.7), { x: 230, y: 560, s: 1, pencil: false });
+}
+
+function sceneRiddle(c, t, i) {
+  const r = RIDDLES[i], p = t - (T.riddles + i * 4);
+  paper(c, i % 2 ? '#fdf3e1' : '#fdf6e3'); cornerDoodles(c, t);
+  BOIL = Math.floor(t * 10);
+  const drop = back(lin(p, 0, .35));
+  sticky(c, CX, 330, 420, 150, NOTE[i], -.04 + i * .02, drop);
+  write(c, `چیستان ${NUM[i]}`, CX, 345, 72, drop > .5 ? 1 : 0, { rot: -.04 + i * .02, col: INK });
+  doodle(c, r.strokes, lin(p, .3, 2.3), { x: CX, y: DY, s: 1.1 });
+  write(c, r.q1, CX, 1340, 78, lin(p, .6, 1.3), { hl: r.hl });
+  write(c, r.q2, CX, 1460, 70, lin(p, 1.3, 2.1), { col: r.col });
+  // big red "?" stamp
+  const st = lin(p, 2.6, 2.75);
+  if (st > 0) { c.save(); c.translate(860, 1080); c.rotate(.18); const s = 1 + (1 - st) * 1.5; c.scale(s, s); c.globalAlpha = st;
+    c.strokeStyle = RED; c.lineWidth = 10; c.beginPath(); c.arc(0, 0, 95, 0, 7); c.stroke(); c.lineWidth = 4; c.beginPath(); c.arc(0, 0, 80, 0, 7); c.stroke();
+    c.fillStyle = RED; c.font = '900 130px Vazirmatn'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('؟', 0, 8); c.restore(); }
+  write(c, 'جوابش؟ هنوز سِرّه!', CX, 1640, 48, lin(p, 2.9, 3.4), { col: '#6c757d', weight: 600 });
+}
+
+function sceneBuild(c, t) {
+  const p = t - T.build;
+  paper(c, '#fff8e7'); cornerDoodles(c, t);
+  BOIL = Math.floor(t * 10);
+  RIDDLES.forEach((r, i) => { const a = i / 5 * Math.PI * 2 + p * (.6 + p * .25), rad = 380;
+    const s = back(lin(p, i * .12, .4 + i * .12)) * .38;
+    doodle(c, r.strokes, 1, { x: CX + Math.cos(a) * rad, y: DY + 40 + Math.sin(a) * rad * .9, s, fillAll: true, pencil: false }); });
+  const shake = p > 3 ? Math.sin(p * 60) * .08 : Math.sin(p * Math.PI * 4) * .03;
+  doodle(c, p > 3.85 ? LOCK_OPEN : LOCK, 1, { x: CX, y: DY + 40, s: .9 + p * .05, rot: shake, fillAll: true, pencil: false });
+  write(c, 'یه جا هست…', CX, 360, 90, lin(p, .1, .7), { col: INK });
+  write(c, 'که همه‌ی اینا رو یه‌جا داره!', CX, 1540, 72, lin(p, 1.3, 2.3), { hl: '#ffe66d' });
+}
+
+function sceneReveal(c, t) {
+  const p = t - T.reveal;
+  paper(c, '#fffaf0'); cornerDoodles(c, t);
+  BOIL = Math.floor(t * 10);
+  // burst of drawn stars
+  for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, d = 330 + (i % 3) * 70, s = back(lin(p, .1 + i * .03, .5 + i * .03));
+    doodle(c, [S(starPts(0, 0, 34), INK, 6, [YEL, PINK, BLUE, GREEN, ORANGE][i % 5])], 1, { x: CX + Math.cos(a) * d, y: 640 + Math.sin(a) * d * .7, s: s * (1 + .15 * Math.sin(t * 8 + i)), rot: t + i, fillAll: true, pencil: false }); }
+  // big crayon title
+  const tp = lin(p, .15, 1.0);
+  c.save(); c.translate(CX, 640); c.rotate(-.05);
+  c.font = '900 220px Vazirmatn'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+  const w = c.measureText('به‌زودی!').width, vis = (w + 40) * tp;
+  c.beginPath(); c.rect(w / 2 + 20 - vis, -200, vis, 400); c.clip();
+  c.lineJoin = 'round'; c.lineWidth = 26; c.strokeStyle = INK; c.strokeText('به‌زودی!', 6, 10);
+  c.fillStyle = RED; c.fillText('به‌زودی!', 0, 0);
+  c.restore();
+  doodle(c, [S(poly(Array.from({ length: 30 }, (_, k) => [-340 + k * 23.4, 130 + Math.sin(k * 1.3) * 14])), BLUE, 14)], lin(p, 1.0, 1.5), { x: CX, y: 640, pencil: true });
+  write(c, 'فقط برای دانش‌آموزای کانون', CX, 920, 66, lin(p, 1.5, 2.3), { hl: '#a0e7e5' });
+  // polaroid with logo, taped
+  const ps = back(lin(p, 2.5, 2.9));
+  if (ps > 0) { c.save(); c.translate(CX, 1300); c.rotate(.05); c.scale(ps, ps);
+    c.fillStyle = 'rgba(0,0,0,.15)'; c.fillRect(-190, -190, 400, 450);
+    c.fillStyle = '#fff'; c.fillRect(-200, -210, 400, 450); c.strokeStyle = '#ddd'; c.lineWidth = 2; c.strokeRect(-200, -210, 400, 450);
+    if (logo.complete && logo.naturalWidth) c.drawImage(logo, -170, -180, 340, 340);
+    tape(c, -150, -210, 140, -.5); tape(c, 150, -210, 140, .5);
+    c.restore(); }
+  write(c, 'کانون نخبه‌پروری شهید کاظم آشتیانی', CX, 1590, 44, lin(p, 3.0, 3.6), { weight: 700 });
+  const ns = back(lin(p, 3.8, 4.15));
+  if (ns > 0) { sticky(c, 830, 1760, 330, 140, '#ffb3c6', .08, ns); write(c, 'منتظر باش!', 830, 1772, 60, 1, { rot: .08 }); }
+  doodle(c, LOCK_OPEN, 1, { x: 200, y: 1730, s: .4, rot: -.2, fillAll: true, pencil: false });
+}
+
+function sceneEnd(c, t) {
+  sceneReveal(c, Math.min(t, T.end + 1.5));
+  const p = t - T.end;
+  c.fillStyle = `rgba(253,246,227,${Math.pow(lin(p, 1.3, 2), 2)})`; c.fillRect(0, 0, W, H);
+}
+
+function drawScene(c, t) {
+  if (t < T.riddles) sceneIntro(c, t);
+  else if (t < T.build) sceneRiddle(c, t, Math.min(4, Math.floor((t - T.riddles) / 4)));
+  else if (t < T.reveal) sceneBuild(c, t);
+  else if (t < T.end) sceneReveal(c, t);
+  else sceneEnd(c, t);
+}
+
+// page-turn transition at every section boundary
+const FLIPS = [6, 10, 14, 18, 22, 26, 30];
+function render(t) {
+  t = clamp(t, 0, DUR);
+  drawScene(ctx, t);
+  const f = FLIPS.find(b => t >= b && t < b + .45);
+  if (f != null) {
+    const u = eo(lin(t, f, f + .45));
+    drawScene(pctx, f - .001);
+    const w = W * (1 - u);
+    ctx.save();
+    const g = ctx.createLinearGradient(w, 0, w + 80, 0); g.addColorStop(0, 'rgba(0,0,0,.25)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(w, 0, 80, H);
+    ctx.drawImage(pageBuf, 0, 0, W, H, 0, 0, w, H);
+    const g2 = ctx.createLinearGradient(w - 120, 0, w, 0); g2.addColorStop(0, 'rgba(255,255,255,0)'); g2.addColorStop(1, 'rgba(120,100,60,.25)');
+    ctx.fillStyle = g2; ctx.fillRect(Math.max(0, w - 120), 0, Math.min(120, w), H);
+    ctx.restore();
+  }
+}
+
+// ---------- player ----------
+const RENDER = new URLSearchParams(location.search).has('render');
+const audio = document.getElementById('music');
+window.teaserReady = Promise.all([document.fonts.load('900 40px Vazirmatn').then(() => document.fonts.ready),
+  new Promise(r => { if (logo.complete) r(); else { logo.onload = r; logo.onerror = r; } })]);
+window.renderAt = t => { render(t); return cv.toDataURL('image/jpeg', .92); };
+window.TEASER_DURATION = DUR;
+if (RENDER) { document.querySelectorAll('.ui').forEach(e => e.remove()); cv.style.cssText = 'height:auto;width:1080px;max-width:none;max-height:none;box-shadow:none;transform:none'; return; }
+window.teaserReady.then(() => render(4.95));
+const start = document.getElementById('start'), end = document.getElementById('end'); let raf = 0;
+function loop() { const t = audio.currentTime; render(t); if (audio.ended || t >= DUR - .05) { end.classList.remove('hide'); return; } raf = requestAnimationFrame(loop); }
+function play() { start.classList.add('hide'); end.classList.add('hide'); audio.currentTime = 0; audio.play().catch(() => {}); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop); }
+document.getElementById('play').onclick = play; document.getElementById('replay').onclick = play;
+})();
+</script>
+</body>
+</html>
