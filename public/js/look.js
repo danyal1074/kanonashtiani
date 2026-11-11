@@ -1,4 +1,4 @@
-// انتخاب ظاهر پنل مدیر: «جدید» یا «کلاسیک». هر مدیر ظاهر خودش را انتخاب می‌کند (ذخیره در سرور).
+// انتخاب ظاهر پنل مدیر: «مینیمال» (کلید داخلی new، پیش‌فرض) یا «فانتزی» (classic، ظاهر قبلی). هر مدیر ظاهر خودش را انتخاب می‌کند (ذخیره در سرور).
 // فقط دارایی‌های ظاهر انتخاب‌شده بارگذاری می‌شوند (CSS، آیکون‌ها، پوسته)؛ نقش‌های دیگر هیچ‌چیز از این‌ها دانلود نمی‌کنند.
 import { put } from './core.js';
 
@@ -32,7 +32,7 @@ export async function applyLook(me) {
   return look;
 }
 
-export const lookToggleHtml = (cur) => `<div class="look-toggle" role="group" aria-label="ظاهر پنل"><span>ظاهر پنل</span><button type="button" data-look-set="new" aria-pressed="${cur === 'new'}">جدید</button><button type="button" data-look-set="classic" aria-pressed="${cur === 'classic'}">کلاسیک</button></div>`;
+export const lookToggleHtml = (cur) => `<div class="look-toggle" role="group" aria-label="ظاهر پنل"><span>ظاهر پنل</span><button type="button" data-look-set="new" aria-pressed="${cur === 'new'}">مینیمال</button><button type="button" data-look-set="classic" aria-pressed="${cur === 'classic'}">فانتزی</button></div>`;
 
 export async function switchLook(look) {
   await put('/api/me/look', { look });
