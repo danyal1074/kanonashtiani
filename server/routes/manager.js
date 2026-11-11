@@ -9,6 +9,7 @@ export { recalcInvoice };
 import { importStudents } from '../importer.js';
 import { syncStudentsLater, removeStudentsLater, classroomEnabled, pendingRemovals, fullSync, ClassroomError } from '../classroom.js';
 import { sendSms, smsProvider } from '../sms.js';
+import { setSession } from './common.js';
 import { parseQuestions, examWithResults, performanceList, studentDetail } from './teacher.js';
 
 const M = { roles: ['manager'] };
@@ -290,6 +291,13 @@ export default function register(r) {
       run('UPDATE students SET school=?, grade=?, class_id=?, birth_date=?, parent_phone=?, address=? WHERE user_id=?', d.school, d.grade, d.class_id, d.birth_date, d.parent_phone, d.address, s.id);
     });
     syncStudentsLater([s.id]);
+    return { ok: true };
+  });
+  // ورود به پنل دانش‌آموز (مشاهده‌به‌جای دانش‌آموز)؛ بازگشت از نوار بالای صفحه
+  r.post('/api/manager/students/:id/impersonate', M, (ctx) => {
+    const u = get(`SELECT * FROM users WHERE id=? AND center_id=? AND role='student' AND active=1`, Number(ctx.params.id), ctx.user.center_id);
+    if (!u) fail(404, 'دانش‌آموز فعال در این کانون یافت نشد');
+    setSession(ctx, u, { imp: ctx.user.id });
     return { ok: true };
   });
   r.del('/api/manager/students/:id', M, (ctx) => {

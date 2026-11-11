@@ -49,7 +49,8 @@ function loadUser(req) {
   // اعتبار توکن پس از تغییر رمز از بین می‌رود
   if (p.pv && p.pv !== user.pass_hash.slice(-8)) return {};
   delete user.pass_hash;
-  const impersonator = p.imp ? get('SELECT id, full_name FROM users WHERE id=? AND role=?', p.imp, 'admin') : null;
+  // مشاهده‌به‌جای کاربر: مدیر سامانه (هر کاربر) یا مدیر کانون (فقط دانش‌آموزان کانون خودش)
+  const impersonator = p.imp ? get(`SELECT id, full_name, role FROM users WHERE id=? AND active=1 AND (role='admin' OR (role='manager' AND center_id=? AND ?='student'))`, p.imp, user.center_id, user.role) : null;
   return { user, impersonator };
 }
 
