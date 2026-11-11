@@ -1,0 +1,467 @@
+{
+  "results": [
+    {
+      "name": "Counselor resolves to own center manager",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Student initiates counselor conversation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Manager sees new counseling student",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Manager replies",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Student sees reply",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Other center cannot read conversation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Other student cannot read manager private thread",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "600 CSV dry-run validates without writes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "600 students imported in isolated database",
+      "ok": true,
+      "detail": "{\"created\":600,\"errors\":0}"
+    },
+    {
+      "name": "Repeated 600 records detected",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Imported account active before credentials are issued",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Imported account requires password change",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student-4 counselor form renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student-9 counselor form renders",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "All role navigation pages render",
+      "ok": true,
+      "detail": "pages=76"
+    },
+    {
+      "name": "No browser JavaScript errors",
+      "ok": true,
+      "detail": "[]"
+    }
+  ],
+  "pages": [
+    {
+      "role": "manager",
+      "route": "/home",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/students",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/staff",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/timetable",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/fees",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/announcements",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/accounting",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/invoices",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/sms-outbox",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/barpa",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/hoosh-studio",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/manual-scores",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/att-log",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/comprehensive",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/performance",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/shop",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/messages",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/settings",
+      "failed": false
+    },
+    {
+      "role": "manager",
+      "route": "/account",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/home",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/classes",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/assignments",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/exams",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/manual-scores",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/attendance",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/reports",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/messages",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/materials",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/timetable",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/plans",
+      "failed": false
+    },
+    {
+      "role": "teacher",
+      "route": "/more",
+      "failed": false
+    },
+    {
+      "role": "admin",
+      "route": "/home",
+      "failed": false
+    },
+    {
+      "role": "admin",
+      "route": "/managers",
+      "failed": false
+    },
+    {
+      "role": "admin",
+      "route": "/users",
+      "failed": false
+    },
+    {
+      "role": "admin",
+      "route": "/backup",
+      "failed": false
+    },
+    {
+      "role": "admin",
+      "route": "/account",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/home",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/lessons",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/schedule",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/library",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/classes",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/assignments",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/exams",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/results",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/study",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/path",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/games",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/self-exams",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/roadmap",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/records",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/counselor",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/messages",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/announcements",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/profile",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/payment",
+      "failed": false
+    },
+    {
+      "role": "student-4",
+      "route": "/shop",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/home",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/lessons",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/schedule",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/library",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/classes",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/assignments",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/exams",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/results",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/study",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/path",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/games",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/self-exams",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/roadmap",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/records",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/counselor",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/messages",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/announcements",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/profile",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/payment",
+      "failed": false
+    },
+    {
+      "role": "student-9",
+      "route": "/shop",
+      "failed": false
+    }
+  ],
+  "errors": []
+}

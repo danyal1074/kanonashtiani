@@ -13,3 +13,10 @@ export function resolveBookPage(id, n) {
   }
   return null;
 }
+
+// بررسی وجود صفحات کتاب‌های داخلی؛ پوشهٔ data/books در گیت نیست و باید جداگانه روی سرور منتقل شود.
+export function missingBuiltinBooks() {
+  return [['hoosh_6', 27], ['hoosh_8_9', 19]]
+    .filter(([id, first]) => !resolveBookPage(id, first))
+    .map(([id]) => id);
+}

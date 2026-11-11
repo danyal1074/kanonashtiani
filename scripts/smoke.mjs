@@ -17,6 +17,11 @@ fs.mkdirSync(path.join(env.ROSHD_DATA_DIR, 'books', 'hoosh_6'), { recursive: tru
 fs.writeFileSync(path.join(env.ROSHD_DATA_DIR, 'books', 'hoosh_6', 'page_1.jpg'), 'sample-page-content');
 fs.writeFileSync(path.join(env.ROSHD_DATA_DIR, 'books', 'hoosh_6', 'page_500.jpg'), 'sample-page-500-content');
 
+// Shared books must work when the preview database uses an isolated data directory.
+env.ROSHD_BOOKS_DIR = path.join(tmp, 'shared-books');
+fs.mkdirSync(path.join(env.ROSHD_BOOKS_DIR, 'hoosh_6'), { recursive: true });
+fs.writeFileSync(path.join(env.ROSHD_BOOKS_DIR, 'hoosh_6', 'page_27.jpg'), 'shared-book-page-content');
+
 const app = spawn(process.execPath, ['server/index.js'], { cwd: ROOT, env, stdio: 'ignore' });
 const B = `http://127.0.0.1:${PORT}`;
 for (let i = 0; i < 50; i++) { try { if ((await fetch(B + '/api/health')).ok) break; } catch { /* هنوز بالا نیامده */ } await new Promise((r) => setTimeout(r, 200)); }
@@ -574,6 +579,9 @@ check('پیش‌فرض ظاهر پنل مدیر «جدید» است', (await cal
 check('مدیر ظاهر کلاسیک را انتخاب می‌کند و ماندگار است', (await call(S.manager.ck, 'PUT', '/api/me/look', { look: 'classic' })).status === 200 && (await call(S.manager.ck, 'GET', '/api/me')).data.ui_look === 'classic');
 check('ظاهر نامعتبر رد می‌شود و دانش‌آموز نمی‌تواند ظاهر مدیر را عوض کند', (await call(S.manager.ck, 'PUT', '/api/me/look', { look: 'x' })).status === 400 && (await call(S.student.ck, 'PUT', '/api/me/look', { look: 'new' })).status === 403);
 await call(S.manager.ck, 'PUT', '/api/me/look', { look: 'new' });
+const sharedPage = await fetch(B + '/api/exam-books/hoosh_6/pages/27', { headers: { Cookie: S.teacher.ck } });
+check('کتاب مشترک با دیتای جداگانه پیش‌نمایش نمایش داده می‌شود', sharedPage.status === 200 && await sharedPage.text() === 'shared-book-page-content');
+check('کتاب مشترک برای دانش‌آموز قابل دسترسی نیست', (await call(S.student.ck, 'GET', '/api/exam-books/hoosh_6/pages/27')).status === 403);
 
 app.kill();
 await new Promise((r) => setTimeout(r, 300));

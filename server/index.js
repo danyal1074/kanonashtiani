@@ -10,6 +10,7 @@ import { metrics, snapshot } from './metrics.js';
 import { allow, purge as purgeBuckets } from './ratelimit.js';
 import { backupTick } from './backup.js';
 import { classroomEnabled, fullSync } from './classroom.js';
+import { missingBuiltinBooks } from './book-pages.js';
 import registerCommon from './routes/common.js';
 import registerStudent from './routes/student.js';
 import registerTeacher from './routes/teacher.js';
@@ -148,6 +149,8 @@ server.on('clientError', (err, socket) => { if (socket.writable) socket.end('HTT
 server.listen(PORT, HOST, Number(process.env.ROSHD_BACKLOG || 1024), () => {
   console.log(`پلتفرم رشد نخبه روی http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT} اجرا شد (نخ‌های کمکی: ${process.env.UV_THREADPOOL_SIZE})`);
   if (!get('SELECT COUNT(*) n FROM users').n) console.warn('پایگاه داده خالی است؛ برای ساخت داده نمونه دستور «npm run seed» را اجرا کنید.');
+  const missingBooks = missingBuiltinBooks();
+  if (missingBooks.length) console.warn(`تصاویر کتاب‌های هوش کمپلکس روی دیسک نیست (${missingBooks.join('، ')}). پوشهٔ data/books را روی سرور منتقل کنید (scripts/deploy_vps.py این کار را انجام می‌دهد).`);
 });
 
 // ---------- کارهای زمان‌بندی‌شده (همه با try/catch تا خطا سرور را نیندازد) ----------

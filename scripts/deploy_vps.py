@@ -78,6 +78,37 @@ def run_cmd(cmd):
         print(f"Command failed with exit code: {code}")
     return code
 
+LOCAL_BOOKS_DIR = os.environ.get('ROSHD_LOCAL_BOOKS_DIR') or os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'books')
+REMOTE_BOOKS_DIR = os.environ.get('ROSHD_REMOTE_BOOKS_DIR', f"{REMOTE_PATH}/data/books")
+BUILTIN_BOOKS = ('hoosh_6', 'hoosh_8_9')
+
+def sync_books():
+    """فقط فایل‌هایی که روی سرور نیستند یا اندازه‌شان فرق دارد بارگذاری می‌شوند."""
+    if os.environ.get('ROSHD_SYNC_BOOKS') == '0':
+        print("انتقال تصاویر کتاب‌ها رد شد (ROSHD_SYNC_BOOKS=0).")
+        return
+    print("\n--- همگام‌سازی تصاویر کتاب‌های هوش کمپلکس ---")
+    sftp = client.open_sftp()
+    try:
+        for book in BUILTIN_BOOKS:
+            local_dir = os.path.join(LOCAL_BOOKS_DIR, book)
+            if not os.path.isdir(local_dir):
+                print(f"هشدار: پوشهٔ محلی {local_dir} وجود ندارد؛ کتاب {book} منتقل نشد.")
+                continue
+            remote_dir = f"{REMOTE_BOOKS_DIR}/{book}"
+            run_cmd(f"mkdir -p '{remote_dir}'")
+            remote_sizes = {a.filename: a.st_size for a in sftp.listdir_attr(remote_dir)}
+            files = sorted(f for f in os.listdir(local_dir) if f.endswith('.jpg'))
+            todo = [f for f in files if remote_sizes.get(f) != os.path.getsize(os.path.join(local_dir, f))]
+            print(f"{book}: {len(files)} فایل محلی، {len(todo)} فایل برای بارگذاری")
+            for i, name in enumerate(todo, 1):
+                sftp.put(os.path.join(local_dir, name), f"{remote_dir}/{name}")
+                if i % 50 == 0 or i == len(todo):
+                    print(f"  {i}/{len(todo)}")
+        run_cmd(f"chmod -R a+rX '{REMOTE_BOOKS_DIR}'")
+    finally:
+        sftp.close()
+
 try:
     # ۱. قبل از git pull روی سرور نسخه پشتیبان تهیه شود
     print("\n--- تهیه نسخه پشتیبان پیش از اعمال تغییرات جدید ---")
@@ -90,6 +121,9 @@ try:
         run_cmd(f"cd {REMOTE_PATH} && git checkout {DEPLOY_REF}")
     else:
         run_cmd(f"cd {REMOTE_PATH} && git checkout main && git pull origin main")
+
+    # ۲-ب. انتقال تصاویر کتاب‌های هوش کمپلکس (data/books در گیت نیست؛ بدون این مرحله تصاویر استودیو بالا نمی‌آیند)
+    sync_books()
 
     # ۳. اطمینان از پیش‌نیازهای پایتون
     run_cmd("if [ ! -f /usr/bin/python ]; then ln -s /usr/bin/python3 /usr/bin/python; fi")
