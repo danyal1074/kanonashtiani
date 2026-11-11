@@ -687,6 +687,11 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     const cols = database.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
     if (!cols.includes('ui_look')) database.exec('ALTER TABLE users ADD COLUMN ui_look TEXT');
   },
+  // فهرست درس‌های قابل تخصیص به معلم، قابل ویرایش توسط مدیر هر کانون (خالی = فهرست پیش‌فرض)
+  (database) => {
+    const cols = database.prepare('PRAGMA table_info(centers)').all().map((c) => c.name);
+    if (!cols.includes('subjects')) database.exec('ALTER TABLE centers ADD COLUMN subjects TEXT');
+  },
 ];
 
 export function migrate(database = db) {

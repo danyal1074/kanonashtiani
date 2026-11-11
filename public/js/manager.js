@@ -383,18 +383,60 @@ async function staff(el) {
   on(el, 'click', '[data-ds]', (e, b) => busy(b, async () => { await del(`/api/manager/schedule/${b.dataset.ds}`); drawSched(); }));
   on(el, 'click', '[data-dc]', async (e, b) => { if (await confirmBox('کلاس حذف شود؟', 'حذف')) { await del(`/api/manager/classes/${b.dataset.dc}`); staff(el); } });
   drawSched();
-  const SUBJECTS = ['ریاضی', 'علوم', 'فارسی', 'زبان انگلیسی', 'هوش و استعداد', 'مطالعات اجتماعی'];
+  // فهرست درس‌ها از تنظیمات کانون می‌آید و داخل همین پنجره قابل ویرایش است
+  const SUBJECTS = [...(md.subjects || [])];
   const teacherModal = async (t) => {
     const assign = t ? (await api(`/api/manager/teachers/${t.id}`)).assign : [];
-    const has = (cid, s) => assign.some((a) => a.class_id === cid && a.subject === s);
     modal({
       title: t ? `${icon('edit', { size: 16 })} ${esc(t.full_name)}` : ' معلم جدید', wide: true,
       body: `<form class="stack" id="tForm"><div class="form-grid"><div class="field"><label>نام و نام خانوادگی</label><input class="input" name="full_name" value="${esc(t?.full_name || '')}" required></div>
         <div class="field"><label>نام کاربری (لاتین)</label><input class="input ltr" name="username" value="${esc(t?.username || '')}" ${t ? 'disabled' : 'required'}></div>
         <div class="field"><label>${t ? 'رمز جدید (اختیاری)' : 'رمز عبور'}</label><input class="input ltr" name="password" type="password" ${t ? '' : 'required'} minlength="6"></div>
         ${t ? `<div class="field"><label>وضعیت</label><select class="input" name="active"><option value="1" ${t.active ? 'selected' : ''}>فعال</option><option value="0" ${t.active ? '' : 'selected'}>غیرفعال</option></select></div>` : ''}</div>
-        <div class="label">کلاس‌ها و درس‌ها</div><div class="table-wrap"><table class="table"><thead><tr><th>کلاس</th>${SUBJECTS.map((s) => `<th class="tiny">${s}</th>`).join('')}</tr></thead><tbody>
-        ${md.classes.map((c) => `<tr><td>${gradeName(c.grade)} ${esc(c.name)}</td>${SUBJECTS.map((s) => `<td class="center"><input type="checkbox" data-as="${c.id}|${s}" ${has(c.id, s) ? 'checked' : ''}></td>`).join('')}</tr>`).join('')}</tbody></table></div></form>`,
+        <div class="label">درس‌های قابل انتخاب <span class="tiny muted">(نام را برای ویرایش تغییر دهید، با ✕ حذف کنید یا درس جدید اضافه کنید)</span></div>
+        <div class="row wrap" id="subjChips" style="gap:6px"></div>
+        <div class="row" style="gap:6px;margin-top:6px"><input class="input" id="newSubj" placeholder="درس جدید، مثلاً: قرآن" maxlength="40" style="max-width:220px" aria-label="نام درس جدید"><button type="button" class="btn soft sm" id="addSubj">${icon('plus', { size: 16 })} افزودن درس</button></div>
+        <div class="label">کلاس‌ها و درس‌ها</div><div id="asgTable"></div></form>`,
+      onOpen: (m) => {
+        const checked = new Set(assign.map((a) => `${a.class_id}|${a.subject}`));
+        const drawSubjects = () => {
+          $('#subjChips', m).innerHTML = SUBJECTS.map((s, i) => `<span class="row" style="gap:2px;display:inline-flex"><input class="input" data-sren="${i}" value="${esc(s)}" maxlength="40" aria-label="نام درس" style="width:${Math.max(9, s.length + 3)}ch;height:34px;padding:2px 8px"><button type="button" class="icon-btn" data-sdel="${i}" title="حذف درس" aria-label="حذف درس ${esc(s)}">${icon('x', { size: 14 })}</button></span>`).join('') || '<span class="tiny muted">هنوز درسی تعریف نشده</span>';
+          $('#asgTable', m).innerHTML = `<div class="table-wrap"><table class="table"><thead><tr><th>کلاس</th>${SUBJECTS.map((s) => `<th class="tiny">${esc(s)}</th>`).join('')}</tr></thead><tbody>
+            ${md.classes.map((c) => `<tr><td>${gradeName(c.grade)} ${esc(c.name)}</td>${SUBJECTS.map((s) => `<td class="center"><input type="checkbox" data-as="${c.id}|${esc(s)}" aria-label="${esc(s)}" ${checked.has(`${c.id}|${s}`) ? 'checked' : ''}></td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        };
+        // هر تغییر فهرست فوری ذخیره می‌شود؛ اگر سرور نپذیرفت (مثلاً درس در حال استفاده) به حالت قبل برمی‌گردد
+        const persist = async (next, renames = []) => {
+          try { await put('/api/manager/subjects', { subjects: next, renames }); SUBJECTS.splice(0, SUBJECTS.length, ...next); md.subjects = [...next]; return true; }
+          catch (err) { toast(err.message, 'err'); return false; }
+        };
+        $('#asgTable', m).addEventListener('change', (e) => { const c = e.target.closest('[data-as]'); if (c) (c.checked ? checked.add(c.dataset.as) : checked.delete(c.dataset.as)); });
+        const add = async () => {
+          const inp = $('#newSubj', m), name = inp.value.trim();
+          if (!name) return;
+          if (SUBJECTS.includes(name)) { toast('این درس در فهرست هست', 'err'); return; }
+          if (await persist([...SUBJECTS, name])) { inp.value = ''; drawSubjects(); }
+        };
+        $('#addSubj', m).onclick = add;
+        m.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('#newSubj, [data-sren]')) { e.preventDefault(); e.target.id === 'newSubj' ? add() : e.target.blur(); } });
+        m.addEventListener('change', async (e) => {
+          const inp = e.target.closest('[data-sren]');
+          if (!inp) return;
+          const i = Number(inp.dataset.sren), from = SUBJECTS[i], to = inp.value.trim();
+          if (!to || to === from) { inp.value = from; return; }
+          if (SUBJECTS.includes(to)) { toast('این درس در فهرست هست', 'err'); inp.value = from; return; }
+          const next = SUBJECTS.map((s, j) => (j === i ? to : s));
+          if (await persist(next, [{ from, to }])) {
+            for (const k of [...checked]) { const [cid, sub] = k.split('|'); if (sub === from) { checked.delete(k); checked.add(`${cid}|${to}`); } }
+            drawSubjects();
+          } else inp.value = from;
+        });
+        on(m, 'click', '[data-sdel]', async (e, b) => {
+          const i = Number(b.dataset.sdel), gone = SUBJECTS[i];
+          if (SUBJECTS.length < 2) { toast('حداقل یک درس باید بماند', 'err'); return; }
+          if (await persist(SUBJECTS.filter((_, j) => j !== i))) { for (const k of [...checked]) if (k.split('|')[1] === gone) checked.delete(k); drawSubjects(); }
+        });
+        drawSubjects();
+      },
       actions: [{ label: 'انصراف', cls: 'ghost', value: false }, {
         label: ' ذخیره', onClick: async (m) => {
           const f = formData($('#tForm', m));

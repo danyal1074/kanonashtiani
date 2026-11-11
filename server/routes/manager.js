@@ -205,10 +205,39 @@ export default function register(r) {
     return result;
   });
 
+  // ---------- فهرست درس‌ها (قابل ویرایش توسط مدیر کانون) ----------
+  const DEFAULT_SUBJECTS = ['ریاضی', 'علوم', 'فارسی', 'زبان انگلیسی', 'هوش و استعداد', 'مطالعات اجتماعی'];
+  const subjectsOf = (cid) => {
+    try { const l = JSON.parse(get('SELECT subjects FROM centers WHERE id=?', cid)?.subjects || 'null'); if (Array.isArray(l) && l.length) return l; } catch { /* فهرست خراب: پیش‌فرض */ }
+    return DEFAULT_SUBJECTS;
+  };
+  // body: { subjects: [نام‌ها به ترتیب نمایش], renames: [{ from, to }] }
+  // تغییر نام در تخصیص معلم‌ها و برنامه هفتگی همین کانون هم اعمال می‌شود؛ حذف درسِ در حال استفاده مجاز نیست.
+  r.put('/api/manager/subjects', M, (ctx) => {
+    const cid = ctx.user.center_id, b = ctx.body || {};
+    const names = [...new Set((Array.isArray(b.subjects) ? b.subjects : []).map((s) => clampStr(s, 40)).filter(Boolean))];
+    if (!names.length) fail(400, 'حداقل یک درس لازم است');
+    if (names.length > 40) fail(400, 'حداکثر ۴۰ درس');
+    const renames = (Array.isArray(b.renames) ? b.renames : []).map((x) => ({ from: clampStr(x?.from, 40), to: clampStr(x?.to, 40) })).filter((x) => x.from && x.to && x.from !== x.to);
+    tx(() => {
+      for (const { from, to } of renames) {
+        run('UPDATE OR IGNORE teacher_classes SET subject=? WHERE subject=? AND class_id IN (SELECT id FROM classes WHERE center_id=?)', to, from, cid);
+        run('DELETE FROM teacher_classes WHERE subject=? AND class_id IN (SELECT id FROM classes WHERE center_id=?)', from, cid);
+        run('UPDATE schedule SET subject=? WHERE subject=? AND class_id IN (SELECT id FROM classes WHERE center_id=?)', to, from, cid);
+      }
+      const used = all('SELECT DISTINCT tc.subject FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE c.center_id=?', cid).map((x) => x.subject);
+      const gone = used.filter((s) => !names.includes(s));
+      if (gone.length) fail(400, `درس «${gone.join('، ')}» به معلم اختصاص داده شده؛ ابتدا از تنظیمات آن معلم‌ها برش دارید`);
+      run('UPDATE centers SET subjects=? WHERE id=?', JSON.stringify(names), cid);
+    });
+    return { ok: true, subjects: names };
+  });
+
   // ---------- داده‌های پایه ----------
   r.get('/api/manager/meta', M, (ctx) => {
     const cid = ctx.user.center_id;
     return {
+      subjects: subjectsOf(cid),
       grades: GRADES,
       classes: all(`SELECT c.*, (SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1) students FROM classes c WHERE center_id=? ORDER BY grade, name`, cid),
       schools: all(`SELECT DISTINCT s.school FROM students s JOIN users u ON u.id=s.user_id WHERE u.center_id=? AND s.school<>'' ORDER BY s.school`, cid).map((x) => x.school),
