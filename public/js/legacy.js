@@ -557,7 +557,7 @@ export async function smsOutbox(el) {
 
 export async function mgrBarpa(el) {
   setHead('کارنامه‌های آزمون جامع برپا', 'صدور دستی یا تفکیک خودکار کارنامه با آپلود PDF نتایج');
-  const [rows, unmatched] = await Promise.all([api('/api/barpa-exams/reports'), api('/api/manager/barpa-exams/unmatched').catch(() => [])]);
+  const [rows, unmatched, exams] = await Promise.all([api('/api/barpa-exams/reports'), api('/api/manager/barpa-exams/unmatched').catch(() => []), api('/api/manager/barpa-exams').catch(() => [])]);
   const f = (id, l, extra = '') => `<div class="field"><label for="${id}">${l}</label><input class="input" id="${id}" name="${id}" type="number" step="any" inputmode="decimal" required ${extra}></div>`;
 
   el.innerHTML = `
@@ -588,14 +588,20 @@ export async function mgrBarpa(el) {
         <div class="field" style="flex:1 1 120px"><label for="bpUpGrade">پایه</label><select class="input" id="bpUpGrade">${['چهارم', 'پنجم', 'ششم', 'هفتم', 'هشتم', 'نهم'].map((g) => `<option${g === 'نهم' ? ' selected' : ''}>${g}</option>`).join('')}</select></div>
         <div class="field" style="flex:1 1 100px"><label for="bpUpStage">مرحله</label><input class="input" id="bpUpStage" type="number" min="1" max="20" inputmode="numeric"></div>
       </div>
-      <div class="tiny muted" style="margin-top:6px">کارنامه‌ها فقط با کد ملی یا نام کاربری دانش‌آموز تطبیق داده می‌شوند و حساب جدیدی ساخته نمی‌شود.</div>
+      <div class="tiny muted" style="margin-top:6px">کارنامه‌ها اول با کد ملی یا نام کاربری و در صورت نبودن با نام و نام خانوادگی دانش‌آموز تطبیق داده می‌شوند و حساب جدیدی ساخته نمی‌شود.</div>
       <div id="barpaUploadStatus" class="small bold" style="margin-top:10px;display:none;color:#1e40af"></div>
     </section>
+
+    ${exams.length ? `<section class="card" id="bpExams" style="margin-bottom:16px">
+      <div class="card-title">${icon('database', { size: 18 })} آزمون‌های ثبت‌شده (${num(exams.length)})</div>
+      <p class="small muted" style="margin-top:0">اگر فایل اشتباه آپلود شده، آزمون را حذف کنید و فایل درست را دوباره آپلود کنید. حذف، کارنامه همه‌ی دانش‌آموزان آن آزمون را از پنل‌هایشان برمی‌دارد.</p>
+      <div class="table-wrap"><table class="table"><thead><tr><th>آزمون</th><th>پایه</th><th>کارنامه</th><th>تطبیق‌نشده</th><th></th></tr></thead><tbody>${exams.map((x) => `<tr><td><b>${esc(x.exam_title)}</b></td><td>${esc(x.grade || '—')}</td><td>${num(x.reports)}</td><td>${num(x.unmatched)}</td><td><button class="btn sm red" data-delexam="${esc(x.exam_id)}" data-title="${esc(x.exam_title)}" data-n="${x.reports}">${icon('trash', { size: 16 })} حذف و آپلود دوباره</button></td></tr>`).join('')}</tbody></table></div>
+    </section>` : ''}
 
     ${unmatched.length ? `<section class="card" id="bpUnmatched" style="margin-bottom:16px;border:1.5px solid var(--sun-400,#f5b041)">
       <div class="card-title">${icon('alert', { size: 18 })} کارنامه‌های تطبیق‌نشده (${num(unmatched.length)})</div>
       <p class="small muted" style="margin-top:0">این کارنامه‌ها با کد ملی یا نام کاربری هیچ دانش‌آموزی تطبیق نخوردند و در پنل کسی ثبت نشده‌اند. دانش‌آموز درست را انتخاب کنید.</p>
-      <div class="table-wrap"><table class="table"><thead><tr><th>آزمون</th><th>صفحه</th><th>نام در کارنامه</th><th>کد داوطلبی</th><th></th></tr></thead><tbody>${unmatched.map((u) => `<tr><td class="tiny">${esc(u.exam_id)}</td><td>${fa(u.page ?? '—')}</td><td><b>${esc(u.full_name || '—')}</b></td><td dir="ltr">${esc(u.candidate_code || '—')}</td><td><button class="btn sm" data-match="${u.id}" data-name="${esc(u.full_name || '')}">تطبیق با دانش‌آموز</button></td></tr>`).join('')}</tbody></table></div>
+      <div class="table-wrap"><table class="table"><thead><tr><th>آزمون</th><th>صفحه</th><th>نام در کارنامه</th><th>کد داوطلبی</th><th></th></tr></thead><tbody>${unmatched.map((u) => `<tr><td class="tiny">${esc(u.exam_id)}</td><td>${fa(u.page ?? '—')}</td><td><b>${esc(u.full_name || '—')}</b></td><td dir="ltr">${esc(u.candidate_code || '—')}</td><td><div class="row" style="gap:4px"><button class="btn sm" data-match="${u.id}" data-name="${esc(u.full_name || '')}">تطبیق با دانش‌آموز</button><button class="btn sm ghost" data-delun="${u.id}" aria-label="حذف این مورد" title="حذف این مورد">${icon('trash', { size: 16 })}</button></div></td></tr>`).join('')}</tbody></table></div>
     </section>` : ''}
 
     <div class="grid c3">
@@ -663,7 +669,7 @@ export async function mgrBarpa(el) {
           grade: $('#bpUpGrade', el).value,
           stage: $('#bpUpStage', el).value || undefined,
         });
-        toast(`${fa(res.count || 0)} کارنامه ثبت شد${res.unmatched_count ? ` · ${fa(res.unmatched_count)} مورد تطبیق داده نشد` : ''}`, res.unmatched_count ? 'error' : 'ok');
+        toast(`${fa(res.count || 0)} کارنامه ثبت شد${res.matched_by_name ? ` (${fa(res.matched_by_name)} مورد با نام و نام خانوادگی تطبیق خورد)` : ''}${res.unmatched_count ? ` · ${fa(res.unmatched_count)} مورد تطبیق داده نشد` : ''}`, res.unmatched_count ? 'error' : 'ok');
         await mgrBarpa(el);
         $('#bpUnmatched', el)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
@@ -672,6 +678,18 @@ export async function mgrBarpa(el) {
       }
     };
     reader.readAsDataURL(selectedFile);
+  });
+
+  on(el, 'click', '[data-delexam]', async (e, b) => {
+    if (!(await confirmBox(`آزمون «${b.dataset.title}» با ${fa(b.dataset.n)} کارنامه از پنل همه‌ی دانش‌آموزان حذف شود؟ این کار برگشت‌پذیر نیست (فقط از پشتیبان شبانه می‌شود برگرداند).`, 'حذف'))) return;
+    await busy(b, async () => { await del(`/api/manager/barpa-exams?exam_id=${encodeURIComponent(b.dataset.delexam)}`); });
+    toast('آزمون حذف شد؛ حالا فایل درست را آپلود کنید', 'ok');
+    await mgrBarpa(el);
+    const t = $('#bpUpTitle', el); if (t) t.value = b.dataset.title;
+    $('#barpaPickBtn', el)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  on(el, 'click', '[data-delun]', async (e, b) => {
+    if (await confirmBox('این مورد تطبیق‌نشده حذف شود؟', 'حذف')) busy(b, async () => { await del(`/api/manager/barpa-exams/unmatched/${b.dataset.delun}`); mgrBarpa(el); });
   });
 
   on(el, 'click', '[data-match]', async (e, b) => {
