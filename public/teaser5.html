@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>به‌زودی رونمایی</title>
+<meta name="description" content="هر تحولی با یک پرسش آغاز می‌شود. به‌زودی رونمایی می‌شود.">
+<meta name="theme-color" content="#f5f2ec">
+<style>
+  @font-face { font-family: Vazirmatn; src: url('fonts/Vazirmatn.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+  :root { --paper: #f5f2ec; --navy: #0f1d33; --gold: #b08d57; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: #e9e4da; color: var(--navy); font-family: Vazirmatn, Tahoma, sans-serif; overflow: hidden; }
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  canvas#c { height: 100%; max-height: 100dvh; max-width: 100vw; aspect-ratio: 9 / 16; display: block; box-shadow: 0 30px 80px rgba(15,29,51,.18); }
+  .ui { position: fixed; inset: 0; display: grid; place-items: center; z-index: 5; transition: opacity .8s; }
+  .ui.hide { opacity: 0; pointer-events: none; }
+  .btn { font: inherit; font-weight: 500; font-size: 16px; letter-spacing: .5px; color: var(--navy); background: rgba(245,242,236,.85); backdrop-filter: blur(6px);
+    border: 1px solid var(--navy); border-radius: 999px; padding: 12px 30px; cursor: pointer; text-decoration: none; display: inline-flex; gap: 10px; align-items: center; transition: background .3s, color .3s; }
+  .btn:hover { background: var(--navy); color: var(--paper); }
+  .card { text-align: center; } .card p { margin-top: 14px; font-size: 13px; opacity: .65; }
+  .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  #end { place-items: end center; padding-bottom: max(30px, env(safe-area-inset-bottom)); }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" width="1080" height="1920"></canvas></div>
+<div class="ui" id="start"><div class="card"><button class="btn" id="play">▶&nbsp; پخش</button><p>با صدا ببینید</p></div></div>
+<div class="ui hide" id="end"><div class="row"><button class="btn" id="replay">↻ پخش دوباره</button><a class="btn" href="teaser5/teaser.mp4" download="kanon-unveiling.mp4">دانلود ویدیو</a></div></div>
+<audio id="music" src="teaser5/teaser-music.mp3" preload="auto"></audio>
+
+<script>
+(() => {
+'use strict';
+// timeline (هماهنگ با scripts/teaser/make-music-5.py)
+const DUR = 42, W = 1080, H = 1920, CX = W / 2, CY = 820;
+const T = { words: 14, veil: 26, build: 31, hit: 34 };
+const PAPER = '#f5f2ec', NAVY = '#0f1d33', GOLD = '#b08d57', MUTE = '#8a8f99', TEAL = '#1f7a7a';
+const WORDS = [
+  { w: 'هوشمندتر.', m: motifNetwork },
+  { w: 'شخصی‌تر.', m: motifPersonal },
+  { w: 'منسجم‌تر.', m: motifGrid },
+  { w: 'در دسترس‌تر.', m: motifRings },
+  { w: 'الهام‌بخش‌تر.', m: motifRise },
+];
+const FA = ['۰۱', '۰۲', '۰۳', '۰۴', '۰۵'];
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const logo = new Image(); logo.src = 'img/logo-ashtiani.png';
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lin = (t, a, b) => clamp((t - a) / (b - a));
+const eo = x => 1 - Math.pow(1 - x, 3);
+const eio = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const win = (t, a, b, fi = .6, fo = .5) => Math.min(lin(t, a, a + fi), 1 - lin(t, b - fo, b));
+
+// ---------- typography: masked rise + blur-to-sharp ----------
+function line(s, x, y, size, a, o = {}) {
+  if (a <= 0 || !s) return;
+  const c = ctx; c.save();
+  c.font = `${o.weight || 300} ${size}px Vazirmatn`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+  if (o.spacing) c.letterSpacing = o.spacing + 'px';
+  c.beginPath(); c.rect(0, y - size * .9, W, size * 1.8); c.clip();
+  const k = eo(clamp(a));
+  c.globalAlpha = clamp(a * 1.4);
+  if (k < 1) c.filter = `blur(${(1 - k) * 10}px)`;
+  c.fillStyle = o.col || NAVY; c.fillText(s, x, y + (1 - k) * size * .6);
+  c.restore();
+}
+function hair(x1, y1, x2, y2, col = NAVY, w = 2, a = 1) { const c = ctx; c.save(); c.globalAlpha = a; c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); c.restore(); }
+
+// ---------- paper, grid, frame marks ----------
+function backdrop(t, warm = 0) {
+  const c = ctx;
+  const g = c.createRadialGradient(CX, CY, 100, CX, CY, 1400); g.addColorStop(0, '#fbf9f5'); g.addColorStop(1, '#ebe5da'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  if (warm > 0) { const g2 = c.createRadialGradient(CX, CY, 0, CX, CY, 900); g2.addColorStop(0, `rgba(176,141,87,${.18 * warm})`); g2.addColorStop(1, 'rgba(176,141,87,0)'); c.fillStyle = g2; c.fillRect(0, 0, W, H); }
+  // fine grid, drifting very slowly
+  c.save(); c.strokeStyle = 'rgba(15,29,51,.045)'; c.lineWidth = 1; const off = (t * 4) % 60;
+  for (let x = -60 + off; x < W + 60; x += 60) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+  for (let y = -60 + off; y < H + 60; y += 60) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  c.restore();
+  // frame + corner registration marks
+  const m = 60, L2 = 46; c.save(); c.strokeStyle = 'rgba(15,29,51,.35)'; c.lineWidth = 2;
+  [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]].forEach(([x, y, sx, sy]) => { c.beginPath(); c.moveTo(x + sx * L2, y); c.lineTo(x, y); c.lineTo(x, y + sy * L2); c.stroke(); });
+  c.restore();
+  // header / footer microcopy
+  c.save(); c.font = '500 24px Vazirmatn'; c.fillStyle = 'rgba(15,29,51,.55)'; c.direction = 'rtl'; c.letterSpacing = '3px';
+  c.textAlign = 'right'; c.fillText('کانون نخبه‌پروری شهید کاظم آشتیانی', W - 100, 120);
+  c.textAlign = 'left'; c.fillText('رونمایی', 100, 120);
+  c.textAlign = 'right'; c.fillText('به‌زودی', W - 100, H - 100);
+  c.textAlign = 'left'; c.fillText(t < T.hit ? `${String(Math.floor(t)).padStart(2, '0').replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d])}″` : '', 100, H - 100);
+  c.restore();
+}
+
+// ---------- motifs (hairline, navy + gold) ----------
+function motifNetwork(p, a) {
+  const c = ctx, pts = Array.from({ length: 14 }, (_, i) => { const r = 120 + hash(i) * 230, an = i / 14 * Math.PI * 2 + hash(i + 3); return [CX + Math.cos(an + p * .15) * r, CY + Math.sin(an + p * .15) * r * .95]; });
+  c.save(); c.globalAlpha = a;
+  pts.forEach((q, i) => pts.forEach((r, j) => { if (j <= i) return; const d = Math.hypot(q[0] - r[0], q[1] - r[1]); if (d > 260) return;
+    const k = lin(p, .2 + (i + j) * .02, .8 + (i + j) * .02); if (k <= 0) return;
+    c.strokeStyle = 'rgba(15,29,51,.35)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(q[0], q[1]); c.lineTo(q[0] + (r[0] - q[0]) * k, q[1] + (r[1] - q[1]) * k); c.stroke(); }));
+  pts.forEach((q, i) => { c.fillStyle = i === 5 ? GOLD : NAVY; c.beginPath(); c.arc(q[0], q[1], i === 5 ? 9 : 5, 0, 7); c.fill(); });
+  c.strokeStyle = GOLD; c.lineWidth = 2; c.beginPath(); c.arc(pts[5][0], pts[5][1], 22 + 10 * Math.sin(p * 4), 0, 7); c.stroke();
+  c.restore();
+}
+function motifPersonal(p, a) {
+  const c = ctx; c.save(); c.globalAlpha = a;
+  for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++) { if (i === 4 && j === 4) continue; c.fillStyle = 'rgba(15,29,51,.28)'; c.beginPath(); c.arc(CX - 320 + i * 80, CY - 320 + j * 80, 5, 0, 7); c.fill(); }
+  const k = eo(lin(p, .1, .9));
+  c.fillStyle = GOLD; c.beginPath(); c.arc(CX, CY, 10 + 6 * k, 0, 7); c.fill();
+  c.strokeStyle = GOLD; c.lineWidth = 2; c.beginPath(); c.arc(CX, CY, 40 * k + 6, 0, 7); c.stroke();
+  c.globalAlpha = a * .5; c.beginPath(); c.arc(CX, CY, 80 * k + 6, 0, 7); c.stroke();
+  // a single path leaving the crowd
+  c.globalAlpha = a; c.strokeStyle = NAVY; c.lineWidth = 2; c.setLineDash([2, 10]); c.beginPath(); c.moveTo(CX, CY);
+  const e = lin(p, .5, 1.8); for (let u = 0; u <= e; u += .02) c.lineTo(CX + Math.sin(u * 3) * 120 * u, CY - u * 380); c.stroke(); c.setLineDash([]);
+  c.restore();
+}
+function motifGrid(p, a) {
+  const c = ctx; c.save(); c.globalAlpha = a;
+  for (let i = 0; i < 9; i++) {
+    const gx = CX - 190 + (i % 3) * 130, gy = CY - 190 + Math.floor(i / 3) * 130;
+    const sx = CX + (hash(i) - .5) * 760, sy = CY + (hash(i + 9) - .5) * 760, k = eio(lin(p, .1 + i * .05, .9 + i * .05));
+    const x = sx + (gx - sx) * k, y = sy + (gy - sy) * k, r = (1 - k) * (hash(i + 2) - .5) * 1.5;
+    c.save(); c.translate(x + 55, y + 55); c.rotate(r);
+    c.strokeStyle = i === 4 ? GOLD : NAVY; c.lineWidth = i === 4 ? 3 : 1.8; c.strokeRect(-55, -55, 110, 110);
+    if (i === 4 && k > .95) { c.fillStyle = 'rgba(176,141,87,.15)'; c.fillRect(-55, -55, 110, 110); }
+    c.restore();
+  }
+  c.restore();
+}
+function motifRings(p, a) {
+  const c = ctx; c.save();
+  for (let i = 0; i < 6; i++) { const u = ((p * .55 + i / 6) % 1), r = 30 + u * 420;
+    c.globalAlpha = a * (1 - u) * .9; c.strokeStyle = i % 3 ? NAVY : GOLD; c.lineWidth = 2; c.beginPath(); c.arc(CX, CY, r, 0, 7); c.stroke(); }
+  c.globalAlpha = a; c.fillStyle = NAVY; c.beginPath(); c.arc(CX, CY, 10, 0, 7); c.fill();
+  // small satellites receiving
+  for (let i = 0; i < 6; i++) { const an = i / 6 * Math.PI * 2 + .3, r = 330; c.fillStyle = i === 2 ? GOLD : 'rgba(15,29,51,.6)'; c.beginPath(); c.arc(CX + Math.cos(an) * r, CY + Math.sin(an) * r, 6, 0, 7); c.fill(); }
+  c.restore();
+}
+function motifRise(p, a) {
+  const c = ctx; c.save(); c.globalAlpha = a;
+  const x0 = CX - 330, x1 = CX + 330, y0 = CY + 260;
+  c.strokeStyle = 'rgba(15,29,51,.3)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y0); c.moveTo(x0, y0); c.lineTo(x0, CY - 330); c.stroke();
+  const k = eo(lin(p, .1, 1.6)), pts = [];
+  for (let u = 0; u <= k; u += .01) pts.push([x0 + u * 660, y0 - (Math.pow(u, 1.8) * 520 + Math.sin(u * 14) * 18 * (1 - u))]);
+  c.strokeStyle = NAVY; c.lineWidth = 3; c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.stroke();
+  if (pts.length) { const [x, y] = pts[pts.length - 1]; const g = c.createRadialGradient(x, y, 0, x, y, 70); g.addColorStop(0, 'rgba(176,141,87,.5)'); g.addColorStop(1, 'rgba(176,141,87,0)'); c.fillStyle = g; c.fillRect(x - 70, y - 70, 140, 140); c.fillStyle = GOLD; c.beginPath(); c.arc(x, y, 9, 0, 7); c.fill(); }
+  c.restore();
+}
+
+// ---------- the veiled object ----------
+function veiled(t, a, zoom = 1) {
+  const c = ctx, w = 520, h = 1000, x = CX - w / 2, y = CY - h / 2 + 40;
+  c.save(); c.globalAlpha = a; c.translate(CX, CY); c.scale(zoom, zoom); c.translate(-CX, -CY);
+  c.shadowColor = 'rgba(15,29,51,.18)'; c.shadowBlur = 60; c.shadowOffsetY = 30;
+  c.fillStyle = '#fbfaf7'; c.beginPath(); c.roundRect(x, y, w, h, 64); c.fill();
+  c.shadowColor = 'transparent';
+  // blurred content behind frosted glass
+  c.save(); c.beginPath(); c.roundRect(x + 18, y + 18, w - 36, h - 36, 48); c.clip();
+  c.filter = 'blur(26px)';
+  c.fillStyle = 'rgba(31,122,122,.55)'; c.beginPath(); c.roundRect(x + 50, y + 80, w - 100, 190, 30); c.fill();
+  [[0, 0, GOLD], [1, 0, NAVY], [0, 1, NAVY], [1, 1, TEAL], [0, 2, TEAL], [1, 2, GOLD]].forEach(([i, j, col]) => { c.fillStyle = col; c.globalAlpha = a * .45; c.beginPath(); c.roundRect(x + 50 + i * 220, y + 320 + j * 200, 200, 170, 26); c.fill(); });
+  c.filter = 'none'; c.globalAlpha = a;
+  c.fillStyle = 'rgba(245,242,236,.35)'; c.fillRect(x, y, w, h);
+  // light sweep
+  const sw = ((t - T.veil) * .45) % 1.6 - .3;
+  const g = c.createLinearGradient(x + w * sw - 200, y, x + w * sw + 200, y + 300); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.75)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = g; c.fillRect(x, y, w, h);
+  c.restore();
+  c.strokeStyle = NAVY; c.lineWidth = 2.5; c.beginPath(); c.roundRect(x, y, w, h, 64); c.stroke();
+  c.strokeStyle = 'rgba(15,29,51,.25)'; c.lineWidth = 1.5; c.beginPath(); c.roundRect(x + 18, y + 18, w - 36, h - 36, 48); c.stroke();
+  c.fillStyle = NAVY; c.beginPath(); c.roundRect(CX - 60, y + 34, 120, 12, 6); c.fill();
+  c.restore();
+}
+
+// ---------- scenes ----------
+function render(t) {
+  t = clamp(t, 0, DUR);
+  const c = ctx;
+  backdrop(t, t >= T.hit ? Math.max(0, 1 - (t - T.hit) / 3) : lin(t, T.build, T.hit));
+
+  if (t < T.words) {
+    // opening line + presents
+    const k = eio(lin(t, .4, 2.4)); hair(CX - 380 * k, CY, CX + 380 * k, CY, NAVY, 2, win(t, .4, 4.8, .2, .6));
+    c.save(); c.globalAlpha = win(t, .6, 4.8, .4, .6); c.fillStyle = GOLD; c.beginPath(); c.arc(CX + 380 * k, CY, 6, 0, 7); c.fill(); c.restore();
+    line('کانون نخبه‌پروری شهید کاظم آشتیانی', CX, CY - 80, 40, win(t, 1.4, 4.8, .9, .6), { weight: 500, spacing: 2 });
+    line('تقدیم می‌کند', CX, CY + 80, 34, win(t, 2.3, 4.8, .9, .6), { weight: 300, col: MUTE, spacing: 6 });
+    line('هر تحولی', CX, CY - 70, 96, win(t, 5.2, 9.6, .9, .6), { weight: 200 });
+    line('با یک پرسش آغاز می‌شود.', CX, CY + 60, 70, win(t, 6.2, 9.6, .9, .6), { weight: 500 });
+    line('اگر یادگیری…', CX, CY - 70, 96, win(t, 10.0, 13.9, .9, .5), { weight: 200 });
+    line('شکل دیگری داشت؟', CX, CY + 60, 84, win(t, 11.0, 13.9, .9, .5), { weight: 600, col: GOLD });
+  } else if (t < T.veil) {
+    const i = Math.min(4, Math.floor((t - T.words) / 2.4)), p = t - T.words - i * 2.4, a = win(p, 0, 2.4, .4, .35);
+    WORDS[i].m(p, a);
+    line(WORDS[i].w, CX, 1430, 120, win(p, .15, 2.4, .6, .35), { weight: 300 });
+    // index + progress hairline
+    line(`${FA[i]} — ۰۵`, CX, 1560, 28, a, { weight: 500, col: MUTE, spacing: 4 });
+    hair(CX - 200, 1610, CX + 200, 1610, 'rgba(15,29,51,.15)', 2);
+    hair(CX + 200, 1610, CX + 200 - 400 * ((t - T.words) / 12), 1610, GOLD, 3);
+  } else if (t < T.hit) {
+    const zoom = 1 + eio(lin(t, T.build, T.hit)) * .12;
+    veiled(t, eo(lin(t, T.veil, T.veil + 1.2)) * (1 - lin(t, T.hit - .25, T.hit)), zoom);
+    line('طراحی‌شده برای', CX, 1500, 48, win(t, 27.2, 31.2, .8, .5), { weight: 300, col: MUTE });
+    line('دانش‌آموزان کانون', CX, 1590, 76, win(t, 27.8, 31.2, .8, .5), { weight: 600 });
+    line('یک تجربه‌ی تازه.', CX, 1650, 72, win(t, 31.3, 33.9, .5, .3), { weight: 300 });
+    // converging lines in the build
+    const k = lin(t, T.build, T.hit);
+    for (let i = 0; i < 10; i++) { const y = 200 + i * 170; c.save(); c.globalAlpha = k * .5; hair(0, y, W * k * .5, y + (CY - y) * k * .8, i % 3 ? NAVY : GOLD, 1.5); hair(W, y, W - W * k * .5, y + (CY - y) * k * .8, i % 3 ? NAVY : GOLD, 1.5); c.restore(); }
+  } else {
+    const p = t - T.hit;
+    c.fillStyle = `rgba(255,255,255,${Math.max(0, 1 - p * 1.6)})`; c.fillRect(0, 0, W, H);
+    // logo
+    const la = lin(p, 2.0, 3.2);
+    if (la > 0 && logo.complete && logo.naturalWidth) { const ly = 540 + (1 - eo(la)) * 30; c.save(); c.globalAlpha = la; c.shadowColor = 'rgba(15,29,51,.15)'; c.shadowBlur = 30; c.shadowOffsetY = 10; c.fillStyle = '#fff'; c.beginPath(); c.arc(CX, ly, 125, 0, 7); c.fill(); c.shadowColor = 'transparent'; c.strokeStyle = GOLD; c.lineWidth = 2.5; c.beginPath(); c.arc(CX, ly, 125, 0, 7); c.stroke(); c.beginPath(); c.arc(CX, ly, 116, 0, 7); c.clip(); c.drawImage(logo, CX - 105, ly - 105, 210, 210); c.restore(); }
+    line('به‌زودی', CX, CY + 20, 200, lin(p, .15, 1.4), { weight: 800 });
+    const gw = eio(lin(p, 1.0, 2.2)) * 260; hair(CX - gw, CY + 170, CX + gw, CY + 170, GOLD, 3);
+    line('رونمایی می‌شود', CX, CY + 270, 64, lin(p, 1.5, 2.6), { weight: 300, spacing: 4 });
+    line('کانون نخبه‌پروری شهید کاظم آشتیانی', CX, 1420, 38, lin(p, 2.8, 3.8), { weight: 500, spacing: 2 });
+    line('منتظر باشید.', CX, 1560, 46, lin(p, 3.6, 4.6), { weight: 300, col: GOLD, spacing: 6 });
+    if (t > DUR - 1.4) { c.fillStyle = `rgba(245,242,236,${lin(t, DUR - 1.4, DUR) * .0})`; }
+  }
+  // film-like soft vignette (light)
+  const v = c.createRadialGradient(CX, H / 2, H * .35, CX, H / 2, H * .85); v.addColorStop(0, 'rgba(15,29,51,0)'); v.addColorStop(1, 'rgba(15,29,51,.10)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
+  if (t < .6) { c.fillStyle = `rgba(245,242,236,${1 - t / .6})`; c.fillRect(0, 0, W, H); }
+}
+
+// ---------- player ----------
+const RENDER = new URLSearchParams(location.search).has('render');
+const audio = document.getElementById('music');
+window.teaserReady = Promise.all([document.fonts.load('300 40px Vazirmatn').then(() => document.fonts.load('800 40px Vazirmatn')).then(() => document.fonts.ready),
+  new Promise(r => { if (logo.complete) r(); else { logo.onload = r; logo.onerror = r; } })]);
+window.renderAt = t => { render(t); return cv.toDataURL('image/jpeg', .93); };
+window.TEASER_DURATION = DUR;
+if (RENDER) { document.querySelectorAll('.ui').forEach(e => e.remove()); cv.style.cssText = 'height:auto;width:1080px;max-width:none;max-height:none;box-shadow:none'; return; }
+window.teaserReady.then(() => render(40));
+const start = document.getElementById('start'), end = document.getElementById('end'); let raf = 0;
+function loop() { const t = audio.currentTime; render(t); if (audio.ended || t >= DUR - .05) { end.classList.remove('hide'); return; } raf = requestAnimationFrame(loop); }
+function play() { start.classList.add('hide'); end.classList.add('hide'); audio.currentTime = 0; audio.play().catch(() => {}); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop); }
+document.getElementById('play').onclick = play; document.getElementById('replay').onclick = play;
+})();
+</script>
+</body>
+</html>
