@@ -1019,6 +1019,32 @@ export default function register(r) {
     return { ok: true, count: saved.length, ids: saved };
   });
 
+  // ---------- تطبیق با نام و نام خانوادگی (وقتی کد ملی نیست یا پیدا نشد) ----------
+  // یکسان‌سازی ی/ک عربی، حذف اعراب، نیم‌فاصله و علائم. دو کلید ساخته می‌شود:
+  //  - اجزای نام مرتب‌شده (ترتیب «نام / نام‌خانوادگی» مهم نیست)
+  //  - نام چسبیده (فاصله و نیم‌فاصله مهم نیست: «حسن زاده» = «حسن‌زاده» = «حسنزاده»)
+  const nameClean = (s) => String(s || '').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/ي/g, 'ی').replace(/ك/g, 'ک').replace(/[ۀة]/g, 'ه').toLowerCase();
+  const nameTokens = (s) => nameClean(s).split(/[\s\u200c\u200d]+/).map((t) => t.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
+  const nameKeys = (s) => { const t = nameTokens(s); return t.length ? [`s:${[...t].sort().join('|')}`, `j:${t.join('')}`] : []; };
+  const BARPA_GRADES = { 'چهارم': 4, 'پنجم': 5, 'ششم': 6, 'هفتم': 7, 'هشتم': 8, 'نهم': 9 };
+  const buildNameIndex = (centerId) => {
+    const idx = new Map();
+    for (const st of all(`SELECT u.id, u.full_name, s.grade FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1`, centerId)) {
+      for (const k of nameKeys(st.full_name)) { const a = idx.get(k) || []; if (!a.some((x) => x.id === st.id)) a.push(st); idx.set(k, a); }
+    }
+    return idx;
+  };
+  // فقط وقتی دقیقاً یک دانش‌آموز مطابقت داشته باشد برمی‌گرداند. در هم‌نام بودن، پایه آزمون تعیین‌کننده است؛
+  // اگر باز هم یکتا نشد، رکورد «تطبیق‌نشده» می‌ماند تا مدیر دستی تعیین کند (جلوگیری از ثبت نتیجه برای فرد اشتباه).
+  const findByName = (idx, fullName, gradeWord) => {
+    for (const k of nameKeys(fullName)) {
+      let c = idx.get(k) || [];
+      if (c.length > 1 && BARPA_GRADES[gradeWord]) c = c.filter((x) => x.grade === BARPA_GRADES[gradeWord]);
+      if (c.length === 1) return c[0];
+    }
+    return null;
+  };
+
   // ---------- آپلود PDF و تفکیک خودکار کارنامه آزمون جامع برپا ----------
   const handleBarpaUpload = async (ctx) => {
     const b = ctx.body || {};
@@ -1047,6 +1073,7 @@ export default function register(r) {
 
     const imported = [];
     const unmatched = [];
+    const nameIdx = buildNameIndex(centerId);
 
     tx(() => {
       // پاکسازی رکوردهای تطبیق‌نشده قبلی برای همین آزمون و کانون جهت جلوگیری از تکرار هنگام آپلود دوباره
@@ -1059,24 +1086,17 @@ export default function register(r) {
         const total = item.total_summary || {};
         const payloadJson = JSON.stringify(item);
 
-        if (!candidateCode) {
-          const res = run(`
-            INSERT INTO barpa_unmatched (exam_id, center_id, candidate_code, full_name, school_name, page, payload_json, created_at)
-            VALUES (?,?,?,?,?,?,?,?)
-          `, examId, centerId, null, fullName || null, schoolName, item.page || null, payloadJson, Date.now());
-          unmatched.push({ id: res.lastInsertRowid, candidate_code: null, full_name: fullName, school_name: schoolName, page: item.page });
-          continue;
-        }
-
-        // فقط تطبیق با کد ملی یا نام کاربری (تطبیق با نام کامل حذف شد)
-        const stu = get("SELECT u.id, u.full_name FROM users u WHERE u.role='student' AND u.center_id=? AND (u.national_code=? OR u.username=?)", centerId, candidateCode, candidateCode);
+        // اول با کد ملی/نام کاربری، اگر نبود یا پیدا نشد با نام و نام خانوادگی
+        let stu = candidateCode ? get("SELECT u.id, u.full_name FROM users u WHERE u.role='student' AND u.center_id=? AND (u.national_code=? OR u.username=?)", centerId, candidateCode, candidateCode) : null;
+        let matchedBy = stu ? 'code' : null;
+        if (!stu) { stu = findByName(nameIdx, fullName, grade); if (stu) matchedBy = 'name'; }
 
         if (!stu) {
           const res = run(`
             INSERT INTO barpa_unmatched (exam_id, center_id, candidate_code, full_name, school_name, page, payload_json, created_at)
             VALUES (?,?,?,?,?,?,?,?)
-          `, examId, centerId, candidateCode, fullName || null, schoolName, item.page || null, payloadJson, Date.now());
-          unmatched.push({ id: res.lastInsertRowid, candidate_code: candidateCode, full_name: fullName, school_name: schoolName, page: item.page });
+          `, examId, centerId, candidateCode || null, fullName || null, schoolName, item.page || null, payloadJson, Date.now());
+          unmatched.push({ id: res.lastInsertRowid, candidate_code: candidateCode || null, full_name: fullName, school_name: schoolName, page: item.page });
           continue;
         }
 
@@ -1109,7 +1129,7 @@ export default function register(r) {
           item.exam_title || examTitle,
           grade,
           stu.id,
-          candidateCode,
+          candidateCode || `STU_${stu.id}`,
           fullName || stu.full_name,
           schoolName,
           toNumOrNull(item.total_attendees),
@@ -1129,7 +1149,8 @@ export default function register(r) {
         imported.push({
           student_id: stu.id,
           full_name: fullName || stu.full_name,
-          candidate_code: candidateCode,
+          candidate_code: candidateCode || null,
+          matched_by: matchedBy,
           traz: toNumOrNull(total.traz),
           rank: toNumOrNull(total.rank_all)
         });
@@ -1142,6 +1163,7 @@ export default function register(r) {
       exam_id: examId,
       exam_title: examTitle,
       count: imported.length,
+      matched_by_name: imported.filter((x) => x.matched_by === 'name').length,
       unmatched_count: unmatched.length,
       students: imported,
       unmatched
@@ -1229,6 +1251,31 @@ export default function register(r) {
     });
 
     return { ok: true, matched: true, student_id: stu.id, student_name: stu.full_name };
+  });
+
+  // فهرست آزمون‌های برپای ثبت‌شده در کانون (برای حذف و آپلود دوباره)
+  r.get('/api/manager/barpa-exams', M, (ctx) => all(`SELECT exam_id, MAX(exam_title) exam_title, MAX(grade) grade, COUNT(*) reports, MAX(created_at) created_at,
+      (SELECT COUNT(*) FROM barpa_unmatched b WHERE b.center_id=r.center_id AND b.exam_id=r.exam_id) unmatched
+    FROM comprehensive_exam_reports r WHERE r.center_id=? GROUP BY r.exam_id ORDER BY MAX(r.id) DESC`, ctx.user.center_id));
+  // حذف همه کارنامه‌ها و رکوردهای تطبیق‌نشده یک آزمون (سپس می‌توان فایل را دوباره آپلود کرد)
+  r.del('/api/manager/barpa-exams', M, (ctx) => {
+    const examId = clampStr(ctx.query.exam_id, 200), cid = ctx.user.center_id;
+    if (!examId) fail(400, 'شناسه آزمون لازم است');
+    return tx(() => {
+      const reports = run('DELETE FROM comprehensive_exam_reports WHERE center_id=? AND exam_id=?', cid, examId).changes;
+      const unmatched = run('DELETE FROM barpa_unmatched WHERE center_id=? AND exam_id=?', cid, examId).changes;
+      if (!reports && !unmatched) fail(404, 'آزمونی با این شناسه یافت نشد');
+      return { ok: true, deleted_reports: Number(reports), deleted_unmatched: Number(unmatched) };
+    });
+  });
+  // حذف یک کارنامه یا یک رکورد تطبیق‌نشده
+  r.del('/api/manager/barpa-exams/reports/:id', M, (ctx) => {
+    if (!run('DELETE FROM comprehensive_exam_reports WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id).changes) fail(404, 'کارنامه یافت نشد');
+    return { ok: true };
+  });
+  r.del('/api/manager/barpa-exams/unmatched/:id', M, (ctx) => {
+    if (!run('DELETE FROM barpa_unmatched WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id).changes) fail(404, 'رکورد یافت نشد');
+    return { ok: true };
   });
 
   r.post('/api/manager/barpa-exams/upload', { roles: ['manager', 'admin'] }, handleBarpaUpload);
