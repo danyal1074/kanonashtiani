@@ -5,20 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>آغاز تازه</title>
 <meta name="description" content="همه‌چیز از یک پرسش آغاز شد… به‌زودی رونمایی می‌شود.">
-<meta name="theme-color" content="#0b3d40">
+<meta name="theme-color" content="#f6faf9">
 <style>
   @font-face { font-family: Vazirmatn; src: url('fonts/Vazirmatn.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
   :root { --deep: #072f33; --teal: #0f766e; --gold: #f2c14e; --ink: #fff; }
   * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; color: var(--ink); font-family: Vazirmatn, Tahoma, sans-serif; overflow: hidden;
-    background: radial-gradient(70% 90% at 70% 20%, #11807a 0%, transparent 60%), linear-gradient(135deg, #0b4a4d, #0b2545); }
+  html, body { height: 100%; color: #0b2545; font-family: Vazirmatn, Tahoma, sans-serif; overflow: hidden;
+    background: radial-gradient(60% 80% at 75% 15%, rgba(15,118,110,.18), transparent 60%), radial-gradient(50% 70% at 15% 90%, rgba(242,193,78,.22), transparent 60%), #f6faf9; }
   #stage { position: fixed; inset: 0; display: grid; place-items: center; }
-  canvas#c { width: 100vw; max-width: calc(100dvh * 16 / 9); aspect-ratio: 16 / 9; display: block; box-shadow: 0 30px 90px rgba(0,0,0,.35); }
+  canvas#c { width: 100vw; max-width: calc(100dvh * 16 / 9); aspect-ratio: 16 / 9; display: block; box-shadow: 0 30px 90px rgba(11,37,69,.18); border-radius: 12px; }
   .ui { position: fixed; inset: 0; display: grid; place-items: center; z-index: 5; transition: opacity .6s; }
   .ui.hide { opacity: 0; pointer-events: none; }
-  .btn { font: inherit; font-weight: 800; font-size: 17px; color: #0b2545; background: linear-gradient(90deg, #f2c14e, #ffe39a); border: 0; border-radius: 999px; padding: 14px 34px; cursor: pointer;
-    text-decoration: none; display: inline-flex; gap: 10px; align-items: center; box-shadow: 0 10px 34px rgba(242,193,78,.35); }
-  .btn.ghost { background: rgba(255,255,255,.12); color: #fff; box-shadow: none; border: 1px solid rgba(255,255,255,.4); font-size: 15px; padding: 10px 22px; backdrop-filter: blur(8px); }
+  .btn { font: inherit; font-weight: 800; font-size: 17px; color: #fff; background: linear-gradient(90deg, #0f766e, #14a39a); border: 0; border-radius: 999px; padding: 14px 34px; cursor: pointer;
+    text-decoration: none; display: inline-flex; gap: 10px; align-items: center; box-shadow: 0 10px 34px rgba(15,118,110,.3); }
+  .btn.ghost { background: rgba(255,255,255,.8); color: #0b2545; box-shadow: 0 6px 20px rgba(11,37,69,.1); border: 1px solid rgba(11,37,69,.15); font-size: 15px; padding: 10px 22px; backdrop-filter: blur(8px); }
   .card { text-align: center; } .card p { margin-top: 14px; font-size: 13px; opacity: .75; }
   .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   #end { place-items: end center; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
@@ -38,10 +38,11 @@ const SC = await (await fetch('teaser7/script.json')).json();
 const LINES = SC.lines, DUR = SC.duration, W = 1920, H = 1080, CX = W / 2, CY = H / 2;
 const HITS = LINES.filter(l => l.hit).map(l => l.t);
 const at = id => LINES.find(l => l.id === id);
-const GOLD = '#f2c14e', MINT = '#5eead4', WHITE = '#ffffff';
+const GOLD = '#e0a526', MINT = '#14a39a', WHITE = '#ffffff', INK = '#0b2545', SUB = '#4a6178', TEAL = '#0f766e';
 const SHOTS = ['home', 'study', 'path', 'games', 'results', 'roadmap', 'profile', 'library', 'birthday'];
 const IMG = Object.fromEntries(SHOTS.map(n => { const i = new Image(); i.src = `teaser6/screens/${n}.webp`; return [n, i]; }));
 const logo = new Image(); logo.src = 'img/logo-ashtiani.png';
+const HOME = { elementary: new Image(), secondary: new Image() }; HOME.elementary.src = 'teaser7/screens/elementary.webp'; HOME.secondary.src = 'teaser7/screens/secondary.webp'; Object.assign(IMG, HOME);
 
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -55,19 +56,19 @@ const hitAmt = (t, len = .5) => { let k = 0; for (const h of HITS) if (t >= h &&
 // ---------- background ----------
 function backdrop(t) {
   const c = ctx, sh = Math.sin(t * .15);
-  const g = c.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0b4a4d'); g.addColorStop(.55 + sh * .1, '#0a3a4a'); g.addColorStop(1, '#0b2545');
+  const g = c.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#f3faf8'); g.addColorStop(.55 + sh * .1, '#fbfaf5'); g.addColorStop(1, '#eef4fb');
   c.fillStyle = g; c.fillRect(0, 0, W, H);
   // light leaks
-  [[.75, .15, 900, '17,128,122', .55], [.15, .9, 800, '242,193,78', .16], [.5, .5, 700, '94,234,212', .12]].forEach(([x, y, r, col, a], i) => {
+  [[.78, .12, 950, '20,163,154', .22], [.12, .9, 850, '242,193,78', .28], [.45, .55, 700, '120,170,240', .12]].forEach(([x, y, r, col, a], i) => {
     const px = x * W + Math.sin(t * .2 + i * 2) * 120, py = y * H + Math.cos(t * .17 + i) * 80;
     const gr = c.createRadialGradient(px, py, 0, px, py, r); gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(1, `rgba(${col},0)`); c.fillStyle = gr; c.fillRect(0, 0, W, H); });
   // fine diagonal lines
-  c.save(); c.strokeStyle = 'rgba(255,255,255,.035)'; c.lineWidth = 2; const off = (t * 25) % 80;
+  c.save(); c.strokeStyle = 'rgba(11,37,69,.035)'; c.lineWidth = 2; const off = (t * 25) % 80;
   for (let x = -H; x < W + H; x += 80) { c.beginPath(); c.moveTo(x + off, 0); c.lineTo(x + off - H * .6, H); c.stroke(); }
   c.restore();
   // dust
   for (let i = 0; i < 70; i++) { const sp = 8 + hash(i) * 25, x = (hash(i + 2) * W + t * sp) % W, y = (hash(i + 5) * H - t * sp * .4 + H) % H;
-    c.globalAlpha = .15 + .45 * hash(i + 9); c.fillStyle = i % 7 ? '#cffaf3' : GOLD; c.beginPath(); c.arc(x, y, 1 + hash(i + 3) * 2.2, 0, 7); c.fill(); }
+    c.globalAlpha = .12 + .35 * hash(i + 9); c.fillStyle = i % 7 ? TEAL : GOLD; c.beginPath(); c.arc(x, y, 1 + hash(i + 3) * 2.2, 0, 7); c.fill(); }
   c.globalAlpha = 1;
 }
 function streak(y, a, col = '255,255,255') {
@@ -90,22 +91,22 @@ function say(s, x, y, size, p, o = {}) {
   if (k < 1) c.filter = `blur(${(1 - k) * 10}px)`;
   c.translate(0, (1 - k) * 24);
   if (o.scale) { c.translate(cx, y); c.scale(o.scale, o.scale); c.translate(-cx, -y); }
-  c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 30; c.shadowOffsetY = 8;
-  c.fillStyle = o.grad ? gradFill(c, cx, w, o.grad) : (o.col || WHITE);
+  c.shadowColor = 'rgba(11,37,69,.10)'; c.shadowBlur = 24; c.shadowOffsetY = 6;
+  c.fillStyle = o.grad ? gradFill(c, cx, w, o.grad) : (o.col || INK);
   c.fillText(s, x, y);
   if (o.shine) { c.shadowColor = 'transparent'; const sx = cx + w / 2 - ((o.shine % 1.6) / 1.2) * (w + 300); const g = c.createLinearGradient(sx - 120, 0, sx + 120, 0);
     g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.globalCompositeOperation = 'source-atop'; c.fillStyle = g; c.fillText(s, x, y); }
   c.restore();
 }
-const GG = ['#ffe39a', '#f2c14e', '#ffffff'], GM = ['#ffffff', '#5eead4', '#a7f3d0'];
+const GG = ['#0f766e', '#14a39a', '#d4a017'], GM = ['#0b2545', '#0f766e', '#14a39a'];
 const fadeOut = (t, l, d = .35) => 1 - lin(t, l.end - d, l.end);
 
 // ---------- phone ----------
 function phone(name, x, y, h, o = {}) {
   const img = IMG[name], c = ctx, w = h * .462, a = o.a ?? 1; if (a <= 0) return;
   c.save(); c.globalAlpha = a; c.translate(x, y); c.rotate(o.rot || 0); const yaw = o.yaw || 0; c.transform(Math.cos(yaw), Math.sin(yaw) * .12, 0, 1, 0, 0);
-  c.save(); c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = h * .1; c.shadowOffsetY = h * .05; c.fillStyle = '#0d1b2a'; c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, w * .17); c.fill(); c.restore();
-  const rim = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); rim.addColorStop(0, 'rgba(255,255,255,.65)'); rim.addColorStop(.5, 'rgba(255,255,255,.08)'); rim.addColorStop(1, 'rgba(242,193,78,.5)');
+  c.save(); c.shadowColor = 'rgba(11,37,69,.28)'; c.shadowBlur = h * .1; c.shadowOffsetY = h * .05; c.fillStyle = '#ffffff'; c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, w * .17); c.fill(); c.restore();
+  const rim = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); rim.addColorStop(0, 'rgba(15,118,110,.55)'); rim.addColorStop(.5, 'rgba(11,37,69,.12)'); rim.addColorStop(1, 'rgba(224,165,38,.6)');
   c.strokeStyle = rim; c.lineWidth = Math.max(2, h * .006); c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, w * .17); c.stroke();
   const i = h * .022; c.save(); c.beginPath(); c.roundRect(-w / 2 + i, -h / 2 + i, w - 2 * i, h - 2 * i, w * .14); c.clip();
   if (img.complete && img.naturalWidth) { const b = o.blur ?? 2; if (b > .3) c.filter = `blur(${b * h / 800}px)`; c.drawImage(img, -w / 2 + i, -h / 2 + i, w - 2 * i, h - 2 * i); c.filter = 'none'; }
@@ -115,8 +116,8 @@ function phone(name, x, y, h, o = {}) {
   c.fillStyle = '#0d1b2a'; c.beginPath(); c.roundRect(-w * .17, -h / 2 + h * .03, w * .34, h * .036, h * .018); c.fill();
   c.restore();
 }
-function rays(x, y, t, a) { if (a <= 0) return; const c = ctx; c.save(); c.translate(x, y); c.rotate(t * .08); c.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 18; i++) { c.rotate(Math.PI * 2 / 18); const g = c.createLinearGradient(0, 0, 0, -1200); g.addColorStop(0, `rgba(242,193,78,${.16 * a})`); g.addColorStop(1, 'rgba(242,193,78,0)'); c.fillStyle = g; c.beginPath(); c.moveTo(0, 0); c.lineTo(-50, -1200); c.lineTo(50, -1200); c.fill(); }
+function rays(x, y, t, a) { if (a <= 0) return; const c = ctx; c.save(); c.translate(x, y); c.rotate(t * .08);
+  for (let i = 0; i < 18; i++) { c.rotate(Math.PI * 2 / 18); const g = c.createLinearGradient(0, 0, 0, -1200); g.addColorStop(0, i % 2 ? `rgba(224,165,38,${.22 * a})` : `rgba(20,163,154,${.16 * a})`); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.beginPath(); c.moveTo(0, 0); c.lineTo(-50, -1200); c.lineTo(50, -1200); c.fill(); }
   c.restore(); }
 function logoBadge(x, y, r, a) { if (a <= 0 || !logo.complete || !logo.naturalWidth) return; const c = ctx; c.save(); c.globalAlpha = a;
   const g = c.createRadialGradient(x, y, r * .8, x, y, r * 2.2); g.addColorStop(0, 'rgba(242,193,78,.35)'); g.addColorStop(1, 'rgba(242,193,78,0)'); c.fillStyle = g; c.fillRect(x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
@@ -134,10 +135,10 @@ function render(t) {
   // 1–3: questions
   for (const id of ['l01', 'l02', 'l03']) { const l = L(id); if (t < l.t - .1 || t > l.end) continue;
     const p = t - l.t, fo = fadeOut(t, l);
-    say(l.show[0], CX, CY - 70, 70, lin(p, 0, .7) * fo, { weight: 300, col: '#cffaf3' });
+    say(l.show[0], CX, CY - 70, 70, lin(p, 0, .7) * fo, { weight: 300, col: SUB });
     say(l.show[1], CX, CY + 50, l.show[1].length > 24 ? 84 : 104, lin(p, .45, 1.4) * fo, { weight: 800, grad: id === 'l02' ? GG : undefined });
     // thin progress hairline under
-    c.save(); c.globalAlpha = .4 * fo; c.fillStyle = '#cffaf3'; const lw = 500 * lin(t, l.t, l.end); c.fillRect(CX + 250 - lw, CY + 150, lw, 2); c.restore(); }
+    c.save(); c.globalAlpha = .5 * fo; c.fillStyle = TEAL; const lw = 500 * lin(t, l.t, l.end); c.fillRect(CX + 250 - lw, CY + 150, lw, 2); c.restore(); }
 
   // 4–7: four keyword beats with phones
   ['l04', 'l05', 'l06', 'l07'].forEach((id, k) => { const l = L(id); if (t < l.t || t >= l.end) return;
@@ -147,31 +148,34 @@ function render(t) {
     phone(SHOTS[(SHOTS.indexOf(l.shot) + 5) % SHOTS.length], CX - side * 740, CY + 90, 560, { a: inP * (1 - out) * .45, yaw: side * .4, rot: side * -.12, blur: 9, t, seed: k + .3 });
     const tx = CX + side * 330;
     c.save(); c.translate(tx, CY - 40); c.scale(punch, punch); c.translate(-tx, -(CY - 40));
-    say(l.show[0], tx, CY - 60, 210, lin(p, 0, .25) * (1 - out), { weight: 900, col: WHITE });
+    say(l.show[0], tx, CY - 60, 190, lin(p, 0, .25) * (1 - out), { weight: 900, col: INK });
     c.restore();
     say(l.show[1], tx, CY + 120, 96, lin(p, .45, .9) * (1 - out), { weight: 700, grad: k % 2 ? GM : GG });
     // counter
-    say(`۰${'۱۲۳۴'[k]} — ۰۴`, tx, CY + 230, 30, lin(p, .2, .5) * (1 - out), { weight: 500, col: 'rgba(207,250,243,.7)', spacing: 4 });
+    say(`۰${'۱۲۳۴'[k]} — ۰۴`, tx, CY + 230, 30, lin(p, .2, .5) * (1 - out), { weight: 500, col: SUB, spacing: 4 });
   });
-  // 8: all in one place
+  // 8: «از دبستان تا متوسطه» — the two home pages side by side
   { const l = L('l08'); if (t >= l.t - .2 && t < l.end) { const p = t - l.t, fo = fadeOut(t, l);
-    for (let i = 0; i < 7; i++) { const an = (i - 3) * .32, r = 1500; const x = CX + Math.sin(an) * r * .62, y = CY + 330 + (1 - Math.cos(an)) * r * .5 - eo(lin(p, i * .06, .7 + i * .06)) * 120;
-      phone(SHOTS[i], x, y, 520 - Math.abs(i - 3) * 40, { a: eo(lin(p, i * .06, .5 + i * .06)) * fo * .9, rot: an * .6, blur: 3 + Math.abs(i - 3) * 1.5, t, seed: i }); }
-    const veil = c.createLinearGradient(0, 0, 0, H); veil.addColorStop(0, 'rgba(7,47,51,.85)'); veil.addColorStop(.55, 'rgba(7,47,51,.35)'); veil.addColorStop(1, 'rgba(7,47,51,0)'); c.fillStyle = veil; c.globalAlpha = fo; c.fillRect(0, 0, W, H); c.globalAlpha = 1;
-    say(l.show[0], CX, 230, 96, lin(p, 0, .7) * fo, { weight: 800 });
-    say(l.show[1], CX, 360, 110, lin(p, 1.2, 2.0) * fo, { weight: 900, grad: GG }); } }
+    [['elementary', 'دبستان', -1], ['secondary', 'متوسطه', 1]].forEach(([shot, label, side], k) => {
+      const inP = eo(lin(p, k * .25, .7 + k * .25)), x = CX + side * 330 + side * (1 - inP) * 200, y = CY + 100 + (1 - inP) * 120 + Math.sin(t * 1.3 + k) * 6;
+      phone(shot, x, y, 690, { a: inP * fo, yaw: side * -.18, rot: side * .04, blur: .6, t, seed: k });
+      // label pill
+      c.save(); c.globalAlpha = inP * fo; c.fillStyle = k ? INK : TEAL; c.beginPath(); c.roundRect(x - 95, y + 368, 190, 56, 28); c.fill();
+      c.fillStyle = '#fff'; c.font = '800 30px Vazirmatn'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl'; c.fillText(label, x, y + 397); c.restore(); });
+    say(l.show[0], CX, 120, 74, lin(p, 0, .7) * fo, { weight: 800 });
+    say(l.show[1], CX, 215, 64, lin(p, 1.3, 2.0) * fo, { weight: 900, grad: GG }); } }
   // 9: «و حالا…» + converging light
   { const l = L('l09'); if (t >= l.t && t < 28.2) { const p = t - l.t, k = lin(t, l.t, 27.7);
     rays(CX, CY, t, k);
-    for (let i = 0; i < 12; i++) { const y = 80 + i * 85; streak(y + (CY - y) * eio(k), .25 * k); }
+    for (let i = 0; i < 12; i++) { const y = 80 + i * 85; streak(y + (CY - y) * eio(k), .3 * k, '15,118,110'); }
     say(l.show[0], CX, CY, 120, lin(p, 0, .6) * (1 - lin(t, 27.5, 27.7)), { weight: 300 });
-    if (t >= 27.7) { c.fillStyle = '#041d20'; c.fillRect(-50, -50, W + 100, H + 100); } } }
+    if (t >= 27.7) { c.fillStyle = '#ffffff'; c.fillRect(-50, -50, W + 100, H + 100); } } }
   // 10: big hit — «آماده‌ی یک آغاز تازه باش!»
   { const l = L('l10'); if (t >= l.t && t < l.end) { const p = t - l.t, fo = fadeOut(t, l);
     rays(CX, CY, t, (1 - lin(p, 0, 3)) * .9 + .3);
-    for (let i = 0; i < 60; i++) { const an = hash(i) * Math.PI * 2, d = eo(lin(p, 0, 1.6)) * (300 + hash(i + 3) * 900); c.globalAlpha = (1 - lin(p, .3, 2.5)) * .9; c.fillStyle = i % 3 ? GOLD : MINT;
+    for (let i = 0; i < 60; i++) { const an = hash(i) * Math.PI * 2, d = eo(lin(p, 0, 1.6)) * (300 + hash(i + 3) * 900); c.globalAlpha = (1 - lin(p, .3, 2.5)) * .9; c.fillStyle = i % 3 ? GOLD : TEAL;
       c.beginPath(); c.arc(CX + Math.cos(an) * d, CY + Math.sin(an) * d * .6, 3 + hash(i + 5) * 4, 0, 7); c.fill(); } c.globalAlpha = 1;
-    say(l.show[0], CX, CY - 110, 80, lin(p, 0, .4) * fo, { weight: 300, col: '#cffaf3' });
+    say(l.show[0], CX, CY - 110, 80, lin(p, 0, .4) * fo, { weight: 300, col: SUB });
     say(l.show[1], CX, CY + 40, 150, lin(p, .1, .5) * fo, { weight: 900, grad: GG, scale: back(lin(p, 0, .5)), shine: p * 1.1 }); } }
   // 11: center name + logo
   { const l = L('l11'); if (t >= l.t && t < l.end + .3) { const p = t - l.t, fo = 1 - lin(t, l.end, l.end + .3);
@@ -180,19 +184,20 @@ function render(t) {
   // 12: «به‌زودی»
   { const l = L('l12'); if (t >= l.t) { const p = t - l.t;
     rays(CX, CY - 40, t, .7 - lin(p, 0, 4) * .3);
+    phone('elementary', 250, CY + 80 + (1 - eo(lin(p, 1.2, 2.2))) * 300, 640, { a: eo(lin(p, 1.2, 2.2)) * .95, yaw: .25, rot: -.08, blur: 1.5, t, seed: 1 });
+    phone('secondary', W - 250, CY + 80 + (1 - eo(lin(p, 1.4, 2.4))) * 300, 640, { a: eo(lin(p, 1.4, 2.4)) * .95, yaw: -.25, rot: .08, blur: 1.5, t, seed: 2 });
     logoBadge(CX, 200, 80, eo(lin(p, .8, 1.6)));
     say(l.show[0], CX, CY + 10, 260, lin(p, 0, .45), { weight: 900, grad: GG, scale: back(lin(p, 0, .6)), shine: p * .7 + .2 });
-    say(l.show[1], CX, CY + 210, 64, lin(p, .9, 1.8), { weight: 300, spacing: 10, col: '#cffaf3' });
-    say('کانون نخبه‌پروری شهید کاظم آشتیانی', CX, H - 110, 34, lin(p, 1.6, 2.4), { weight: 500, col: 'rgba(207,250,243,.8)', spacing: 2 }); } }
+    say(l.show[1], CX, CY + 210, 64, lin(p, .9, 1.8), { weight: 400, spacing: 10, col: SUB });
+    say('کانون نخبه‌پروری شهید کاظمی آشتیانی', CX, H - 110, 34, lin(p, 1.6, 2.4), { weight: 600, col: INK, spacing: 2 }); } }
 
   // hit flash + anamorphic streak
-  if (hk > 0) { c.fillStyle = `rgba(255,248,220,${Math.pow(hk, 3) * .55})`; c.fillRect(-50, -50, W + 100, H + 100); streak(CY, hk * .9, '255,236,180'); }
+  if (hk > 0) { c.fillStyle = `rgba(255,255,255,${Math.pow(hk, 3) * .7})`; c.fillRect(-50, -50, W + 100, H + 100); streak(CY, hk * .8, '20,163,154'); }
   c.restore();
   // letterbox bars + vignette (cinematic)
-  const v = c.createRadialGradient(CX, CY, H * .35, CX, CY, W * .7); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
-  c.fillStyle = '#020c0e'; c.fillRect(0, 0, W, 54); c.fillRect(0, H - 54, W, 54);
-  if (t < .6) { c.fillStyle = `rgba(2,12,14,${1 - t / .6})`; c.fillRect(0, 0, W, H); }
-  if (t > DUR - 1.2) { c.fillStyle = `rgba(2,12,14,${lin(t, DUR - 1.2, DUR)})`; c.fillRect(0, 0, W, H); }
+  const v = c.createRadialGradient(CX, CY, H * .35, CX, CY, W * .7); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(11,37,69,.08)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
+  if (t < .6) { c.fillStyle = `rgba(255,255,255,${1 - t / .6})`; c.fillRect(0, 0, W, H); }
+  if (t > DUR - 1.2) { c.fillStyle = `rgba(246,250,249,${lin(t, DUR - 1.2, DUR)})`; c.fillRect(0, 0, W, H); }
 }
 
 // ---------- player ----------

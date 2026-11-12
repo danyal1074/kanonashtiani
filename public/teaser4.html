@@ -319,7 +319,7 @@ function sceneReveal(c, t) {
     box(c, -420, -80, 840, 160, BLUE, 0, 12, 14); c.restore();
     ctext(c, 'پنل جدید دانش‌آموزان', CX, 950, 80, WHITE, { alpha: lin(p, 1.1, 1.2), rot: .03 }); }
   logoBadge(c, CX, 1300, 170, back(lin(p, 1.8, 2.2)), t);
-  ctext(c, 'کانون نخبه‌پروری شهید کاظم آشتیانی', CX, 1560, 44, WHITE, { alpha: lin(p, 2.4, 2.6), depth: 3, ow: 10 });
+  ctext(c, 'کانون نخبه‌پروری شهید کاظمی آشتیانی', CX, 1560, 44, WHITE, { alpha: lin(p, 2.4, 2.6), depth: 3, ow: 10 });
   bubble(c, CX, 1730, p < 6 ? 'قهرمان، آماده‌ای؟' : 'منتظرمون باش!', 64, back(lin(p, 3.0, 3.3)), true);
   if (t >= T.hit) { c.fillStyle = `rgba(255,255,255,${Math.max(0, .9 - (t - T.hit) * 3)})`; c.fillRect(0, 0, W, H); }
   if (t > DUR - .7) { c.fillStyle = `rgba(255,214,10,${lin(t, DUR - .7, DUR)})`; c.fillRect(0, 0, W, H); }

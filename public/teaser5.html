@@ -85,7 +85,7 @@ function backdrop(t, warm = 0) {
   c.restore();
   // header / footer microcopy
   c.save(); c.font = '500 24px Vazirmatn'; c.fillStyle = 'rgba(15,29,51,.55)'; c.direction = 'rtl'; c.letterSpacing = '3px';
-  c.textAlign = 'right'; c.fillText('کانون نخبه‌پروری شهید کاظم آشتیانی', W - 100, 120);
+  c.textAlign = 'right'; c.fillText('کانون نخبه‌پروری شهید کاظمی آشتیانی', W - 100, 120);
   c.textAlign = 'left'; c.fillText('رونمایی', 100, 120);
   c.textAlign = 'right'; c.fillText('به‌زودی', W - 100, H - 100);
   c.textAlign = 'left'; c.fillText(t < T.hit ? `${String(Math.floor(t)).padStart(2, '0').replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d])}″` : '', 100, H - 100);
@@ -183,7 +183,7 @@ function render(t) {
     // opening line + presents
     const k = eio(lin(t, .4, 2.4)); hair(CX - 380 * k, CY, CX + 380 * k, CY, NAVY, 2, win(t, .4, 4.8, .2, .6));
     c.save(); c.globalAlpha = win(t, .6, 4.8, .4, .6); c.fillStyle = GOLD; c.beginPath(); c.arc(CX + 380 * k, CY, 6, 0, 7); c.fill(); c.restore();
-    line('کانون نخبه‌پروری شهید کاظم آشتیانی', CX, CY - 80, 40, win(t, 1.4, 4.8, .9, .6), { weight: 500, spacing: 2 });
+    line('کانون نخبه‌پروری شهید کاظمی آشتیانی', CX, CY - 80, 40, win(t, 1.4, 4.8, .9, .6), { weight: 500, spacing: 2 });
     line('تقدیم می‌کند', CX, CY + 80, 34, win(t, 2.3, 4.8, .9, .6), { weight: 300, col: MUTE, spacing: 6 });
     line('هر تحولی', CX, CY - 70, 96, win(t, 5.2, 9.6, .9, .6), { weight: 200 });
     line('با یک پرسش آغاز می‌شود.', CX, CY + 60, 70, win(t, 6.2, 9.6, .9, .6), { weight: 500 });
@@ -215,7 +215,7 @@ function render(t) {
     line('به‌زودی', CX, CY + 20, 200, lin(p, .15, 1.4), { weight: 800 });
     const gw = eio(lin(p, 1.0, 2.2)) * 260; hair(CX - gw, CY + 170, CX + gw, CY + 170, GOLD, 3);
     line('رونمایی می‌شود', CX, CY + 270, 64, lin(p, 1.5, 2.6), { weight: 300, spacing: 4 });
-    line('کانون نخبه‌پروری شهید کاظم آشتیانی', CX, 1420, 38, lin(p, 2.8, 3.8), { weight: 500, spacing: 2 });
+    line('کانون نخبه‌پروری شهید کاظمی آشتیانی', CX, 1420, 38, lin(p, 2.8, 3.8), { weight: 500, spacing: 2 });
     line('منتظر باشید.', CX, 1560, 46, lin(p, 3.6, 4.6), { weight: 300, col: GOLD, spacing: 6 });
     if (t > DUR - 1.4) { c.fillStyle = `rgba(245,242,236,${lin(t, DUR - 1.4, DUR) * .0})`; }
   }
