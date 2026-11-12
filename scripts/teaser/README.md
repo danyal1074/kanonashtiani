@@ -146,3 +146,18 @@ python3 scripts/teaser/make-voice.py fa_IR-gyro-medium.onnx /tmp/vo 8     # یا
 python3 scripts/teaser/mix-voice.py /tmp/music7.wav /tmp/vo public/teaser7/teaser-audio.mp3
 node scripts/teaser/render-video.cjs http://localhost:8765/teaser7.html public/teaser7/teaser.mp4 public/teaser7/teaser-audio.mp3
 ```
+
+---
+
+# تیزر هشتم: «یک آغاز تازه» (۳۲ ثانیه، بدون گوینده، افقی و عمودی)
+
+نسخه‌ی پرهیجان‌تر تیزر هفتم، بدون گوینده؛ یک صفحه برای هر دو قالب: `/teaser8.html?fmt=h` (۱۶:۹) و `/teaser8.html?fmt=v` (۹:۱۶).
+- فونت‌ها: **لاله‌زار** برای واژه‌های بزرگ و **چنگا** برای تیترها (هر دو OFL، در `public/teaser8/fonts/` با مجوز)، وزیرمتن برای متن ریز.
+- موسیقی ۱۲۸ BPM با دو «دراپ» (۹٫۴ و ۲۲٫۵ ثانیه)، کیک چهارضرب، بیس ۸۰۸، هی‌هت ترپ و سکوت یک‌ضربی پیش از هر دراپ (`make-music-8.py`).
+- حرکت‌ها و برش‌ها روی ضرب: ضربان زوم روی هر کیک، کوبیدن واژه‌ها روی ضرب اول هر میزان.
+
+```bash
+python3 scripts/teaser/make-music-8.py /tmp/music8.wav && ffmpeg -y -i /tmp/music8.wav -b:a 192k public/teaser8/teaser-music.mp3
+node scripts/teaser/render-video.cjs "http://localhost:8765/teaser8.html?fmt=h" public/teaser8/teaser-h.mp4 public/teaser8/teaser-music.mp3
+node scripts/teaser/render-video.cjs "http://localhost:8765/teaser8.html?fmt=v" public/teaser8/teaser-v.mp4 public/teaser8/teaser-music.mp3
+```

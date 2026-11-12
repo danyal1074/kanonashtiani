@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>یک آغاز تازه</title>
+<meta name="description" content="از دبستان تا متوسطه… یک آغاز تازه. به‌زودی رونمایی می‌شود.">
+<meta name="theme-color" content="#f6faf9">
+<style>
+  @font-face { font-family: Lalezar; src: url('teaser8/fonts/lalezar.woff2') format('woff2'); font-display: block; }
+  @font-face { font-family: Changa; src: url('teaser8/fonts/changa-500.woff2') format('woff2'); font-weight: 500; font-display: block; }
+  @font-face { font-family: Changa; src: url('teaser8/fonts/changa-700.woff2') format('woff2'); font-weight: 700; font-display: block; }
+  @font-face { font-family: Changa; src: url('teaser8/fonts/changa-800.woff2') format('woff2'); font-weight: 800; font-display: block; }
+  @font-face { font-family: Vazirmatn; src: url('fonts/Vazirmatn.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+  :root { --ink: #0b2545; --teal: #0f766e; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; color: var(--ink); font-family: Vazirmatn, Tahoma, sans-serif; overflow: hidden;
+    background: radial-gradient(60% 80% at 75% 15%, rgba(20,163,154,.2), transparent 60%), radial-gradient(50% 70% at 15% 90%, rgba(242,193,78,.25), transparent 60%), #f6faf9; }
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  canvas#c { display: block; max-width: 100vw; max-height: 100dvh; border-radius: 12px; box-shadow: 0 30px 90px rgba(11,37,69,.18); }
+  canvas.h { width: 100vw; aspect-ratio: 16 / 9; } canvas.v { height: 100dvh; aspect-ratio: 9 / 16; }
+  .ui { position: fixed; inset: 0; display: grid; place-items: center; z-index: 5; transition: opacity .5s; }
+  .ui.hide { opacity: 0; pointer-events: none; }
+  .btn { font: 700 18px Changa, Vazirmatn, sans-serif; color: #fff; background: linear-gradient(90deg, #0f766e, #14a39a 60%, #e0a526); border: 0; border-radius: 999px; padding: 14px 34px; cursor: pointer;
+    text-decoration: none; display: inline-flex; gap: 10px; align-items: center; box-shadow: 0 12px 34px rgba(15,118,110,.32); }
+  .btn.ghost { background: rgba(255,255,255,.85); color: var(--ink); box-shadow: 0 6px 20px rgba(11,37,69,.1); font-size: 14px; padding: 10px 20px; }
+  .card { text-align: center; } .card p { margin-top: 14px; font-size: 13px; opacity: .7; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding: 0 16px; }
+  #end { place-items: end center; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c"></canvas></div>
+<div class="ui" id="start"><div class="card"><button class="btn" id="play">▶&nbsp; پخش</button><p>با صدا تماشا کنید</p></div></div>
+<div class="ui hide" id="end"><div class="row">
+  <button class="btn ghost" id="replay">↻ پخش دوباره</button>
+  <a class="btn ghost" href="teaser8/teaser-h.mp4" download="kanon-teaser-16x9.mp4">دانلود افقی</a>
+  <a class="btn ghost" href="teaser8/teaser-v.mp4" download="kanon-teaser-9x16.mp4">دانلود عمودی</a>
+</div></div>
+<audio id="music" src="teaser8/teaser-music.mp3" preload="auto"></audio>
+
+<script>
+(() => {
+'use strict';
+// ---------- format: ?fmt=v (۹:۱۶) یا افقی (۱۶:۹)؛ در حالت عادی بر اساس اندازه‌ی صفحه ----------
+const q = new URLSearchParams(location.search);
+const V = q.get('fmt') ? q.get('fmt') === 'v' : innerHeight > innerWidth;
+const W = V ? 1080 : 1920, H = V ? 1920 : 1080, CX = W / 2, CY = H / 2;
+const cv = document.getElementById('c'); cv.width = W; cv.height = H; cv.className = V ? 'v' : 'h';
+const ctx = cv.getContext('2d');
+
+// ---------- timeline (هماهنگ با scripts/teaser/make-music-8.py) — ۱۲۸ BPM ----------
+const B = 60 / 128, BAR = 4 * B, DUR = 32;
+const bt = (bar, beat = 0) => bar * BAR + beat * B;
+const GROOVE = [[bt(2), bt(4)], [bt(5), bt(11)], [bt(12), bt(16)]];
+const DROPS = [bt(5), bt(12)], HITS = [bt(2), ...[5, 6, 7, 8, 9, 10, 12, 13, 14, 16].map(b => bt(b))];
+
+const INK = '#0b2545', SUB = '#4a6178', TEAL = '#0f766e', TEAL2 = '#14a39a', GOLD = '#e0a526', BLUE = '#3b6cf6', PURPLE = '#8b5cf6';
+const G_TEAL = ['#0f766e', '#14a39a', '#e0a526'], G_GOLD = ['#e0a526', '#f59e0b', '#0f766e'], G_BLUE = ['#3b6cf6', '#0f766e'], G_PUR = ['#8b5cf6', '#3b6cf6'];
+const SHOTS = ['study', 'path', 'games', 'results', 'roadmap', 'profile', 'library', 'birthday', 'home'];
+const IMG = Object.fromEntries(SHOTS.map(n => { const i = new Image(); i.src = `teaser6/screens/${n}.webp`; return [n, i]; }));
+['elementary', 'secondary'].forEach(n => { const i = new Image(); i.src = `teaser7/screens/${n}.webp`; IMG[n] = i; });
+const logo = new Image(); logo.src = 'img/logo-ashtiani.png';
+
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lin = (t, a, b) => clamp((t - a) / (b - a));
+const eo = x => 1 - Math.pow(1 - x, 3);
+const eio = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const back = x => { const c1 = 1.8, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const kick = t => GROOVE.some(([a, b]) => t >= a && t < b) ? Math.exp(-((t % B)) * 11) : 0;
+const hitAmt = (t, len = .35) => { let k = 0; for (const h of HITS) if (t >= h && t < h + len) k = Math.max(k, 1 - (t - h) / len); return k; };
+
+// ---------- background: light, brand blobs, glass cards, sparkles ----------
+const BLOBS = [[TEAL2, .85, .12, .55], [GOLD, .12, .88, .5], [BLUE, .1, .15, .38], [PURPLE, .9, .9, .35]];
+const CARDS = Array.from({ length: 14 }, (_, i) => ({ x: hash(i), y: hash(i + 30), w: 150 + hash(i + 7) * 200, h: 100 + hash(i + 9) * 130, r: (hash(i + 11) - .5) * .6, d: .3 + hash(i + 13) * .8, col: [TEAL2, GOLD, BLUE, PURPLE][i % 4] }));
+let tint = TEAL2;
+function backdrop(t, energy) {
+  const c = ctx; const g = c.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#f3faf8'); g.addColorStop(.6, '#fcfbf6'); g.addColorStop(1, '#eef3fb'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  const R = Math.max(W, H);
+  BLOBS.forEach(([col, x, y, r], i) => { const px = x * W + Math.sin(t * .3 + i * 2) * W * .05, py = y * H + Math.cos(t * .25 + i) * H * .04, rr = r * R * (1 + energy * .12);
+    const gr = c.createRadialGradient(px, py, 0, px, py, rr); gr.addColorStop(0, (i === 0 ? tint : col) + '55'); gr.addColorStop(1, col + '00'); c.fillStyle = gr; c.fillRect(0, 0, W, H); });
+  CARDS.forEach((k, i) => { const x = ((k.x * (W + 400) + t * 22 * k.d) % (W + 400)) - 200, y = k.y * H + Math.sin(t * .6 + i) * 20;
+    c.save(); c.translate(x, y); c.rotate(k.r + Math.sin(t * .4 + i) * .05); c.globalAlpha = .5 + .3 * k.d;
+    c.fillStyle = 'rgba(255,255,255,.45)'; c.strokeStyle = 'rgba(255,255,255,.95)'; c.lineWidth = 2; c.beginPath(); c.roundRect(-k.w / 2, -k.h / 2, k.w, k.h, 20); c.fill(); c.stroke();
+    c.fillStyle = k.col; c.globalAlpha *= .7; c.beginPath(); c.arc(-k.w / 2 + 24, -k.h / 2 + 24, 8, 0, 7); c.fill();
+    c.strokeStyle = k.col; c.globalAlpha *= .5; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); c.moveTo(-k.w / 2 + 46, -k.h / 2 + 22); c.lineTo(k.w / 2 - 22, -k.h / 2 + 22); c.moveTo(-k.w / 2 + 46, -k.h / 2 + 36); c.lineTo(k.w / 2 - 60, -k.h / 2 + 36); c.stroke(); c.restore(); });
+  for (let i = 0; i < 50; i++) { const x = (hash(i + 2) * W + t * (10 + hash(i) * 30)) % W, y = (hash(i + 5) * H - t * 12 + H) % H, tw = .5 + .5 * Math.sin(t * 3 + i);
+    c.globalAlpha = (.15 + .4 * hash(i + 9)) * tw; c.fillStyle = i % 3 ? TEAL2 : GOLD; star4(x, y, 3 + hash(i + 3) * 5); }
+  c.globalAlpha = 1;
+}
+function star4(x, y, r) { const c = ctx; c.beginPath(); c.moveTo(x, y - r * 2); c.quadraticCurveTo(x, y, x + r * 2, y); c.quadraticCurveTo(x, y, x, y + r * 2); c.quadraticCurveTo(x, y, x - r * 2, y); c.quadraticCurveTo(x, y, x, y - r * 2); c.fill(); }
+
+// ---------- typography ----------
+function gradFill(x, w, cols) { const g = ctx.createLinearGradient(x + w / 2, 0, x - w / 2, 0); cols.forEach((col, i) => g.addColorStop(i / (cols.length - 1), col)); return g; }
+/* style: 'slam' (بزرگ→عادی با محوشدگی)، 'wipe' (آشکارشدن راست‌به‌چپ)، 'rise' */
+function txt(s, x, y, size, p, o = {}) {
+  if (p <= 0 || !s) return;
+  const c = ctx; c.save();
+  const fam = o.font || 'Changa', wt = o.weight || (fam === 'Lalezar' ? 400 : 800);
+  c.font = `${wt} ${size}px ${fam}, Vazirmatn`; let w = c.measureText(s).width;
+  const maxW = o.maxW || W * .9; if (w > maxW) { size *= maxW / w; c.font = `${wt} ${size}px ${fam}, Vazirmatn`; w = maxW; }
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+  const k = eo(clamp(p)), st = o.style || 'rise';
+  c.globalAlpha = clamp(p * 2) * (o.alpha ?? 1);
+  c.translate(x, y);
+  if (st === 'slam') { const s2 = 1 + (1 - eo(clamp(p * 1.4))) * .7; c.scale(s2, s2); if (k < 1) c.filter = `blur(${(1 - k) * 12}px)`; }
+  if (st === 'rise') { c.translate(0, (1 - k) * size * .35); if (k < 1) c.filter = `blur(${(1 - k) * 8}px)`; }
+  if (st === 'wipe') { const edge = w / 2 + 40 - (w + 120) * k; c.beginPath(); c.rect(edge, -size, W * 2, size * 2.2); c.clip(); }
+  if (o.pulse) c.scale(1 + o.pulse * .04, 1 + o.pulse * .04);
+  if (o.rot) c.rotate(o.rot);
+  if (o.shadow !== false) { c.shadowColor = 'rgba(11,37,69,.14)'; c.shadowBlur = size * .25; c.shadowOffsetY = size * .06; }
+  c.fillStyle = o.grad ? gradFill(0, w, o.grad) : (o.col || INK);
+  c.fillText(s, 0, 0);
+  if (o.shine != null) { c.shadowColor = 'transparent'; const sx = w / 2 - ((o.shine % 1.8) / 1.3) * (w + 300), g = c.createLinearGradient(sx - 110, 0, sx + 110, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.9)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.globalCompositeOperation = 'source-atop'; c.fillStyle = g; c.fillText(s, 0, 0); }
+  c.restore();
+}
+function pill(s, x, y, a, bg = TEAL, size = 30) {
+  if (a <= 0) return; const c = ctx; c.save(); c.globalAlpha = a; c.font = `700 ${size}px Changa, Vazirmatn`; c.direction = 'rtl';
+  const w = c.measureText(s).width + size * 1.6, h = size * 1.9; c.translate(x, y); c.scale(back(clamp(a)), back(clamp(a)));
+  c.fillStyle = bg; c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, h / 2); c.fill();
+  c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, 0, 2); c.restore();
+}
+
+// ---------- phone ----------
+function phone(name, x, y, h, o = {}) {
+  const img = IMG[name], c = ctx, w = h * .462, a = o.a ?? 1; if (a <= 0 || !img) return;
+  c.save(); c.globalAlpha = a; c.translate(x, y); c.rotate(o.rot || 0); const yaw = o.yaw || 0; c.transform(Math.cos(yaw), Math.sin(yaw) * .12, 0, 1, 0, 0);
+  c.save(); c.shadowColor = 'rgba(11,37,69,.28)'; c.shadowBlur = h * .1; c.shadowOffsetY = h * .05; c.fillStyle = '#fff'; c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, w * .17); c.fill(); c.restore();
+  const rim = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); rim.addColorStop(0, 'rgba(15,118,110,.6)'); rim.addColorStop(.5, 'rgba(11,37,69,.12)'); rim.addColorStop(1, 'rgba(224,165,38,.65)');
+  c.strokeStyle = rim; c.lineWidth = Math.max(2, h * .007); c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, w * .17); c.stroke();
+  const i = h * .022; c.save(); c.beginPath(); c.roundRect(-w / 2 + i, -h / 2 + i, w - 2 * i, h - 2 * i, w * .14); c.clip();
+  if (img.complete && img.naturalWidth) { const b = o.blur ?? 1.2; if (b > .3) c.filter = `blur(${b * h / 800}px)`; c.drawImage(img, -w / 2 + i, -h / 2 + i, w - 2 * i, h - 2 * i); c.filter = 'none'; }
+  const s = ((o.t || 0) * .5 + (o.seed || 0)) % 1.8 - .4, g = c.createLinearGradient(-w / 2 + w * s * 2 - w * .4, -h / 2, -w / 2 + w * s * 2 + w * .4, -h / 2 + h * .35);
+  g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(-w / 2, -h / 2, w, h);
+  c.restore();
+  c.fillStyle = '#0d1b2a'; c.beginPath(); c.roundRect(-w * .17, -h / 2 + h * .03, w * .34, h * .036, h * .018); c.fill();
+  c.restore();
+}
+function burst(x, y, t0, t, n = 70, spread = 1) {
+  const u = t - t0; if (u < 0 || u > 2.2) return; const c = ctx;
+  for (let i = 0; i < n; i++) { const an = hash(i + t0) * Math.PI * 2, d = eo(lin(u, 0, 1.2)) * (200 + hash(i + 3) * 700) * spread;
+    c.globalAlpha = (1 - lin(u, .4, 2.2)) * .9; c.fillStyle = i % 3 ? GOLD : TEAL2; star4(x + Math.cos(an) * d, y + Math.sin(an) * d * .75 + u * u * 80, 3 + hash(i + 5) * 5); }
+  c.globalAlpha = 1;
+}
+function rays(x, y, t, a) { if (a <= 0) return; const c = ctx; c.save(); c.translate(x, y); c.rotate(t * .1);
+  for (let i = 0; i < 20; i++) { c.rotate(Math.PI / 10); const g = c.createLinearGradient(0, 0, 0, -Math.max(W, H)); g.addColorStop(0, i % 2 ? `rgba(224,165,38,${.2 * a})` : `rgba(20,163,154,${.16 * a})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.beginPath(); c.moveTo(0, 0); c.lineTo(-60, -Math.max(W, H)); c.lineTo(60, -Math.max(W, H)); c.fill(); } c.restore(); }
+function logoBadge(x, y, r, a) { if (a <= 0 || !logo.complete || !logo.naturalWidth) return; const c = ctx; c.save(); c.globalAlpha = a; c.translate(x, y); c.scale(back(clamp(a)), back(clamp(a)));
+  c.shadowColor = 'rgba(11,37,69,.22)'; c.shadowBlur = 40; c.shadowOffsetY = 10; c.fillStyle = '#fff'; c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.shadowColor = 'transparent';
+  c.strokeStyle = GOLD; c.lineWidth = 4; c.stroke(); c.beginPath(); c.arc(0, 0, r - 7, 0, 7); c.clip(); c.drawImage(logo, -r * .86, -r * .86, r * 1.72, r * 1.72); c.restore(); }
+
+// ---------- layout helpers (افقی/عمودی) ----------
+const L = V ? { titleY: CY - 140, subY: CY + 20, phoneX: CX, phoneY: H * .33, phoneH: 900, kwY: H * .7, kwSubY: H * .7 + 190, side: 0, big: 230 }
+            : { titleY: CY - 80, subY: CY + 60, phoneX: CX - 470, phoneY: CY + 30, phoneH: 860, kwY: CY - 60, kwSubY: CY + 140, side: 1, big: 250 };
+const KW = [['تمرکز', 'بیشتر.', 'study', G_TEAL, TEAL2], ['مسیر', 'هوشمندتر.', 'path', G_BLUE, BLUE], ['یادگیری', 'شیرین‌تر.', 'games', G_PUR, PURPLE], ['پیشرفت', 'درخشان‌تر.', 'results', G_GOLD, GOLD]];
+
+function render(t) {
+  t = clamp(t, 0, DUR);
+  const c = ctx, pk = kick(t), hk = hitAmt(t);
+  tint = t >= bt(5) && t < bt(9) ? KW[Math.floor((t - bt(5)) / BAR)][4] : TEAL2;
+  const z = 1 + pk * .012 + hk * .03;
+  c.save(); c.translate(CX, CY); c.scale(z, z); c.translate(-CX, -CY);
+  backdrop(t, pk);
+
+  // S0 — bars 0–2
+  if (t < bt(2)) {
+    txt('همه‌چیز', CX, L.titleY, 76, lin(t, .2, .9) * (1 - lin(t, bt(2) - .2, bt(2))), { weight: 500, col: SUB });
+    txt('از یک پرسش آغاز شد.', CX, L.subY + 20, V ? 96 : 120, lin(t, 1.0, 1.9) * (1 - lin(t, bt(2) - .2, bt(2))), { style: 'wipe', grad: ['#0b2545', '#0f766e'] });
+  }
+  // S1 — bars 2–4: question + two home pages drifting behind
+  if (t >= bt(2) && t < bt(4)) { const p = t - bt(2), fo = 1 - lin(t, bt(4) - .15, bt(4));
+    const a = eo(lin(p, 0, .8)) * fo * .55;
+    phone('elementary', V ? CX - 280 : CX - 640, (V ? H * .78 : CY + 120) + (1 - eo(lin(p, 0, 1))) * 200, V ? 640 : 700, { a, rot: -.12, yaw: .3, blur: 5, t });
+    phone('secondary', V ? CX + 280 : CX + 640, (V ? H * .78 : CY + 120) + (1 - eo(lin(p, .2, 1.2))) * 200, V ? 640 : 700, { a, rot: .12, yaw: -.3, blur: 5, t, seed: 1 });
+    txt('اگر درس خواندن', CX, (V ? H * .3 : L.titleY), 80, lin(p, 0, .5) * fo, { weight: 500, col: SUB });
+    txt('هیجان‌انگیز بود؟', CX, (V ? H * .3 + 170 : L.subY + 30), V ? 140 : 150, lin(p, B, B * 2.2) * fo, { font: 'Lalezar', style: 'slam', grad: G_TEAL, pulse: pk });
+  }
+  // S2 — bar 4: «آماده‌ای؟» build
+  if (t >= bt(4) && t < bt(5)) { const p = t - bt(4), roll = Math.pow(lin(p, 0, BAR), 2);
+    rays(CX, CY, t, roll);
+    const stut = 1 + (Math.floor(p / (B / 2)) % 2 ? .04 : 0) * roll;
+    txt('آماده‌ای؟', CX, CY, V ? 250 : 280, lin(p, 0, .25) * (1 - lin(t, bt(4, 3.75), bt(4, 3.8))), { font: 'Lalezar', style: 'slam', grad: G_GOLD, pulse: stut * 2 - 2 + roll, shine: p });
+    for (let i = 0; i < 10; i++) { const y = H * (i + .5) / 10; c.save(); c.globalAlpha = roll * .5; c.fillStyle = i % 2 ? TEAL2 : GOLD; c.fillRect(0, y + (CY - y) * eio(roll) - 2, W, 3); c.restore(); }
+    if (t >= bt(4, 3.75)) { c.fillStyle = '#fff'; c.fillRect(-50, -50, W + 100, H + 100); }
+  }
+  // S3 — bars 5–8: keyword per bar
+  if (t >= bt(5) && t < bt(9)) { const k = Math.floor((t - bt(5)) / BAR), p = t - bt(5 + k), [w1, w2, shot, gr, col] = KW[k];
+    const out = lin(p, BAR - .12, BAR), inP = eo(lin(p, 0, .3)), side = k % 2 ? -1 : 1;
+    const px = V ? CX : CX - side * 470, py = L.phoneY, sx = V ? 0 : side * (1 - inP) * -380, sy = V ? (1 - inP) * -300 : 0;
+    phone(SHOTS[(SHOTS.indexOf(shot) + 4) % SHOTS.length], px + (V ? side * 300 : -side * 250), py + 80, L.phoneH * .62, { a: inP * (1 - out) * .45, rot: side * -.14, yaw: side * .4, blur: 8, t, seed: k + .5 });
+    phone(shot, px + sx, py + sy + Math.sin(t * 2) * 6, L.phoneH * (1 + p * .02), { a: inP * (1 - out), rot: side * -.05 + Math.sin(t * 1.2) * .01, yaw: V ? 0 : side * .22, blur: .8, t, seed: k });
+    const tx = V ? CX : CX + side * 360;
+    txt(w1, tx, L.kwY, L.big, lin(p, 0, .2) * (1 - out), { font: 'Lalezar', style: 'slam', col: INK, pulse: pk, maxW: V ? W * .9 : W * .45 });
+    txt(w2, tx, L.kwSubY, 110, lin(p, B * 2, B * 2.4) * (1 - out), { style: 'slam', grad: gr, maxW: V ? W * .9 : W * .45 });
+    pill(`۰${'۱۲۳۴'[k]} / ۰۴`, tx, L.kwSubY + 120, lin(p, .1, .3) * (1 - out), col, 26);
+    burst(tx, L.kwY, bt(5 + k), t, 40, .8);
+  }
+  // S4 — bars 9–10: elementary → secondary
+  if (t >= bt(9) && t < bt(11)) { const p = t - bt(9), fo = 1 - lin(t, bt(11) - .15, bt(11));
+    const both = eo(lin(p, BAR + 2 * B, BAR + 2.6 * B));
+    const e = eo(lin(p, 0, .4)), s = eo(lin(p, BAR, BAR + .4));
+    const ph = V ? 760 : 700;
+    const ex = V ? CX - 250 * both - (1 - e) * 600 : CX - 330 - (1 - both) * 0 - (1 - e) * 500, ey = V ? H * .43 : CY + 80;
+    const sx = V ? CX + 250 * both + (1 - s) * 600 : CX + 330 + (1 - s) * 500, sy = ey;
+    phone('elementary', V ? (both > 0 ? ex : CX - (1 - e) * 600) : ex, ey + Math.sin(t * 2) * 6, ph * (V ? 1 - both * .25 : 1), { a: e * fo, rot: -.05 * both, yaw: V ? 0 : .12, blur: .5, t, seed: 3 });
+    phone('secondary', sx, sy + Math.cos(t * 2) * 6, ph * (V ? 1 - both * .25 : 1), { a: s * fo, rot: .05, yaw: V ? 0 : -.12, blur: .5, t, seed: 4 });
+    const lab = V ? H * .43 + ph * .75 / 2 + 70 : CY + 80 + ph / 2 + 45;
+    pill('دبستان', V ? (both > 0 ? ex : CX) : ex, V && both === 0 ? H * .43 + ph / 2 + 60 : lab, e * fo, TEAL, 30);
+    pill('متوسطه', sx, lab, s * fo, INK, 30);
+    const ty = V ? H * .1 : 130;
+    txt('از دبستان', V ? CX : CX, ty, V ? 110 : 96, lin(p, .05, .35) * fo * (1 - lin(p, BAR - .1, BAR)), { font: 'Lalezar', style: 'slam', grad: G_TEAL });
+    txt('تا متوسطه', CX, ty, V ? 110 : 96, lin(p, BAR, BAR + .3) * fo * (1 - lin(p, BAR + 2 * B - .1, BAR + 2 * B)), { font: 'Lalezar', style: 'slam', col: INK });
+    txt('از دبستان تا متوسطه', CX, ty, V ? 92 : 90, lin(p, BAR + 2 * B, BAR + 2.4 * B) * fo, { font: 'Lalezar', grad: G_TEAL });
+    txt('همه، برای تو.', CX, ty + (V ? 120 : 105), V ? 70 : 64, lin(p, BAR + 2.4 * B, BAR + 3 * B) * fo, { weight: 700, col: SUB });
+  }
+  // S5 — bar 11: breakdown «و حالا…»
+  if (t >= bt(11) && t < bt(12)) { const p = t - bt(11), k = lin(p, 0, BAR * .9);
+    rays(CX, CY, t, k);
+    for (let i = 0; i < 14; i++) { const y = H * (i + .5) / 14; c.save(); c.globalAlpha = k * .4; c.fillStyle = i % 2 ? TEAL2 : GOLD; c.fillRect(0, y + (CY - y) * eio(k) - 1.5, W, 3); c.restore(); }
+    const g = c.createRadialGradient(CX, CY, 0, CX, CY, 260 + k * 200); g.addColorStop(0, `rgba(255,255,255,${.95 * k})`); g.addColorStop(.4, `rgba(20,163,154,${.25 * k})`); g.addColorStop(1, 'rgba(20,163,154,0)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    txt('و حالا…', CX, CY, V ? 120 : 130, lin(p, 0, .5) * (1 - lin(t, bt(11, 3.4), bt(11, 3.5))), { weight: 500, style: 'rise' });
+    if (t >= bt(11, 3.5)) { c.fillStyle = '#fff'; c.fillRect(-50, -50, W + 100, H + 100); }
+  }
+  // S6 — bars 12–13: DROP 2 «یک آغاز تازه»
+  if (t >= bt(12) && t < bt(14)) { const p = t - bt(12), fo = 1 - lin(t, bt(14) - .12, bt(14));
+    rays(CX, CY, t, .8 - lin(p, 0, 3) * .4);
+    const all = ['elementary', 'study', 'path', 'games', 'results', 'profile', 'secondary'], n = all.length;
+    all.forEach((s, i) => { const an = (i - (n - 1) / 2) * (V ? .32 : .28) + Math.sin(t * .8) * .03, r = V ? 2100 : 1900;
+      const x = CX + Math.sin(an) * r * (V ? .55 : .62), y = (V ? H * .72 : CY + 280) + (1 - Math.cos(an)) * r * .5 + (1 - eo(lin(p, i * .05, .5 + i * .05))) * 500;
+      phone(s, x, y, (V ? 520 : 480) - Math.abs(i - 3) * 30, { a: eo(lin(p, i * .05, .4 + i * .05)) * fo, rot: an * .7, blur: 1 + Math.abs(i - 3) * .8, t, seed: i }); });
+    burst(CX, V ? H * .3 : CY - 140, bt(12), t, 90, 1.3);
+    txt('یک آغاز', CX, V ? H * .2 : 150, V ? 120 : 110, lin(p, 0, .2) * fo, { font: 'Lalezar', style: 'slam', col: INK });
+    txt('تازه', CX, V ? H * .2 + 230 : 330, V ? 330 : 270, lin(p, B, B + .25) * fo, { font: 'Lalezar', style: 'slam', grad: G_GOLD, pulse: pk, shine: p * .9 });
+  }
+  // S7 — bars 14–17: «به‌زودی»
+  if (t >= bt(14)) { const p = t - bt(14);
+    rays(CX, V ? H * .42 : CY - 20, t, .75 - lin(p, 0, 5) * .35);
+    if (!V) { phone('elementary', 260, CY + 90 + (1 - eo(lin(p, .9, 1.7))) * 300, 640, { a: eo(lin(p, .9, 1.7)), yaw: .25, rot: -.08, blur: 1, t, seed: 1 });
+              phone('secondary', W - 260, CY + 90 + (1 - eo(lin(p, 1.1, 1.9))) * 300, 640, { a: eo(lin(p, 1.1, 1.9)), yaw: -.25, rot: .08, blur: 1, t, seed: 2 }); }
+    else { phone('elementary', CX - 230, H * .83 + (1 - eo(lin(p, .9, 1.7))) * 400, 620, { a: eo(lin(p, .9, 1.7)), rot: -.1, blur: 1, t, seed: 1 });
+           phone('secondary', CX + 230, H * .83 + (1 - eo(lin(p, 1.1, 1.9))) * 400, 620, { a: eo(lin(p, 1.1, 1.9)), rot: .1, blur: 1, t, seed: 2 }); }
+    logoBadge(CX, V ? H * .17 : 190, V ? 110 : 85, eo(lin(p, .5, 1.1)));
+    const punch = t >= bt(16) ? 1 + Math.max(0, .12 - (t - bt(16)) * .4) : 1;
+    c.save(); c.translate(CX, V ? H * .38 : CY); c.scale(punch, punch); c.translate(-CX, -(V ? H * .38 : CY));
+    txt('به‌زودی', CX, V ? H * .38 : CY - 10, V ? 330 : 320, lin(p, 0, .25), { font: 'Lalezar', style: 'slam', grad: G_TEAL, shine: p * .7 + .3, pulse: pk });
+    c.restore();
+    txt('رونمایی می‌شود', CX, V ? H * .38 + 210 : CY + 190, V ? 76 : 70, lin(p, .6, 1.1), { weight: 700, col: SUB, style: 'rise' });
+    txt('کانون نخبه‌پروری شهید کاظمی آشتیانی', CX, V ? H * .38 + 320 : H - 95, V ? 46 : 38, lin(p, 1.4, 2.0), { weight: 500, col: INK, style: 'rise', shadow: false });
+    burst(CX, V ? H * .38 : CY, bt(14), t, 110, 1.4); burst(CX, V ? H * .38 : CY, bt(16), t, 70, 1.1);
+  }
+  c.restore();
+  // hit flash
+  if (hk > .6) { c.fillStyle = `rgba(255,255,255,${(hk - .6) * 1.4})`; c.fillRect(0, 0, W, H); }
+  const v = c.createRadialGradient(CX, CY, Math.min(W, H) * .4, CX, CY, Math.max(W, H) * .75); v.addColorStop(0, 'rgba(11,37,69,0)'); v.addColorStop(1, 'rgba(11,37,69,.07)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
+  if (t < .4) { c.fillStyle = `rgba(255,255,255,${1 - t / .4})`; c.fillRect(0, 0, W, H); }
+  if (t > DUR - 1) { c.fillStyle = `rgba(246,250,249,${lin(t, DUR - 1, DUR)})`; c.fillRect(0, 0, W, H); }
+}
+
+// ---------- player ----------
+const RENDER = q.has('render');
+const audio = document.getElementById('music');
+const imgs = [...Object.values(IMG), logo].map(i => new Promise(r => { if (i.complete) r(); else { i.onload = r; i.onerror = r; } }));
+window.teaserReady = Promise.all([...['400 40px Lalezar', '500 40px Changa', '700 40px Changa', '800 40px Changa', '500 40px Vazirmatn'].map(f => document.fonts.load(f, 'آزمون')), ...imgs]).then(() => document.fonts.ready);
+window.renderAt = t => { render(t); return cv.toDataURL('image/jpeg', .92); };
+window.TEASER_DURATION = DUR;
+if (RENDER) { document.querySelectorAll('.ui').forEach(e => e.remove()); cv.style.cssText = `width:${W}px;height:${H}px;max-width:none;max-height:none;border-radius:0;box-shadow:none`; return; }
+window.teaserReady.then(() => render(bt(14) + 2.5));
+const start = document.getElementById('start'), end = document.getElementById('end'); let raf = 0;
+function loop() { const t = audio.currentTime; render(t); if (audio.ended || t >= DUR - .05) { end.classList.remove('hide'); return; } raf = requestAnimationFrame(loop); }
+function play() { start.classList.add('hide'); end.classList.add('hide'); audio.currentTime = 0; audio.play().catch(() => {}); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop); }
+document.getElementById('play').onclick = play; document.getElementById('replay').onclick = play;
+})();
+</script>
+</body>
+</html>

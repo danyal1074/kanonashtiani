@@ -10,7 +10,7 @@ const FPS = 30;
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1920, height: 1920 } });
-  await page.goto(url + '?render');
+  await page.goto(url + (url.includes('?') ? '&' : '?') + 'render');
   await page.waitForFunction(() => window.teaserReady && window.renderAt);
   await page.evaluate(() => window.teaserReady);
   const dur = await page.evaluate(() => window.TEASER_DURATION);
