@@ -5,15 +5,16 @@
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const path = require('path');
-const [url = 'http://localhost:8765/teaser.html', out = 'public/teaser/teaser.mp4'] = process.argv.slice(2);
+const [url = 'http://localhost:8765/teaser.html', out = 'public/teaser/teaser.mp4', audioArg] = process.argv.slice(2);
 const FPS = 30;
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1920, height: 1920 } });
   await page.goto(url + '?render');
+  await page.waitForFunction(() => window.teaserReady && window.renderAt);
   await page.evaluate(() => window.teaserReady);
   const dur = await page.evaluate(() => window.TEASER_DURATION);
-  const music = path.join(path.dirname(out), 'teaser-music.mp3');
+  const music = audioArg || path.join(path.dirname(out), 'teaser-music.mp3');
   const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
     '-i', music, '-c:v', 'libx264', '-preset', 'slow', '-crf', '21', '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
     '-c:a', 'aac', '-b:a', '192k', '-shortest', out], { stdio: ['pipe', 'inherit', 'inherit'] });

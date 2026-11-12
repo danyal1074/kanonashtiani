@@ -126,3 +126,20 @@ node scripts/teaser/render-video.cjs http://localhost:8765/teaser2.html public/t
 
 موسیقی حماسی-الکترونیک با «دراپ» در ثانیه‌ی ۲۶ (`scripts/teaser/make-music-6.py`).
 - `public/teaser6.html` (`/teaser6.html`)، `public/teaser6/teaser.mp4`، `public/teaser6/teaser-music.mp3`
+
+---
+
+# تیزر هفتم: «آغاز تازه» (۳۹ ثانیه، افقی، رسمی، با گویندگی)
+
+سبک سینمایی با رنگ‌های سازمانی (سبزآبی تا سرمه‌ای، طلایی)، نوار سینمایی بالا و پایین، تایپوگرافی بزرگ هم‌زمان با گوینده، گوشی با اسکرین‌شات واقعی پنل.
+**متن گوینده و زمان‌بندی در `public/teaser7/script.json` است**؛ صفحه، ساخت صدا و میکس همه از همین فایل می‌خوانند.
+
+ساخت نسخه‌ی گویندگی‌شده:
+```bash
+python3 scripts/teaser/make-music-7.py /tmp/music7.wav
+# الف) صدای ماشینی آفلاین (Piper، مدل فارسی fa_IR-*.onnx لازم است):
+python3 scripts/teaser/make-voice.py fa_IR-gyro-medium.onnx /tmp/vo
+# ب) یا گوینده‌ی انسانی: هر خط را جدا ضبط کنید و با نام l01.wav … l12.wav در /tmp/vo بگذارید
+python3 scripts/teaser/mix-voice.py /tmp/music7.wav /tmp/vo public/teaser7/teaser-audio.mp3
+node scripts/teaser/render-video.cjs http://localhost:8765/teaser7.html public/teaser7/teaser.mp4 public/teaser7/teaser-audio.mp3
+```

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>آغاز تازه</title>
+<meta name="description" content="همه‌چیز از یک پرسش آغاز شد… به‌زودی رونمایی می‌شود.">
+<meta name="theme-color" content="#0b3d40">
+<style>
+  @font-face { font-family: Vazirmatn; src: url('fonts/Vazirmatn.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+  :root { --deep: #072f33; --teal: #0f766e; --gold: #f2c14e; --ink: #fff; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; color: var(--ink); font-family: Vazirmatn, Tahoma, sans-serif; overflow: hidden;
+    background: radial-gradient(70% 90% at 70% 20%, #11807a 0%, transparent 60%), linear-gradient(135deg, #0b4a4d, #0b2545); }
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  canvas#c { width: 100vw; max-width: calc(100dvh * 16 / 9); aspect-ratio: 16 / 9; display: block; box-shadow: 0 30px 90px rgba(0,0,0,.35); }
+  .ui { position: fixed; inset: 0; display: grid; place-items: center; z-index: 5; transition: opacity .6s; }
+  .ui.hide { opacity: 0; pointer-events: none; }
+  .btn { font: inherit; font-weight: 800; font-size: 17px; color: #0b2545; background: linear-gradient(90deg, #f2c14e, #ffe39a); border: 0; border-radius: 999px; padding: 14px 34px; cursor: pointer;
+    text-decoration: none; display: inline-flex; gap: 10px; align-items: center; box-shadow: 0 10px 34px rgba(242,193,78,.35); }
+  .btn.ghost { background: rgba(255,255,255,.12); color: #fff; box-shadow: none; border: 1px solid rgba(255,255,255,.4); font-size: 15px; padding: 10px 22px; backdrop-filter: blur(8px); }
+  .card { text-align: center; } .card p { margin-top: 14px; font-size: 13px; opacity: .75; }
+  .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  #end { place-items: end center; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" width="1920" height="1080"></canvas></div>
+<div class="ui" id="start"><div class="card"><button class="btn" id="play">▶&nbsp; پخش</button><p>با صدا تماشا کنید</p></div></div>
+<div class="ui hide" id="end"><div class="row"><button class="btn ghost" id="replay">↻ پخش دوباره</button><a class="btn ghost" href="teaser7/teaser.mp4" download="kanon-aghaz-tazeh.mp4">دانلود ویدیو</a></div></div>
+<audio id="music" src="teaser7/teaser-audio.mp3" preload="auto"></audio>
+
+<script>
+(async () => {
+'use strict';
+// متن و زمان‌بندی گویندگی از teaser7/script.json (همان فایلی که گویندگی و میکس از آن ساخته می‌شوند)
+const SC = await (await fetch('teaser7/script.json')).json();
+const LINES = SC.lines, DUR = SC.duration, W = 1920, H = 1080, CX = W / 2, CY = H / 2;
+const HITS = LINES.filter(l => l.hit).map(l => l.t);
+const at = id => LINES.find(l => l.id === id);
+const GOLD = '#f2c14e', MINT = '#5eead4', WHITE = '#ffffff';
+const SHOTS = ['home', 'study', 'path', 'games', 'results', 'roadmap', 'profile', 'library', 'birthday'];
+const IMG = Object.fromEntries(SHOTS.map(n => { const i = new Image(); i.src = `teaser6/screens/${n}.webp`; return [n, i]; }));
+const logo = new Image(); logo.src = 'img/logo-ashtiani.png';
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lin = (t, a, b) => clamp((t - a) / (b - a));
+const eo = x => 1 - Math.pow(1 - x, 3);
+const eio = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const back = x => { const c1 = 1.6, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const hitAmt = (t, len = .5) => { let k = 0; for (const h of HITS) if (t >= h && t < h + len) k = Math.max(k, 1 - (t - h) / len); return k; };
+
+// ---------- background ----------
+function backdrop(t) {
+  const c = ctx, sh = Math.sin(t * .15);
+  const g = c.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0b4a4d'); g.addColorStop(.55 + sh * .1, '#0a3a4a'); g.addColorStop(1, '#0b2545');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  // light leaks
+  [[.75, .15, 900, '17,128,122', .55], [.15, .9, 800, '242,193,78', .16], [.5, .5, 700, '94,234,212', .12]].forEach(([x, y, r, col, a], i) => {
+    const px = x * W + Math.sin(t * .2 + i * 2) * 120, py = y * H + Math.cos(t * .17 + i) * 80;
+    const gr = c.createRadialGradient(px, py, 0, px, py, r); gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(1, `rgba(${col},0)`); c.fillStyle = gr; c.fillRect(0, 0, W, H); });
+  // fine diagonal lines
+  c.save(); c.strokeStyle = 'rgba(255,255,255,.035)'; c.lineWidth = 2; const off = (t * 25) % 80;
+  for (let x = -H; x < W + H; x += 80) { c.beginPath(); c.moveTo(x + off, 0); c.lineTo(x + off - H * .6, H); c.stroke(); }
+  c.restore();
+  // dust
+  for (let i = 0; i < 70; i++) { const sp = 8 + hash(i) * 25, x = (hash(i + 2) * W + t * sp) % W, y = (hash(i + 5) * H - t * sp * .4 + H) % H;
+    c.globalAlpha = .15 + .45 * hash(i + 9); c.fillStyle = i % 7 ? '#cffaf3' : GOLD; c.beginPath(); c.arc(x, y, 1 + hash(i + 3) * 2.2, 0, 7); c.fill(); }
+  c.globalAlpha = 1;
+}
+function streak(y, a, col = '255,255,255') {
+  if (a <= 0) return; const c = ctx;
+  const g = c.createLinearGradient(0, 0, W, 0); g.addColorStop(0, `rgba(${col},0)`); g.addColorStop(.5, `rgba(${col},${a})`); g.addColorStop(1, `rgba(${col},0)`);
+  c.fillStyle = g; c.fillRect(0, y - 3, W, 6); c.globalAlpha = a * .35; c.fillRect(0, y - 30, W, 60); c.globalAlpha = 1;
+}
+
+// ---------- text ----------
+function gradFill(c, x, w, cols) { const g = c.createLinearGradient(x + w / 2, 0, x - w / 2, 0); cols.forEach((col, i) => g.addColorStop(i / (cols.length - 1), col)); return g; }
+function say(s, x, y, size, p, o = {}) {
+  if (p <= 0 || !s) return;
+  const c = ctx; c.save();
+  c.font = `${o.weight || 400} ${size}px Vazirmatn`; c.textAlign = o.align || 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+  if (o.spacing) c.letterSpacing = o.spacing + 'px';
+  const w = c.measureText(s).width, k = eo(clamp(p)), cx = o.align === 'right' ? x - w / 2 : x;
+  c.globalAlpha = clamp(p * 1.6) * (o.alpha ?? 1);
+  const edge = cx + w / 2 + 60 - (w + 200) * k;
+  c.beginPath(); c.rect(edge, y - size * 1.2, W * 2, size * 2.4); c.clip();
+  if (k < 1) c.filter = `blur(${(1 - k) * 10}px)`;
+  c.translate(0, (1 - k) * 24);
+  if (o.scale) { c.translate(cx, y); c.scale(o.scale, o.scale); c.translate(-cx, -y); }
+  c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 30; c.shadowOffsetY = 8;
+  c.fillStyle = o.grad ? gradFill(c, cx, w, o.grad) : (o.col || WHITE);
+  c.fillText(s, x, y);
+  if (o.shine) { c.shadowColor = 'transparent'; const sx = cx + w / 2 - ((o.shine % 1.6) / 1.2) * (w + 300); const g = c.createLinearGradient(sx - 120, 0, sx + 120, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.globalCompositeOperation = 'source-atop'; c.fillStyle = g; c.fillText(s, x, y); }
+  c.restore();
+}
+const GG = ['#ffe39a', '#f2c14e', '#ffffff'], GM = ['#ffffff', '#5eead4', '#a7f3d0'];
+const fadeOut = (t, l, d = .35) => 1 - lin(t, l.end - d, l.end);
+
+// ---------- phone ----------
+function phone(name, x, y, h, o = {}) {
+  const img = IMG[name], c = ctx, w = h * .462, a = o.a ?? 1; if (a <= 0) return;
+  c.save(); c.globalAlpha = a; c.translate(x, y); c.rotate(o.rot || 0); const yaw = o.yaw || 0; c.transform(Math.cos(yaw), Math.sin(yaw) * .12, 0, 1, 0, 0);
+  c.save(); c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = h * .1; c.shadowOffsetY = h * .05; c.fillStyle = '#0d1b2a'; c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, w * .17); c.fill(); c.restore();
+  const rim = c.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2); rim.addColorStop(0, 'rgba(255,255,255,.65)'); rim.addColorStop(.5, 'rgba(255,255,255,.08)'); rim.addColorStop(1, 'rgba(242,193,78,.5)');
+  c.strokeStyle = rim; c.lineWidth = Math.max(2, h * .006); c.beginPath(); c.roundRect(-w / 2, -h / 2, w, h, w * .17); c.stroke();
+  const i = h * .022; c.save(); c.beginPath(); c.roundRect(-w / 2 + i, -h / 2 + i, w - 2 * i, h - 2 * i, w * .14); c.clip();
+  if (img.complete && img.naturalWidth) { const b = o.blur ?? 2; if (b > .3) c.filter = `blur(${b * h / 800}px)`; c.drawImage(img, -w / 2 + i, -h / 2 + i, w - 2 * i, h - 2 * i); c.filter = 'none'; }
+  const s = ((o.t || 0) * .4 + (o.seed || 0)) % 1.8 - .4, g = c.createLinearGradient(-w / 2 + w * s * 2 - w * .4, -h / 2, -w / 2 + w * s * 2 + w * .4, -h / 2 + h * .35);
+  g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.4)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(-w / 2, -h / 2, w, h);
+  c.restore();
+  c.fillStyle = '#0d1b2a'; c.beginPath(); c.roundRect(-w * .17, -h / 2 + h * .03, w * .34, h * .036, h * .018); c.fill();
+  c.restore();
+}
+function rays(x, y, t, a) { if (a <= 0) return; const c = ctx; c.save(); c.translate(x, y); c.rotate(t * .08); c.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 18; i++) { c.rotate(Math.PI * 2 / 18); const g = c.createLinearGradient(0, 0, 0, -1200); g.addColorStop(0, `rgba(242,193,78,${.16 * a})`); g.addColorStop(1, 'rgba(242,193,78,0)'); c.fillStyle = g; c.beginPath(); c.moveTo(0, 0); c.lineTo(-50, -1200); c.lineTo(50, -1200); c.fill(); }
+  c.restore(); }
+function logoBadge(x, y, r, a) { if (a <= 0 || !logo.complete || !logo.naturalWidth) return; const c = ctx; c.save(); c.globalAlpha = a;
+  const g = c.createRadialGradient(x, y, r * .8, x, y, r * 2.2); g.addColorStop(0, 'rgba(242,193,78,.35)'); g.addColorStop(1, 'rgba(242,193,78,0)'); c.fillStyle = g; c.fillRect(x - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4);
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.strokeStyle = GOLD; c.lineWidth = 4; c.stroke();
+  c.beginPath(); c.arc(x, y, r - 6, 0, 7); c.clip(); c.drawImage(logo, x - r * .86, y - r * .86, r * 1.72, r * 1.72); c.restore(); }
+
+// ---------- scenes (driven by script.json) ----------
+function render(t) {
+  t = clamp(t, 0, DUR);
+  const c = ctx, hk = hitAmt(t), shake = hk > .7 ? (hash(t * 91) - .5) * 18 * hk : 0;
+  c.save(); c.translate(shake, shake * .6);
+  backdrop(t);
+  const L = id => at(id);
+
+  // 1–3: questions
+  for (const id of ['l01', 'l02', 'l03']) { const l = L(id); if (t < l.t - .1 || t > l.end) continue;
+    const p = t - l.t, fo = fadeOut(t, l);
+    say(l.show[0], CX, CY - 70, 70, lin(p, 0, .7) * fo, { weight: 300, col: '#cffaf3' });
+    say(l.show[1], CX, CY + 50, l.show[1].length > 24 ? 84 : 104, lin(p, .45, 1.4) * fo, { weight: 800, grad: id === 'l02' ? GG : undefined });
+    // thin progress hairline under
+    c.save(); c.globalAlpha = .4 * fo; c.fillStyle = '#cffaf3'; const lw = 500 * lin(t, l.t, l.end); c.fillRect(CX + 250 - lw, CY + 150, lw, 2); c.restore(); }
+
+  // 4–7: four keyword beats with phones
+  ['l04', 'l05', 'l06', 'l07'].forEach((id, k) => { const l = L(id); if (t < l.t || t >= l.end) return;
+    const p = t - l.t, side = k % 2 ? -1 : 1, punch = 1 + Math.max(0, .12 - p * .3);
+    const inP = eo(lin(p, 0, .35)), out = lin(p, 1.95, 2.2);
+    phone(l.shot, CX - side * 470 + side * (1 - inP) * -300, CY + 30 + Math.sin(t * 1.4) * 8, 820 * (1 + p * .03), { a: inP * (1 - out), yaw: side * (.28 - .12 * inP), rot: side * -.05, blur: 1.6, t, seed: k });
+    phone(SHOTS[(SHOTS.indexOf(l.shot) + 5) % SHOTS.length], CX - side * 740, CY + 90, 560, { a: inP * (1 - out) * .45, yaw: side * .4, rot: side * -.12, blur: 9, t, seed: k + .3 });
+    const tx = CX + side * 330;
+    c.save(); c.translate(tx, CY - 40); c.scale(punch, punch); c.translate(-tx, -(CY - 40));
+    say(l.show[0], tx, CY - 60, 210, lin(p, 0, .25) * (1 - out), { weight: 900, col: WHITE });
+    c.restore();
+    say(l.show[1], tx, CY + 120, 96, lin(p, .45, .9) * (1 - out), { weight: 700, grad: k % 2 ? GM : GG });
+    // counter
+    say(`۰${'۱۲۳۴'[k]} — ۰۴`, tx, CY + 230, 30, lin(p, .2, .5) * (1 - out), { weight: 500, col: 'rgba(207,250,243,.7)', spacing: 4 });
+  });
+  // 8: all in one place
+  { const l = L('l08'); if (t >= l.t - .2 && t < l.end) { const p = t - l.t, fo = fadeOut(t, l);
+    for (let i = 0; i < 7; i++) { const an = (i - 3) * .32, r = 1500; const x = CX + Math.sin(an) * r * .62, y = CY + 330 + (1 - Math.cos(an)) * r * .5 - eo(lin(p, i * .06, .7 + i * .06)) * 120;
+      phone(SHOTS[i], x, y, 520 - Math.abs(i - 3) * 40, { a: eo(lin(p, i * .06, .5 + i * .06)) * fo * .9, rot: an * .6, blur: 3 + Math.abs(i - 3) * 1.5, t, seed: i }); }
+    const veil = c.createLinearGradient(0, 0, 0, H); veil.addColorStop(0, 'rgba(7,47,51,.85)'); veil.addColorStop(.55, 'rgba(7,47,51,.35)'); veil.addColorStop(1, 'rgba(7,47,51,0)'); c.fillStyle = veil; c.globalAlpha = fo; c.fillRect(0, 0, W, H); c.globalAlpha = 1;
+    say(l.show[0], CX, 230, 96, lin(p, 0, .7) * fo, { weight: 800 });
+    say(l.show[1], CX, 360, 110, lin(p, 1.2, 2.0) * fo, { weight: 900, grad: GG }); } }
+  // 9: «و حالا…» + converging light
+  { const l = L('l09'); if (t >= l.t && t < 28.2) { const p = t - l.t, k = lin(t, l.t, 27.7);
+    rays(CX, CY, t, k);
+    for (let i = 0; i < 12; i++) { const y = 80 + i * 85; streak(y + (CY - y) * eio(k), .25 * k); }
+    say(l.show[0], CX, CY, 120, lin(p, 0, .6) * (1 - lin(t, 27.5, 27.7)), { weight: 300 });
+    if (t >= 27.7) { c.fillStyle = '#041d20'; c.fillRect(-50, -50, W + 100, H + 100); } } }
+  // 10: big hit — «آماده‌ی یک آغاز تازه باش!»
+  { const l = L('l10'); if (t >= l.t && t < l.end) { const p = t - l.t, fo = fadeOut(t, l);
+    rays(CX, CY, t, (1 - lin(p, 0, 3)) * .9 + .3);
+    for (let i = 0; i < 60; i++) { const an = hash(i) * Math.PI * 2, d = eo(lin(p, 0, 1.6)) * (300 + hash(i + 3) * 900); c.globalAlpha = (1 - lin(p, .3, 2.5)) * .9; c.fillStyle = i % 3 ? GOLD : MINT;
+      c.beginPath(); c.arc(CX + Math.cos(an) * d, CY + Math.sin(an) * d * .6, 3 + hash(i + 5) * 4, 0, 7); c.fill(); } c.globalAlpha = 1;
+    say(l.show[0], CX, CY - 110, 80, lin(p, 0, .4) * fo, { weight: 300, col: '#cffaf3' });
+    say(l.show[1], CX, CY + 40, 150, lin(p, .1, .5) * fo, { weight: 900, grad: GG, scale: back(lin(p, 0, .5)), shine: p * 1.1 }); } }
+  // 11: center name + logo
+  { const l = L('l11'); if (t >= l.t && t < l.end + .3) { const p = t - l.t, fo = 1 - lin(t, l.end, l.end + .3);
+    logoBadge(CX, CY - 120, 120, eo(lin(p, 0, .8)) * fo);
+    say(l.show[0], CX, CY + 110, 64, lin(p, .3, 1.3) * fo, { weight: 600 }); } }
+  // 12: «به‌زودی»
+  { const l = L('l12'); if (t >= l.t) { const p = t - l.t;
+    rays(CX, CY - 40, t, .7 - lin(p, 0, 4) * .3);
+    logoBadge(CX, 200, 80, eo(lin(p, .8, 1.6)));
+    say(l.show[0], CX, CY + 10, 260, lin(p, 0, .45), { weight: 900, grad: GG, scale: back(lin(p, 0, .6)), shine: p * .7 + .2 });
+    say(l.show[1], CX, CY + 210, 64, lin(p, .9, 1.8), { weight: 300, spacing: 10, col: '#cffaf3' });
+    say('کانون نخبه‌پروری شهید کاظم آشتیانی', CX, H - 110, 34, lin(p, 1.6, 2.4), { weight: 500, col: 'rgba(207,250,243,.8)', spacing: 2 }); } }
+
+  // hit flash + anamorphic streak
+  if (hk > 0) { c.fillStyle = `rgba(255,248,220,${Math.pow(hk, 3) * .55})`; c.fillRect(-50, -50, W + 100, H + 100); streak(CY, hk * .9, '255,236,180'); }
+  c.restore();
+  // letterbox bars + vignette (cinematic)
+  const v = c.createRadialGradient(CX, CY, H * .35, CX, CY, W * .7); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#020c0e'; c.fillRect(0, 0, W, 54); c.fillRect(0, H - 54, W, 54);
+  if (t < .6) { c.fillStyle = `rgba(2,12,14,${1 - t / .6})`; c.fillRect(0, 0, W, H); }
+  if (t > DUR - 1.2) { c.fillStyle = `rgba(2,12,14,${lin(t, DUR - 1.2, DUR)})`; c.fillRect(0, 0, W, H); }
+}
+
+// ---------- player ----------
+const RENDER = new URLSearchParams(location.search).has('render');
+const audio = document.getElementById('music');
+const imgs = [...Object.values(IMG), logo].map(i => new Promise(r => { if (i.complete) r(); else { i.onload = r; i.onerror = r; } }));
+window.renderAt = t => { render(t); return cv.toDataURL('image/jpeg', .92); };
+window.TEASER_DURATION = DUR;
+window.teaserReady = Promise.all([document.fonts.load('900 40px Vazirmatn').then(() => document.fonts.load('300 40px Vazirmatn')).then(() => document.fonts.ready), ...imgs]);
+if (RENDER) { document.querySelectorAll('.ui').forEach(e => e.remove()); cv.style.cssText = 'width:1920px;max-width:none;box-shadow:none'; return; }
+window.teaserReady.then(() => render(36));
+const start = document.getElementById('start'), end = document.getElementById('end'); let raf = 0;
+function loop() { const t = audio.currentTime; render(t); if (audio.ended || t >= DUR - .05) { end.classList.remove('hide'); return; } raf = requestAnimationFrame(loop); }
+function play() { start.classList.add('hide'); end.classList.add('hide'); audio.currentTime = 0; audio.play().catch(() => {}); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop); }
+document.getElementById('play').onclick = play; document.getElementById('replay').onclick = play;
+})();
+</script>
+</body>
+</html>
