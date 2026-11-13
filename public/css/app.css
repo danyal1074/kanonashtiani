@@ -643,3 +643,17 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; font-si
 .feature-tile p { opacity: 1; }
 /* فاصله پایین صفحه عمومی تا دکمه شناور سبد خرید روی محتوا نیفتد */
 @media (max-width: 980px) { .pub-main { padding-bottom: 104px; } }
+
+/* ---- مدیریت کلاس‌ها (پنل مدیر): فهرست کلاس‌ها، جزئیات و فهرست دانش‌آموزان ---- */
+.cls-grade { margin-top: var(--s-3); }
+.cls-grade > .tiny { font-weight: 700; margin-bottom: 2px; }
+.cls-list { margin-top: 6px; }
+.cls-row { display: flex; align-items: center; flex-wrap: wrap; gap: 2px var(--s-2); min-height: 48px; padding: 2px 4px; border-bottom: 1px solid var(--line); min-width: 0; }
+.cls-row:last-child { border-bottom: 0; }
+.cls-row .grow { flex: 1 1 150px; }
+.cls-name { background: none; border: 0; padding: 4px 8px; margin-inline-start: -8px; border-radius: var(--r-sm); font: inherit; color: var(--ink); cursor: pointer; text-align: start; }
+.cls-name:hover { background: var(--sand-100); }
+.cls-name:focus-visible, .cls-row .icon-btn:focus-visible { outline: 2px solid var(--teal-600, #0f766e); outline-offset: 1px; }
+.cls-roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; max-height: 340px; overflow: auto; padding: 2px; }
+.cls-stu { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); font-size: var(--fs-sm); }
+.cls-stu.off { opacity: .55; }

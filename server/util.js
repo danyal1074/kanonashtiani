@@ -155,6 +155,10 @@ export function isValidNationalCode(code) {
 }
 export const toEnDigits = (s) => String(s ?? '').replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
 export const clampStr = (s, n = 500) => String(s ?? '').trim().slice(0, n);
+/** نام کلاس: حروف عربی به فارسی، فاصله‌های اضافه حذف (نیم‌فاصله‌ی فارسی دست‌نخورده می‌ماند) */
+export const normClassName = (s) => clampStr(s, 30).replace(/[يى]/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim();
+/** کلید مقایسه‌ی نام کلاس: «دختر ۱» و «دختر 1» یکی حساب می‌شوند */
+export const classNameKey = (s) => toEnDigits(normClassName(s)).toLowerCase();
 
 // استانداردسازی شماره همراه ایرانی (پشتیبانی از +98، 0098، بدون صفر، فاصله‌ها و ارقام فارسی)
 export function normalizeIranianMobile(phone) {

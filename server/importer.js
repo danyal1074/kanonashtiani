@@ -4,7 +4,7 @@
 // دانش‌آموزی که قبلاً ثبت شده باشد رد نمی‌شود: کلاس، وضعیت پرداخت و اطلاعات خالی پروفایلش به‌روزرسانی می‌شود.
 import zlib from 'node:zlib';
 import { all, get, run, tx } from './db.js';
-import { hashPasswordAsync, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, clampStr, toEnDigits } from './util.js';
+import { hashPasswordAsync, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, clampStr, toEnDigits, normClassName, classNameKey } from './util.js';
 import { markFeePaid } from './logic.js';
 import { ymd, jMonthOf, JMONTHS } from './util.js';
 
@@ -317,12 +317,25 @@ export async function importStudents(centerId, input, { dryRun = false, defaults
   for (let i = 0; i < news.length; i += 24) await Promise.all(news.slice(i, i + 24).map((g) => hashPasswordAsync(g.national_code, undefined, { bulk: true }).then((h) => hashes.set(g.national_code, h))));
 
   tx(() => {
-    const classIds = new Map(all('SELECT id, grade, name FROM classes WHERE center_id=?', centerId).map((c) => [`${c.grade}|${c.name}`, c.id]));
+    const classRows = all('SELECT id, grade, name FROM classes WHERE center_id=?', centerId);
+    const classIds = new Map(classRows.map((c) => [`${c.grade}|${classNameKey(c.name)}`, c.id]));
     const classFor = (grade, name) => {
-      const key = `${grade}|${name}`;
+      const key = `${grade}|${classNameKey(name)}`;
       let cid = classIds.get(key);
-      if (!cid) { cid = Number(run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', centerId, grade, name).lastInsertRowid); classIds.set(key, cid); summary.classes_created++; }
+      if (!cid) { cid = Number(run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', centerId, grade, normClassName(name)).lastInsertRowid); classIds.set(key, cid); classRows.push({ id: cid, grade, name: normClassName(name) }); summary.classes_created++; }
       return cid;
+    };
+    // دانش‌آموز تازه‌ای که کلاس ندارد: اگر جنسیتش در فایل آمده و برای پایه‌اش کلاس «پسر…» / «دختر…» هست، به آن می‌رود
+    // (بین چند کلاس دختران، به کلاسی با کمترین دانش‌آموز)؛ وگرنه مثل همیشه «الف»
+    const sizes = new Map(all('SELECT class_id, COUNT(*) n FROM students WHERE class_id IS NOT NULL GROUP BY class_id').map((x) => [x.class_id, x.n]));
+    const genderClassFor = (d) => {
+      if (d.genderGuessed) return null;
+      const word = d.gender === 'f' ? 'دختر' : 'پسر';
+      const cands = classRows.filter((c) => c.grade === d.grade && c.name.includes(word));
+      if (!cands.length) return null;
+      const best = cands.reduce((a, c) => ((sizes.get(c.id) || 0) < (sizes.get(a.id) || 0) ? c : a));
+      sizes.set(best.id, (sizes.get(best.id) || 0) + 1);
+      return best.id;
     };
     const markPaid = (uid) => {
       const r = markFeePaid(centerId, uid, { period: feeMonthUsed ? `${feeMonthUsed} ${curYear}` : undefined });
@@ -331,7 +344,7 @@ export async function importStudents(centerId, input, { dryRun = false, defaults
       return r?.result === 'paid' || r?.result === 'unset';
     };
     for (const d of news) {
-      const cid = classFor(d.grade, d.class_name || 'الف');
+      const cid = d.class_name ? classFor(d.grade, d.class_name) : (genderClassFor(d) ?? classFor(d.grade, 'الف'));
       const uid = Number(run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`, centerId, 'student', d.national_code, hashes.get(d.national_code), d.full_name, d.gender).lastInsertRowid);
       run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar, profile_done, father_name, mother_name, phone2) VALUES (?,?,?,?,?,?,?,?,1,?,?,?)', uid, d.school, d.grade, cid, d.birth_date, d.parent_phone, d.address, 'sprout', d.father_name, d.mother_name, d.phone2);
       if (d.fee_paid === true) markPaid(uid);
