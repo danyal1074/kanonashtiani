@@ -217,32 +217,8 @@ async function students(el) {
       const r = await post('/api/manager/students/delete', { all: true, confirm: true }); toast(`${fa(r.deleted)} دانش‌آموز حذف شد`, 'ok'); afterBulk();
     } }] });
 
-  // ----- کلاس‌ها: چند کلاس برای هر پایه، تقسیم خودکار دانش‌آموزان -----
-  $('#classesSt').onclick = () => {
-    const body = () => `<div class="stack"><div class="row between wrap" style="gap:8px"><span class="small muted">تقسیم بر اساس جنسیت برای همهٔ پایه‌ها (کلاس‌های الف و ب در صورت نبودن ساخته می‌شوند)</span><button class="btn sm" data-gsplit="all">همهٔ پایه‌ها: پسر الف، دختر ب</button></div>${md.grades.map((g) => { const cl = md.classes.filter((c) => c.grade === g); return `<div class="card flat" style="padding:10px"><div class="row between wrap" style="gap:8px"><b>پایه ${gradeName(g)}</b><span class="row wrap" style="gap:6px"><input class="input" data-newname="${g}" placeholder="نام کلاس جدید (مثلاً ب)" style="width:170px" maxlength="30"><button class="btn sm" data-addcls="${g}">افزودن کلاس</button><button class="btn sm soft" data-gsplit="${g}">پسر الف، دختر ب</button>${cl.length > 1 ? `<button class="btn sm soft" data-dist="${g}">تقسیم خودکار بین ${fa(cl.length)} کلاس</button>` : ''}</span></div>
-      <div class="row wrap" style="gap:6px;margin-top:8px">${cl.map((c) => `<span class="badge">${esc(c.name)} · ${fa(c.students)} نفر${c.students ? '' : ` <button class="icon-btn" data-delcls="${c.id}" aria-label="حذف کلاس ${esc(c.name)}">${icon('trash', { size: 14 })}</button>`}</span>`).join('') || '<span class="small muted">کلاسی نیست</span>'}</div></div>`; }).join('')}
-      <p class="small muted" style="margin:0;line-height:2">برای هر پایه چند کلاس بسازید، سپس «تقسیم خودکار» دانش‌آموزان را بین کلاس‌ها پخش می‌کند. برای جابه‌جایی دلخواه، در فهرست دانش‌آموزان چند نفر را تیک بزنید و «انتقال به کلاس» را بزنید.</p></div>`;
-    modal({ title: 'کلاس‌های هر پایه', wide: true, body: `<div id="clsBody">${body()}</div>`, actions: [{ label: 'بستن', value: true }], onOpen: (m) => {
-      const redraw = async () => { metaCache = null; md = await meta(); $('#clsBody', m).innerHTML = body(); fillClasses(); load(); };
-      on(m, 'click', '[data-addcls]', (ev, b) => busy(b, async () => {
-        const g = Number(b.dataset.addcls), name = $(`[data-newname="${g}"]`, m).value.trim();
-        if (!name) { toast('نام کلاس را بنویسید'); return; }
-        await post('/api/manager/classes', { grade: g, name }); toast('کلاس ساخته شد', 'ok'); await redraw();
-      }));
-      on(m, 'click', '[data-delcls]', (ev, b) => busy(b, async () => { await del(`/api/manager/classes/${b.dataset.delcls}`); toast('کلاس حذف شد', 'ok'); await redraw(); }));
-      on(m, 'click', '[data-gsplit]', (ev, b) => busy(b, async () => {
-        const g = b.dataset.gsplit, all_ = g === 'all';
-        if (!(await confirmBox(`${all_ ? 'در همهٔ پایه‌ها' : `در پایهٔ ${gradeName(Number(g))}`} همهٔ پسرها به کلاس «الف» و همهٔ دخترها به کلاس «ب» منتقل شوند؟ کلاس فعلی دانش‌آموزان تغییر می‌کند.`, 'انتقال'))) return;
-        const r = await post('/api/manager/classes/split-gender', all_ ? {} : { grade: Number(g) });
-        toast(`${fa(r.boys)} پسر در «الف» و ${fa(r.girls)} دختر در «ب» قرار گرفتند${r.classes_created ? ` (${fa(r.classes_created)} کلاس تازه ساخته شد)` : ''}`, 'ok', 6000); await redraw();
-      }));
-      on(m, 'click', '[data-dist]', (ev, b) => busy(b, async () => {
-        const g = Number(b.dataset.dist), cl = md.classes.filter((c) => c.grade === g);
-        if (!(await confirmBox(`دانش‌آموزان پایهٔ ${gradeName(g)} به‌ترتیب حروف الفبا (دختر و پسر جداگانه) بین ${fa(cl.length)} کلاس پخش شوند؟ کلاس فعلی همهٔ آن‌ها تغییر می‌کند.`, 'تقسیم خودکار'))) return;
-        const r = await post('/api/manager/classes/distribute', { grade: g, class_ids: cl.map((c) => c.id) }); toast(`${fa(r.moved)} نفر بین کلاس‌ها تقسیم شدند`, 'ok'); await redraw();
-      }));
-    } });
-  };
+  // ----- کلاس‌ها: افزودن، تغییر نام، حذف/ادغام، تقسیم خودکار، راه‌اندازی پسر/دختر (پنجرهٔ مشترک) -----
+  $('#classesSt').onclick = () => classManager(async () => { md = await meta(); fillClasses(); load(); });
 
   const save = async (m, id) => {
     const body = readStudent(m);
@@ -361,16 +337,163 @@ async function students(el) {
   });
 }
 
+// ================= مدیریت کلاس‌ها (مشترک بین «دانش‌آموزان» و «معلمان، کلاس‌ها و برنامه») =================
+const clsLabel = (c) => `${gradeName(c.grade)} ${c.name}`;
+const clsCounts = (c) => (c.students ? `${fa(c.students)} نفر · ${fa(c.boys ?? 0)} پسر · ${fa(c.girls ?? 0)} دختر` : 'بدون دانش‌آموز');
+const pressEnter = (m, input, actIndex) => input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); m.querySelector(`[data-act="${actIndex}"]`)?.click(); } });
+
+/** تغییر نام کلاس؛ نتیجه true یعنی ذخیره شد. دانش‌آموزان، معلم‌ها و برنامهٔ هفتگی دست‌نخورده می‌مانند. */
+function renameClass(c) {
+  return modal({
+    title: `${icon('edit', { size: 16 })} تغییر نام «${esc(clsLabel(c))}»`,
+    body: `<div class="field"><label for="rnName">نام تازهٔ کلاس</label><input class="input" id="rnName" value="${esc(c.name)}" maxlength="30" autocomplete="off">
+      <p class="tiny muted" style="margin:6px 0 0;line-height:1.9">نام کلاس همراه پایه نمایش داده می‌شود؛ مثلاً «${esc(gradeName(c.grade))} پسر». دانش‌آموزان، معلم‌ها و برنامهٔ هفتگی این کلاس همان‌طور می‌مانند.</p></div>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ذخیره', onClick: async (m) => {
+      const name = $('#rnName', m).value.trim();
+      if (!name) { toast('نام کلاس را بنویسید', 'err'); return false; }
+      if (name === c.name) return true;
+      await put(`/api/manager/classes/${c.id}`, { name }); toast('نام کلاس تغییر کرد', 'ok'); return true;
+    } }],
+    onOpen: (m) => { const i = $('#rnName', m); i.select(); pressEnter(m, i, 1); },
+  });
+}
+
+/** حذف کلاس؛ اگر دانش‌آموز دارد باید کلاس مقصد انتخاب شود (ادغام). نتیجه true یعنی حذف شد. */
+async function deleteClass(c) {
+  const [d, md] = await Promise.all([api(`/api/manager/classes/${c.id}`), meta()]);
+  const others = md.classes.filter((x) => x.grade === c.grade && x.id !== c.id), n = d.students.length, rel = d.related;
+  const LABEL = { assignments: 'تکلیف', exams: 'آزمون', attendance: 'سابقهٔ حضور و غیاب', study_plans: 'برنامهٔ مطالعه' };
+  const carried = Object.entries(LABEL).filter(([k]) => rel[k] > 0).map(([k, v]) => `${fa(rel[k])} ${v}`);
+  const note = (cond, html) => (cond ? `<p class="small" style="margin:0;line-height:2">${html}</p>` : '');
+  if (n && !others.length) {
+    return modal({ title: `حذف «${esc(clsLabel(c))}»`, body: `<p style="margin:0;line-height:2">این کلاس ${fa(n)} دانش‌آموز دارد و در پایهٔ ${gradeName(c.grade)} کلاس دیگری نیست که آن‌ها را به آن منتقل کنیم. ابتدا یک کلاس دیگر برای این پایه بسازید.</p>`, actions: [{ label: 'باشه', value: false }] });
+  }
+  return modal({
+    title: `${icon('trash', { size: 16 })} حذف «${esc(clsLabel(c))}»`,
+    body: `<div class="stack">
+      ${n ? `<div class="field"><label for="dlTo">این کلاس ${fa(n)} دانش‌آموز دارد؛ به کدام کلاس منتقل شوند؟</label><select class="input" id="dlTo">${others.map((x) => `<option value="${x.id}">${esc(clsLabel(x))} (${fa(x.students)} نفر)</option>`).join('')}</select></div>` : ''}
+      ${n ? note(carried.length, `همراه دانش‌آموزان، ${carried.join('، ')} و معلم‌های این کلاس هم به کلاس مقصد منتقل می‌شود.`) : note(carried.length, `<b>هشدار:</b> با حذف کلاس، ${carried.join('، ')} هم برای همیشه حذف می‌شود.`)}
+      ${note(rel.schedule > 0, `<b>برنامهٔ هفتگی این کلاس (${fa(rel.schedule)} جلسه) حذف می‌شود.</b>`)}
+      ${note(!n && !carried.length && !rel.schedule, 'این کلاس خالی است و چیزی به آن وابسته نیست.')}
+    </div>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: n ? 'انتقال و حذف کلاس' : 'حذف کلاس', cls: 'red', onClick: async (m) => {
+      const to = n ? `move_to=${$('#dlTo', m).value}&` : '';
+      const r = await del(`/api/manager/classes/${c.id}?${to}force=1`);
+      toast(r.moved ? `کلاس حذف شد و ${fa(r.moved)} دانش‌آموز به «${r.to}» منتقل شدند` : 'کلاس حذف شد', 'ok', 5000); return true;
+    } }],
+  });
+}
+
+/** فهرست دانش‌آموزان یک کلاس با جنسیت (برای اطمینان از درستی جنسیت‌های ثبت‌شده) */
+async function classDetails(c) {
+  const d = await api(`/api/manager/classes/${c.id}`), k = d.counts, rel = d.related;
+  const relTxt = [['schedule', 'جلسهٔ برنامه'], ['teachers', 'معلم'], ['assignments', 'تکلیف'], ['exams', 'آزمون']].filter(([x]) => rel[x] > 0).map(([x, l]) => `${fa(rel[x])} ${l}`).join(' · ');
+  return modal({
+    title: esc(clsLabel(d)), wide: true,
+    body: `<div class="stack"><div class="row wrap" style="gap:6px"><span class="badge">${fa(k.students)} دانش‌آموز</span><span class="badge">${fa(k.boys)} پسر</span><span class="badge">${fa(k.girls)} دختر</span>${k.inactive ? `<span class="badge gray">${fa(k.inactive)} غیرفعال</span>` : ''}${relTxt ? `<span class="small muted">${relTxt}</span>` : ''}</div>
+      ${d.students.length ? `<div class="cls-roster">${d.students.map((s) => `<div class="cls-stu${s.active ? '' : ' off'}"><span>${esc(s.full_name)}</span><span class="badge ${s.gender === 'f' ? 'red' : ''}">${s.gender === 'f' ? 'دختر' : 'پسر'}</span></div>`).join('')}</div>` : '<p class="muted" style="margin:0">دانش‌آموزی در این کلاس نیست.</p>'}
+      <p class="tiny muted" style="margin:0">برای جابه‌جایی دلخواه، در «مدیریت دانش‌آموزان» چند نفر را تیک بزنید و «انتقال به کلاس» را بزنید. جنسیت هر دانش‌آموز در ویرایش او قابل اصلاح است.</p></div>`,
+    actions: [{ label: 'بستن', value: true }],
+  });
+}
+
+/** راه‌اندازی پسر/دختر: تعداد کلاس پسران و دختران برای هر پایه، با پیش‌نمایش پیش از اعمال */
+async function genderSetup(onDone) {
+  const md = await meta();
+  const read = (m) => ({
+    grades: md.grades.filter((g) => m.querySelector(`[data-gg="${g}"]`).checked).map((g) => ({ grade: g, boys: Number(m.querySelector(`[data-gb="${g}"]`).value), girls: Number(m.querySelector(`[data-gw="${g}"]`).value) })),
+    boys_from: $('#gsBoysFrom', m).value.trim(), boys_name: $('#gsBoys', m).value.trim(), girls_from: $('#gsGirlsFrom', m).value.trim(), girls_name: $('#gsGirls', m).value.trim(),
+    numbered: $('#gsNum', m).checked, move: m.querySelector('input[name="gsMove"]:checked').value, copy_teachers: $('#gsCopy', m).checked });
+  const countSel = (attr, g, def) => `<select class="input" ${attr}="${g}" aria-label="تعداد کلاس ${attr === 'data-gb' ? 'پسران' : 'دختران'} پایهٔ ${gradeName(g)}" style="width:90px">${[1, 2, 3, 4].map((n) => `<option value="${n}" ${n === def ? 'selected' : ''}>${fa(n)}</option>`).join('')}</select>`;
+  const out = (r) => {
+    const sm = r.summary;
+    const act = (p) => (p.action === 'rename' ? `<span class="badge">تغییر نام از «${esc(p.from)}»</span>` : p.action === 'create' ? '<span class="badge green">کلاس تازه</span>' : '<span class="badge gray">بدون تغییر</span>');
+    const mis = r.grades.reduce((n, g) => n + (g.mismatch || 0), 0);
+    const misBox = mis && r.move === 'keep' ? `<div class="card flat" style="padding:10px;border-color:var(--red-700)"><p class="small" style="margin:0 0 8px;line-height:2">${icon('alert', { size: 15 })} <b>${fa(mis)} دانش‌آموز</b> با جنسیت ثبت‌شده در کلاسی هستند که با نامش نمی‌خواند (مثلاً دختر در «پسر»). فقط تغییر نام، این‌ها را درست نمی‌کند.</p><button type="button" class="btn sm" data-gsmove>جابه‌جایی بر اساس جنسیت و پیش‌نمایش دوباره</button></div>` : '';
+    return `<div class="stack">${misBox}<div class="row wrap" style="gap:6px"><span class="badge">${fa(sm.renamed)} تغییر نام</span><span class="badge green">${fa(sm.created)} کلاس تازه</span><span class="badge ${sm.moved ? 'red' : 'gray'}">${fa(sm.moved)} دانش‌آموز جابه‌جا می‌شود</span></div>
+      ${r.grades.map((g) => `<div class="card flat" style="padding:10px"><b>پایهٔ ${gradeName(g.grade)}</b>
+        <table class="table" style="margin-top:6px"><thead><tr><th>کلاس</th><th>اقدام</th><th>دانش‌آموز</th><th>پسر</th><th>دختر</th></tr></thead><tbody>${g.classes.map((p) => `<tr><td><b>${esc(gradeName(g.grade))} ${esc(p.name)}</b></td><td>${act(p)}</td><td class="num">${fa(p.total)}</td><td class="num">${fa(p.boys)}</td><td class="num">${fa(p.girls)}</td></tr>`).join('')}</tbody></table>
+        ${g.others.length ? `<p class="tiny muted" style="margin:6px 0 0">کلاس‌های دیگر این پایه (تغییری نمی‌کنند): ${g.others.map((o) => `${esc(o.name)} (${fa(o.students)} نفر)`).join('، ')}</p>` : ''}
+        ${g.warnings.map((w) => `<p class="small" style="margin:6px 0 0;color:var(--red-700)">${icon('alert', { size: 14 })} ${esc(w)}</p>`).join('')}</div>`).join('') || '<p class="muted" style="margin:0">پایه‌ای برای تغییر پیدا نشد.</p>'}</div>`;
+  };
+  return modal({
+    title: `${icon('users', { size: 16 })} راه‌اندازی کلاس‌های پسر و دختر`, wide: true,
+    body: `<div class="stack" id="gsForm">
+      <p class="small muted" style="margin:0;line-height:2">کلاس‌های «الف» را «پسر 1» و کلاس‌های «ب» را «دختر 1» می‌کند (نمایش: «هفتم پسر 1»). اگر برای یک پایه بیش از یک کلاس خواسته باشید («دختر 2»، …)، کلاس تازه ساخته می‌شود. ابتدا <b>پیش‌نمایش</b> را ببینید؛ تا «اعمال» نزنید چیزی تغییر نمی‌کند.</p>
+      <div class="table-wrap"><table class="table"><thead><tr><th>پایه</th><th>تعداد کلاس پسران</th><th>تعداد کلاس دختران</th></tr></thead><tbody>${md.grades.map((g) => `<tr><td><label class="row" style="gap:8px"><input type="checkbox" data-gg="${g}" checked> <b>${gradeName(g)}</b></label></td><td>${countSel('data-gb', g, 1)}</td><td>${countSel('data-gw', g, 2)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="tiny muted" style="margin:0">پایه‌ای که تیکش را بردارید دست نمی‌خورد. تعداد کلاس هر پایه را با جدول زمانی کانون هماهنگ کنید.</p>
+      <div class="form-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+        <div class="field"><label for="gsBoysFrom">نام فعلی کلاس پسرها</label><input class="input" id="gsBoysFrom" value="الف" maxlength="30"></div>
+        <div class="field"><label for="gsBoys">نام تازهٔ کلاس پسرها</label><input class="input" id="gsBoys" value="پسر" maxlength="30"></div>
+        <div class="field"><label for="gsGirlsFrom">نام فعلی کلاس دخترها</label><input class="input" id="gsGirlsFrom" value="ب" maxlength="30"></div>
+        <div class="field"><label for="gsGirls">نام تازهٔ کلاس دخترها</label><input class="input" id="gsGirls" value="دختر" maxlength="30"></div>
+      </div>
+      <label class="row" style="gap:8px"><input type="checkbox" id="gsNum" checked><span>شماره‌گذاری کلاس‌ها: «پسر 1»، «دختر 1»، «دختر 2» <span class="tiny muted">(هم‌نام با جدول زمانی کانون؛ اگر بردارید، کلاسِ تنها بدون شماره می‌ماند)</span></span></label>
+      <fieldset class="stack" style="border:0;padding:0;margin:0;gap:6px"><legend class="label" style="padding:0">جابه‌جایی دانش‌آموزان</legend>
+        <label class="row" style="gap:8px;align-items:flex-start"><input type="radio" name="gsMove" value="keep" checked><span><b>فقط تغییر نام</b>؛ دانش‌آموزان در همان کلاس فعلی می‌مانند<span class="tiny muted" style="display:block">اگر برای یک سمت چند کلاس خواسته‌اید، فقط دانش‌آموزان همان سمت بین کلاس‌هایش تقسیم می‌شوند.</span></span></label>
+        <label class="row" style="gap:8px;align-items:flex-start"><input type="radio" name="gsMove" value="gender"><span><b>جابه‌جایی بر اساس جنسیت ثبت‌شده</b>؛ همهٔ پسرها بین کلاس‌های پسر و دخترها بین کلاس‌های دختر قرار می‌گیرند (به‌ترتیب حروف الفبا، یکی در میان)<span class="tiny muted" style="display:block">جنسیتی که هنگام ثبت‌نام خالی بوده «پسر» ثبت شده؛ پیش از اعمال، تعداد پسر و دختر هر کلاس را در پیش‌نمایش بررسی کنید.</span></span></label></fieldset>
+      <label class="row" style="gap:8px"><input type="checkbox" id="gsCopy" checked><span>معلم‌های کلاس اول هر سمت به کلاس‌های تازهٔ همان سمت هم اختصاص یابد <span class="tiny muted">(برنامهٔ هفتگی کپی نمی‌شود)</span></span></label>
+      <div id="gsOut"></div></div>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false },
+      { label: 'پیش‌نمایش', cls: 'soft', onClick: async (m) => {
+        const body = read(m);
+        if (!body.grades.length) { toast('دست‌کم یک پایه را انتخاب کنید', 'err'); return false; }
+        const r = await post('/api/manager/classes/setup-gender', { ...body, dry_run: true });
+        $('#gsOut', m).innerHTML = out(r); $('[data-act="2"]', m).disabled = false; $('#gsOut', m).scrollIntoView({ block: 'nearest' }); return false;
+      } },
+      { label: 'اعمال تغییرات', onClick: async (m) => {
+        const body = read(m), pre = await post('/api/manager/classes/setup-gender', { ...body, dry_run: true });
+        if (pre.summary.moved && !(await confirmBox(`${fa(pre.summary.moved)} دانش‌آموز به کلاس دیگری منتقل می‌شوند. ادامه بدهم؟`, 'ادامه'))) return false;
+        const r = await post('/api/manager/classes/setup-gender', body);
+        toast(`انجام شد: ${fa(r.summary.renamed)} تغییر نام، ${fa(r.summary.created)} کلاس تازه، ${fa(r.summary.moved)} دانش‌آموز جابه‌جا شد`, 'ok', 6000); return true;
+      } }],
+    onOpen: (m) => {
+      $('[data-act="2"]', m).disabled = true;
+      m.querySelector('#gsForm').addEventListener('input', () => { $('[data-act="2"]', m).disabled = true; $('#gsOut', m).innerHTML = ''; });
+      on(m, 'click', '[data-gsmove]', () => { m.querySelector('input[name="gsMove"][value="gender"]').click(); m.querySelector('[data-act="1"]').click(); });
+    },
+  }).then((ok) => { if (ok) onDone?.(); return ok; });
+}
+
+/** پنجرهٔ «مدیریت کلاس‌ها»: افزودن، تغییر نام، حذف/ادغام، جزئیات، تقسیم خودکار و راه‌اندازی پسر/دختر */
+async function classManager(onChange = () => {}) {
+  let md = await meta(true);
+  const row = (c) => `<div class="cls-row"><button type="button" class="cls-name" data-cdet="${c.id}" aria-label="فهرست دانش‌آموزان ${esc(clsLabel(c))}"><b>${esc(clsLabel(c))}</b></button><span class="tiny muted grow">${clsCounts(c)}</span>
+    <button type="button" class="icon-btn" data-cren="${c.id}" aria-label="تغییر نام ${esc(clsLabel(c))}" title="تغییر نام">${icon('edit', { size: 17 })}</button><button type="button" class="icon-btn" data-cdel="${c.id}" aria-label="حذف ${esc(clsLabel(c))}" title="حذف">${icon('trash', { size: 17 })}</button></div>`;
+  const body = () => `<div class="stack"><div class="row between wrap" style="gap:8px"><span class="small muted">نام هر کلاس را ویرایش کنید، کلاس تازه بسازید یا کلاس را حذف (و دانش‌آموزانش را به کلاس دیگر منتقل) کنید.</span><button type="button" class="btn sm" data-gsetup>${icon('users', { size: 16 })} راه‌اندازی پسر / دختر…</button></div>
+    ${md.grades.map((g) => { const cl = md.classes.filter((c) => c.grade === g); return `<div class="card flat" style="padding:10px"><div class="row between wrap" style="gap:8px"><b>پایهٔ ${gradeName(g)}</b><span class="row wrap" style="gap:6px"><input class="input" data-newname="${g}" placeholder="نام کلاس جدید (مثلاً پسر)" aria-label="نام کلاس جدید پایهٔ ${gradeName(g)}" style="width:190px" maxlength="30"><button type="button" class="btn sm" data-addcls="${g}">افزودن کلاس</button>${cl.length > 1 ? `<button type="button" class="btn sm soft" data-dist="${g}" title="دانش‌آموزان پایه را بین کلاس‌ها پخش می‌کند">تقسیم خودکار</button>` : ''}</span></div>
+      <div class="cls-list">${cl.map(row).join('') || '<span class="small muted">کلاسی نیست</span>'}</div></div>`; }).join('')}</div>`;
+  await modal({ title: `${icon('layers', { size: 16 })} مدیریت کلاس‌ها`, wide: true, body: `<div id="clsBody">${body()}</div>`, actions: [{ label: 'بستن', value: true }], onOpen: (m) => {
+    const redraw = async () => { md = await meta(true); $('#clsBody', m).innerHTML = body(); await onChange(); };
+    const cls = (id) => md.classes.find((c) => c.id === Number(id));
+    on(m, 'click', '[data-addcls]', (ev, b) => busy(b, async () => {
+      const g = Number(b.dataset.addcls), inp = $(`[data-newname="${g}"]`, m), name = inp.value.trim();
+      if (!name) { toast('نام کلاس را بنویسید'); inp.focus(); return; }
+      await post('/api/manager/classes', { grade: g, name }); toast('کلاس ساخته شد', 'ok'); await redraw();
+    }));
+    on(m, 'keydown', '[data-newname]', (ev, i) => { if (ev.key === 'Enter') { ev.preventDefault(); m.querySelector(`[data-addcls="${i.dataset.newname}"]`).click(); } });
+    on(m, 'click', '[data-cren]', async (ev, b) => { if (await renameClass(cls(b.dataset.cren))) await redraw(); });
+    on(m, 'click', '[data-cdel]', (ev, b) => busy(b, async () => { if (await deleteClass(cls(b.dataset.cdel))) await redraw(); }));
+    on(m, 'click', '[data-cdet]', (ev, b) => busy(b, () => classDetails(cls(b.dataset.cdet))));
+    on(m, 'click', '[data-gsetup]', async () => { await genderSetup(); await redraw(); });
+    on(m, 'click', '[data-dist]', (ev, b) => busy(b, async () => {
+      const g = Number(b.dataset.dist), cl = md.classes.filter((c) => c.grade === g);
+      if (!(await confirmBox(`دانش‌آموزان پایهٔ ${gradeName(g)} به‌ترتیب حروف الفبا (دختر و پسر جداگانه) بین ${fa(cl.length)} کلاس پخش شوند؟ کلاس فعلی همهٔ آن‌ها تغییر می‌کند.`, 'تقسیم خودکار'))) return;
+      const r = await post('/api/manager/classes/distribute', { grade: g, class_ids: cl.map((c) => c.id) }); toast(`${fa(r.moved)} نفر بین کلاس‌ها تقسیم شدند`, 'ok'); await redraw();
+    }));
+  } });
+}
+
 // ================= معلمان، کلاس‌ها، برنامه =================
 async function staff(el) {
   const md = await meta(true);
-  setHead('معلمان، کلاس‌ها و برنامه هفتگی', `${fa(md.teachers.length)} معلم • ${fa(md.classes.length)} کلاس`, '<button class="btn sm" id="addT"> معلم جدید</button> <button class="btn soft sm" id="addC"> کلاس جدید</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllT" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ معلمان…</button><button type="button" id="delAllS" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ جلسات برنامه…</button><button type="button" id="delAllC" class="danger">' + icon('trash', { size: 16 }) + ' حذف کلاس‌های خالی…</button></div></details>');
+  setHead('معلمان، کلاس‌ها و برنامه هفتگی', `${fa(md.teachers.length)} معلم • ${fa(md.classes.length)} کلاس`, '<button class="btn sm" id="addT"> معلم جدید</button> <button class="btn soft sm" id="addC"> کلاس جدید</button> <button class="btn soft sm" id="manageC">'+icon('layers', { size: 16 })+' مدیریت کلاس‌ها</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllT" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ معلمان…</button><button type="button" id="delAllS" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ جلسات برنامه…</button><button type="button" id="delAllC" class="danger">' + icon('trash', { size: 16 }) + ' حذف کلاس‌های خالی…</button></div></details>');
   $('#delAllT').onclick = () => deleteAll('teachers', 'معلمان', () => staff(el), 'برنامهٔ کلاسی آن‌ها هم از معلم جدا می‌شود.');
   $('#delAllS').onclick = () => deleteAll('schedule', 'جلسات برنامهٔ هفتگی', () => staff(el));
   $('#delAllC').onclick = () => deleteAll('classes', 'کلاس‌های خالی', () => staff(el), '(فقط کلاس‌هایی که دانش‌آموز و جلسه ندارند)');
   let schedClass = md.classes[0]?.id;
   el.innerHTML = `<div class="grid c2"><div class="card"><div class="card-title"><span class="ib">${icon('board', { size: 18 })}</span>معلمان</div><div class="list">${md.teachers.map((t) => `<div class="list-item">${nameAvatar(t.full_name)}<div class="grow"><b class="small">${esc(t.full_name)}</b> ${t.active ? '' : '<span class="badge red">غیرفعال</span>'}<div class="tiny muted">${esc(t.username)} • ${fa(esc(t.classes || 'بدون کلاس').replace(/:/g, ' ').replace(/،/g, ' ·'))}</div></div><button class="btn sm ghost" data-et="${t.id}" aria-label="ویرایش معلم" title="ویرایش معلم">${icon('edit', { size: 16 })}</button></div>`).join('')}</div></div>
-    <div class="card"><div class="card-title"><span class="ib">${icon('building', { size: 18 })}</span>کلاس‌ها</div><div class="grid c3">${md.classes.map((c) => `<div class="card flat center" style="padding:12px"><b>${gradeName(c.grade)} ${esc(c.name)}</b><div class="tiny muted">${fa(c.students)} نفر</div>${c.students ? '' : `<button class="btn ghost sm" data-dc="${c.id}">حذف</button>`}</div>`).join('')}</div></div></div>
+    <div class="card"><div class="card-title"><span class="ib">${icon('building', { size: 18 })}</span>کلاس‌ها</div>${md.grades.map((g) => { const cl = md.classes.filter((c) => c.grade === g); return cl.length ? `<div class="cls-grade"><div class="tiny muted">پایهٔ ${gradeName(g)}</div>${cl.map((c) => `<div class="cls-row"><button type="button" class="cls-name" data-cdet="${c.id}" aria-label="فهرست دانش‌آموزان ${esc(clsLabel(c))}"><b>${esc(clsLabel(c))}</b></button><span class="tiny muted grow">${clsCounts(c)}</span><button type="button" class="icon-btn" data-cren="${c.id}" aria-label="تغییر نام ${esc(clsLabel(c))}" title="تغییر نام">${icon('edit', { size: 17 })}</button><button type="button" class="icon-btn" data-cdel="${c.id}" aria-label="حذف ${esc(clsLabel(c))}" title="حذف">${icon('trash', { size: 17 })}</button></div>`).join('')}</div>` : ''; }).join('') || '<p class="muted small" style="margin:0">هنوز کلاسی نساخته‌اید.</p>'}</div></div>
     <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('calendar', { size: 18 })}</span>برنامه هفتگی کلاس<select class="input more" id="schedSel" style="width:auto">${md.classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div><div id="sched"></div></div>`;
   const drawSched = async () => {
     const list = await api(`/api/manager/schedule?class_id=${schedClass}`);
@@ -381,7 +504,11 @@ async function staff(el) {
   };
   $('#schedSel', el).onchange = (e) => { schedClass = Number(e.target.value); drawSched(); };
   on(el, 'click', '[data-ds]', (e, b) => busy(b, async () => { await del(`/api/manager/schedule/${b.dataset.ds}`); drawSched(); }));
-  on(el, 'click', '[data-dc]', async (e, b) => { if (await confirmBox('کلاس حذف شود؟', 'حذف')) { await del(`/api/manager/classes/${b.dataset.dc}`); staff(el); } });
+  const clsOf = (id) => md.classes.find((c) => c.id === Number(id));
+  on(el, 'click', '[data-cren]', async (e, b) => { if (await renameClass(clsOf(b.dataset.cren))) staff(el); });
+  on(el, 'click', '[data-cdel]', (e, b) => busy(b, async () => { if (await deleteClass(clsOf(b.dataset.cdel))) staff(el); }));
+  on(el, 'click', '[data-cdet]', (e, b) => busy(b, () => classDetails(clsOf(b.dataset.cdet))));
+  $('#manageC').onclick = async () => { await classManager(); staff(el); };
   drawSched();
   // فهرست درس‌ها از تنظیمات کانون می‌آید و داخل همین پنجره قابل ویرایش است
   const SUBJECTS = [...(md.subjects || [])];
@@ -858,32 +985,8 @@ async function studentsClassic(el) {
       const r = await post('/api/manager/students/delete', { all: true, confirm: true }); toast(`${fa(r.deleted)} دانش‌آموز حذف شد`, 'ok'); afterBulk();
     } }] });
 
-  // ----- کلاس‌ها: چند کلاس برای هر پایه، تقسیم خودکار دانش‌آموزان -----
-  $('#classesSt').onclick = () => {
-    const body = () => `<div class="stack"><div class="row between wrap" style="gap:8px"><span class="small muted">تقسیم بر اساس جنسیت برای همهٔ پایه‌ها (کلاس‌های الف و ب در صورت نبودن ساخته می‌شوند)</span><button class="btn sm" data-gsplit="all">همهٔ پایه‌ها: پسر الف، دختر ب</button></div>${md.grades.map((g) => { const cl = md.classes.filter((c) => c.grade === g); return `<div class="card flat" style="padding:10px"><div class="row between wrap" style="gap:8px"><b>پایه ${gradeName(g)}</b><span class="row wrap" style="gap:6px"><input class="input" data-newname="${g}" placeholder="نام کلاس جدید (مثلاً ب)" style="width:170px" maxlength="30"><button class="btn sm" data-addcls="${g}">افزودن کلاس</button><button class="btn sm soft" data-gsplit="${g}">پسر الف، دختر ب</button>${cl.length > 1 ? `<button class="btn sm soft" data-dist="${g}">تقسیم خودکار بین ${fa(cl.length)} کلاس</button>` : ''}</span></div>
-      <div class="row wrap" style="gap:6px;margin-top:8px">${cl.map((c) => `<span class="badge">${esc(c.name)} · ${fa(c.students)} نفر${c.students ? '' : ` <button class="icon-btn" data-delcls="${c.id}" aria-label="حذف کلاس ${esc(c.name)}">${icon('trash', { size: 14 })}</button>`}</span>`).join('') || '<span class="small muted">کلاسی نیست</span>'}</div></div>`; }).join('')}
-      <p class="small muted" style="margin:0;line-height:2">برای هر پایه چند کلاس بسازید، سپس «تقسیم خودکار» دانش‌آموزان را بین کلاس‌ها پخش می‌کند. برای جابه‌جایی دلخواه، در فهرست دانش‌آموزان چند نفر را تیک بزنید و «انتقال به کلاس» را بزنید.</p></div>`;
-    modal({ title: 'کلاس‌های هر پایه', wide: true, body: `<div id="clsBody">${body()}</div>`, actions: [{ label: 'بستن', value: true }], onOpen: (m) => {
-      const redraw = async () => { metaCache = null; md = await meta(); $('#clsBody', m).innerHTML = body(); fillClasses(); load(); };
-      on(m, 'click', '[data-addcls]', (ev, b) => busy(b, async () => {
-        const g = Number(b.dataset.addcls), name = $(`[data-newname="${g}"]`, m).value.trim();
-        if (!name) { toast('نام کلاس را بنویسید'); return; }
-        await post('/api/manager/classes', { grade: g, name }); toast('کلاس ساخته شد', 'ok'); await redraw();
-      }));
-      on(m, 'click', '[data-delcls]', (ev, b) => busy(b, async () => { await del(`/api/manager/classes/${b.dataset.delcls}`); toast('کلاس حذف شد', 'ok'); await redraw(); }));
-      on(m, 'click', '[data-gsplit]', (ev, b) => busy(b, async () => {
-        const g = b.dataset.gsplit, all_ = g === 'all';
-        if (!(await confirmBox(`${all_ ? 'در همهٔ پایه‌ها' : `در پایهٔ ${gradeName(Number(g))}`} همهٔ پسرها به کلاس «الف» و همهٔ دخترها به کلاس «ب» منتقل شوند؟ کلاس فعلی دانش‌آموزان تغییر می‌کند.`, 'انتقال'))) return;
-        const r = await post('/api/manager/classes/split-gender', all_ ? {} : { grade: Number(g) });
-        toast(`${fa(r.boys)} پسر در «الف» و ${fa(r.girls)} دختر در «ب» قرار گرفتند${r.classes_created ? ` (${fa(r.classes_created)} کلاس تازه ساخته شد)` : ''}`, 'ok', 6000); await redraw();
-      }));
-      on(m, 'click', '[data-dist]', (ev, b) => busy(b, async () => {
-        const g = Number(b.dataset.dist), cl = md.classes.filter((c) => c.grade === g);
-        if (!(await confirmBox(`دانش‌آموزان پایهٔ ${gradeName(g)} به‌ترتیب حروف الفبا (دختر و پسر جداگانه) بین ${fa(cl.length)} کلاس پخش شوند؟ کلاس فعلی همهٔ آن‌ها تغییر می‌کند.`, 'تقسیم خودکار'))) return;
-        const r = await post('/api/manager/classes/distribute', { grade: g, class_ids: cl.map((c) => c.id) }); toast(`${fa(r.moved)} نفر بین کلاس‌ها تقسیم شدند`, 'ok'); await redraw();
-      }));
-    } });
-  };
+  // ----- کلاس‌ها: افزودن، تغییر نام، حذف/ادغام، تقسیم خودکار، راه‌اندازی پسر/دختر (پنجرهٔ مشترک) -----
+  $('#classesSt').onclick = () => classManager(async () => { md = await meta(); fillClasses(); load(); });
 
   const save = async (m, id) => {
     const body = readStudent(m);
