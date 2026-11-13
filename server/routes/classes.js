@@ -7,7 +7,6 @@ import { syncStudentsLater } from '../classroom.js';
 
 const M = { roles: ['manager'] };
 const GRADES = [4, 5, 6, 7, 8, 9];
-const faDigits = (n) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
 
 export const classNameTaken = (centerId, grade, name, exceptId = null) => {
   const k = classNameKey(name);
@@ -93,30 +92,33 @@ export default function register(r) {
   });
 
   // ---------- راه‌اندازی «پسر / دختر» ----------
-  // برای هر پایه: کلاس پسر (تغییر نام «الف»)، یک یا چند کلاس دختر (تغییر نام «ب» و در صورت نیاز کلاس‌های تازه).
-  // move='keep'  : دانش‌آموزان در کلاس فعلی می‌مانند؛ فقط اگر چند کلاس دختر خواسته شده، دانش‌آموزان کلاس دختران بین آن‌ها تقسیم می‌شوند.
-  // move='gender': همهٔ پسرها در کلاس پسر و دخترها (به‌ترتیب حروف الفبا، یکی در میان) بین کلاس‌های دختر قرار می‌گیرند — بر اساس جنسیت ثبت‌شده.
+  // برای هر پایه: «پسر ۱…n» (تغییر نام «الف») و «دختر ۱…m» (تغییر نام «ب» و در صورت نیاز کلاس‌های تازه).
+  // تعداد کلاس هر پایه جدا تعیین می‌شود: grades=[{grade:5, boys:2, girls:2}, …] (یا boys_classes/girls_classes برای همهٔ پایه‌ها).
+  // نام‌ها «پسر 1»، «دختر 1»، «دختر 2» با رقم لاتین‌اند تا با جدول زمانی کانون (scripts/import-timetable.mjs) یکی باشند (numbered=false: تک‌کلاس بدون شماره).
+  // move='keep'  : دانش‌آموزان در کلاس فعلی می‌مانند؛ فقط اگر برای یک سمت چند کلاس خواسته شده، دانش‌آموزانِ همان سمت بین کلاس‌هایش تقسیم می‌شوند.
+  // move='gender': همهٔ پسرها بین کلاس‌های پسر و دخترها بین کلاس‌های دختر قرار می‌گیرند (به‌ترتیب حروف الفبا، یکی در میان) — بر اساس جنسیت ثبت‌شده.
   // dry_run=true : همین تغییرات در یک تراکنش اجرا و برگردانده می‌شود، پس پیش‌نمایش دقیقاً همان نتیجهٔ واقعی است.
   r.post('/api/manager/classes/setup-gender', M, (ctx) => {
     const cid = ctx.user.center_id, b = ctx.body;
     const boysName = normClassName(b.boys_name) || 'پسر', girlsName = normClassName(b.girls_name) || 'دختر';
     const boysFrom = normClassName(b.boys_from ?? 'الف'), girlsFrom = normClassName(b.girls_from ?? 'ب');
-    const nGirls = Math.min(4, Math.max(1, Math.floor(Number(b.girls_classes)) || 1));
-    const girlsNames = nGirls === 1 ? [girlsName] : Array.from({ length: nGirls }, (_, i) => `${girlsName} ${faDigits(i + 1)}`);
-    const move = b.move === 'gender' ? 'gender' : 'keep', copyTeachers = b.copy_teachers !== false, dry = b.dry_run === true;
-    const grades = b.grade ? [Number(b.grade)] : GRADES;
-    if (grades.some((g) => !GRADES.includes(g))) fail(400, 'پایه نامعتبر است');
-    const targets = [boysName, ...girlsNames].map(classNameKey);
-    if (new Set(targets).size !== targets.length) fail(400, 'نام کلاس پسرها و دخترها باید متفاوت باشد');
-    if (boysFrom && boysFrom === girlsFrom) fail(400, 'نام فعلی کلاس پسرها و دخترها نمی‌تواند یکی باشد');
+    const count = (v) => Math.min(4, Math.max(1, Math.floor(Number(v)) || 1));
+    const numbered = b.numbered !== false, move = b.move === 'gender' ? 'gender' : 'keep', copyTeachers = b.copy_teachers !== false, dry = b.dry_run === true;
+    let plan;
+    if (Array.isArray(b.grades)) plan = b.grades.map((x) => ({ grade: Number(x.grade), boys: count(x.boys), girls: count(x.girls) }));
+    else plan = (b.grade ? [Number(b.grade)] : GRADES).map((g) => ({ grade: g, boys: count(b.boys_classes), girls: count(b.girls_classes) }));
+    if (!plan.length || plan.some((x) => !GRADES.includes(x.grade)) || new Set(plan.map((x) => x.grade)).size !== plan.length) fail(400, 'پایه نامعتبر است');
+    if (classNameKey(boysName) === classNameKey(girlsName)) fail(400, 'نام کلاس پسرها و دخترها باید متفاوت باشد');
+    if (boysFrom && classNameKey(boysFrom) === classNameKey(girlsFrom)) fail(400, 'نام فعلی کلاس پسرها و دخترها نمی‌تواند یکی باشد');
+    const namesFor = (base, n) => (n === 1 && !numbered ? [base] : Array.from({ length: n }, (_, i) => `${base} ${i + 1}`));
 
     const result = { ok: true, dry_run: dry, move, summary: { renamed: 0, created: 0, moved: 0, boys: 0, girls: 0 }, grades: [] };
-    const run_ = () => {
-      for (const g of grades) {
+    const apply = () => {
+      for (const { grade: g, boys: nB, girls: nG } of plan.sort((x, y) => x.grade - y.grade)) {
         const classes = all('SELECT * FROM classes WHERE center_id=? AND grade=?', cid, g);
         const students = all(`SELECT u.id, u.full_name, u.gender, s.class_id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1 AND s.grade=?`, cid, g);
         if (!classes.length && !students.length) continue; // پایه‌ای که اصلاً وجود ندارد
-        const used = new Set(), plan = [];
+        const used = new Set(), planned = [];
         const find = (name) => classes.find((c) => classNameKey(c.name) === classNameKey(name));
         const ensure = (role, target, fromNames) => {
           let c = find(target), action = 'use', from = null;
@@ -127,31 +129,31 @@ export default function register(r) {
             }
           }
           if (!c) { c = { id: Number(run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', cid, g, target).lastInsertRowid), grade: g, name: target }; action = 'create'; result.summary.created++; }
-          used.add(c.id); plan.push({ id: c.id, name: target, role, action, from });
+          used.add(c.id); planned.push({ id: c.id, name: target, role, action, from });
           return c;
         };
-        const boys = ensure('boys', boysName, [boysFrom]);
-        const girls = girlsNames.map((n, i) => ensure('girls', n, i === 0 ? [girlsFrom, girlsName, nGirls === 1 ? `${girlsName} ${faDigits(1)}` : null] : []));
-        if (copyTeachers) for (const p of plan.filter((x) => x.role === 'girls' && x.action === 'create')) {
-          run('INSERT OR IGNORE INTO teacher_classes (teacher_id, class_id, subject) SELECT teacher_id, ?, subject FROM teacher_classes WHERE class_id=?', p.id, girls[0].id);
+        // کلاس اول هر سمت: نام فعلی («الف»/«ب») یا شکل بدون شماره/شماره‌دار قبلی («پسر» ↔ «پسر 1») به نام تازه تغییر می‌کند
+        const side = (role, base, n, from) => namesFor(base, n).map((nm, i) => ensure(role, nm, i === 0 ? [from, base, `${base} 1`] : []));
+        const boys = side('boys', boysName, nB, boysFrom), girls = side('girls', girlsName, nG, girlsFrom);
+        if (copyTeachers) for (const [made, group] of [[planned.filter((x) => x.role === 'boys'), boys], [planned.filter((x) => x.role === 'girls'), girls]]) {
+          for (const p of made.filter((x) => x.action === 'create')) run('INSERT OR IGNORE INTO teacher_classes (teacher_id, class_id, subject) SELECT teacher_id, ?, subject FROM teacher_classes WHERE class_id=?', p.id, group[0].id);
         }
         // جابه‌جایی دانش‌آموزان
-        const girlIds = new Set(girls.map((c) => c.id));
         const byName = (a, c) => a.full_name.localeCompare(c.full_name, 'fa');
-        const boysPool = move === 'gender' ? students.filter((s) => s.gender !== 'f') : [];
-        const girlsPool = (move === 'gender' ? students.filter((s) => s.gender === 'f') : nGirls > 1 ? students.filter((s) => girlIds.has(s.class_id)) : []).sort(byName);
+        const ids = (group) => new Set(group.map((c) => c.id));
+        const boyIds = ids(boys), girlIds = ids(girls);
+        const pool = (isGirl, groupIds, n) => (move === 'gender' ? students.filter((s) => (s.gender === 'f') === isGirl) : n > 1 ? students.filter((s) => groupIds.has(s.class_id)) : []).sort(byName);
         let moved = 0;
         const put = (s, classId) => { if (s.class_id !== classId) { run('UPDATE students SET class_id=? WHERE user_id=?', classId, s.id); moved++; } };
-        boysPool.forEach((s) => put(s, boys.id));
-        girlsPool.forEach((s, i) => put(s, girls[i % girls.length].id));
+        pool(false, boyIds, nB).forEach((s, i) => put(s, boys[i % boys.length].id));
+        pool(true, girlIds, nG).forEach((s, i) => put(s, girls[i % girls.length].id));
         result.summary.moved += moved;
 
         // وضعیت نهایی همین پایه (برای پیش‌نمایش)
         const stat = (id) => get(`SELECT COUNT(*) total, COALESCE(SUM(u.gender='f'),0) girls, COALESCE(SUM(u.gender<>'f' OR u.gender IS NULL),0) boys FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.active=1`, id);
-        const out = plan.map((p) => ({ ...p, ...stat(p.id) }));
+        const out = planned.map((p) => ({ ...p, ...stat(p.id) }));
+        const wrongG = out.filter((x) => x.role === 'boys').reduce((a, x) => a + x.girls, 0), wrongB = out.filter((x) => x.role === 'girls').reduce((a, x) => a + x.boys, 0);
         const warnings = [];
-        const wrongG = get(`SELECT COUNT(*) n FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.active=1 AND u.gender='f'`, boys.id).n;
-        const wrongB = girls.reduce((a, c) => a + get(`SELECT COUNT(*) n FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.active=1 AND (u.gender<>'f' OR u.gender IS NULL)`, c.id).n, 0);
         if (wrongG) warnings.push(`${wrongG} دانش‌آموز با جنسیت ثبت‌شدهٔ «دختر» در کلاس پسرها است`);
         if (wrongB) warnings.push(`${wrongB} دانش‌آموز با جنسیت ثبت‌شدهٔ «پسر» در کلاس دخترها است`);
         if (move === 'gender' && students.length && !students.some((s) => s.gender === 'f')) warnings.push('در این پایه هیچ دختری ثبت نشده؛ اگر جنسیت‌ها را وارد نکرده‌اید، پیش از جابه‌جایی آن‌ها را اصلاح کنید');
@@ -162,7 +164,7 @@ export default function register(r) {
       }
       if (dry) throw new DryRun(result);
     };
-    try { tx(run_); } catch (e) { if (e instanceof DryRun) return e.result; throw e; }
+    try { tx(apply); } catch (e) { if (e instanceof DryRun) return e.result; throw e; }
     if (result.summary.renamed || result.summary.created || result.summary.moved) syncStudentsLater(null);
     return result;
   });

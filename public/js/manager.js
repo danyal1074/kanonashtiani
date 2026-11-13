@@ -397,11 +397,14 @@ async function classDetails(c) {
   });
 }
 
-/** راه‌اندازی پسر/دختر برای همهٔ پایه‌ها یا یک پایه، با پیش‌نمایش پیش از اعمال */
-async function genderSetup(grade, onDone) {
+/** راه‌اندازی پسر/دختر: تعداد کلاس پسران و دختران برای هر پایه، با پیش‌نمایش پیش از اعمال */
+async function genderSetup(onDone) {
   const md = await meta();
-  const read = (m) => ({ grade: Number($('#gsGrade', m).value) || undefined, boys_from: $('#gsBoysFrom', m).value.trim(), boys_name: $('#gsBoys', m).value.trim(), girls_from: $('#gsGirlsFrom', m).value.trim(), girls_name: $('#gsGirls', m).value.trim(),
-    girls_classes: Number($('#gsGirlsN', m).value), move: m.querySelector('input[name="gsMove"]:checked').value, copy_teachers: $('#gsCopy', m).checked });
+  const read = (m) => ({
+    grades: md.grades.filter((g) => m.querySelector(`[data-gg="${g}"]`).checked).map((g) => ({ grade: g, boys: Number(m.querySelector(`[data-gb="${g}"]`).value), girls: Number(m.querySelector(`[data-gw="${g}"]`).value) })),
+    boys_from: $('#gsBoysFrom', m).value.trim(), boys_name: $('#gsBoys', m).value.trim(), girls_from: $('#gsGirlsFrom', m).value.trim(), girls_name: $('#gsGirls', m).value.trim(),
+    numbered: $('#gsNum', m).checked, move: m.querySelector('input[name="gsMove"]:checked').value, copy_teachers: $('#gsCopy', m).checked });
+  const countSel = (attr, g, def) => `<select class="input" ${attr}="${g}" aria-label="تعداد کلاس ${attr === 'data-gb' ? 'پسران' : 'دختران'} پایهٔ ${gradeName(g)}" style="width:90px">${[1, 2, 3, 4].map((n) => `<option value="${n}" ${n === def ? 'selected' : ''}>${fa(n)}</option>`).join('')}</select>`;
   const out = (r) => {
     const sm = r.summary;
     const act = (p) => (p.action === 'rename' ? `<span class="badge">تغییر نام از «${esc(p.from)}»</span>` : p.action === 'create' ? '<span class="badge green">کلاس تازه</span>' : '<span class="badge gray">بدون تغییر</span>');
@@ -416,23 +419,26 @@ async function genderSetup(grade, onDone) {
   return modal({
     title: `${icon('users', { size: 16 })} راه‌اندازی کلاس‌های پسر و دختر`, wide: true,
     body: `<div class="stack" id="gsForm">
-      <p class="small muted" style="margin:0;line-height:2">کلاس‌های «الف» را به «پسر» و کلاس‌های «ب» را به «دختر» تغییر نام می‌دهد (مثلاً «هفتم پسر» و «هفتم دختر»). ابتدا <b>پیش‌نمایش</b> را ببینید؛ تا «اعمال» نزنید چیزی تغییر نمی‌کند.</p>
-      <div class="form-grid">
-        <div class="field"><label for="gsGrade">پایه</label><select class="input" id="gsGrade"><option value="">همهٔ پایه‌ها</option>${md.grades.map((g) => `<option value="${g}" ${g === grade ? 'selected' : ''}>${gradeName(g)}</option>`).join('')}</select></div>
-        <div class="field"><label for="gsGirlsN">تعداد کلاس دختران در هر پایه</label><select class="input" id="gsGirlsN"><option value="1">یک کلاس («دختر»)</option><option value="2">دو کلاس («دختر ۱» و «دختر ۲»)</option><option value="3">سه کلاس</option></select></div>
+      <p class="small muted" style="margin:0;line-height:2">کلاس‌های «الف» را «پسر 1» و کلاس‌های «ب» را «دختر 1» می‌کند (نمایش: «هفتم پسر 1»). اگر برای یک پایه بیش از یک کلاس خواسته باشید («دختر 2»، …)، کلاس تازه ساخته می‌شود. ابتدا <b>پیش‌نمایش</b> را ببینید؛ تا «اعمال» نزنید چیزی تغییر نمی‌کند.</p>
+      <div class="table-wrap"><table class="table"><thead><tr><th>پایه</th><th>تعداد کلاس پسران</th><th>تعداد کلاس دختران</th></tr></thead><tbody>${md.grades.map((g) => `<tr><td><label class="row" style="gap:8px"><input type="checkbox" data-gg="${g}" checked> <b>${gradeName(g)}</b></label></td><td>${countSel('data-gb', g, 1)}</td><td>${countSel('data-gw', g, 2)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="tiny muted" style="margin:0">پایه‌ای که تیکش را بردارید دست نمی‌خورد. تعداد کلاس هر پایه را با جدول زمانی کانون هماهنگ کنید.</p>
+      <div class="form-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
         <div class="field"><label for="gsBoysFrom">نام فعلی کلاس پسرها</label><input class="input" id="gsBoysFrom" value="الف" maxlength="30"></div>
         <div class="field"><label for="gsBoys">نام تازهٔ کلاس پسرها</label><input class="input" id="gsBoys" value="پسر" maxlength="30"></div>
         <div class="field"><label for="gsGirlsFrom">نام فعلی کلاس دخترها</label><input class="input" id="gsGirlsFrom" value="ب" maxlength="30"></div>
         <div class="field"><label for="gsGirls">نام تازهٔ کلاس دخترها</label><input class="input" id="gsGirls" value="دختر" maxlength="30"></div>
       </div>
+      <label class="row" style="gap:8px"><input type="checkbox" id="gsNum" checked><span>شماره‌گذاری کلاس‌ها: «پسر 1»، «دختر 1»، «دختر 2» <span class="tiny muted">(هم‌نام با جدول زمانی کانون؛ اگر بردارید، کلاسِ تنها بدون شماره می‌ماند)</span></span></label>
       <fieldset class="stack" style="border:0;padding:0;margin:0;gap:6px"><legend class="label" style="padding:0">جابه‌جایی دانش‌آموزان</legend>
-        <label class="row" style="gap:8px;align-items:flex-start"><input type="radio" name="gsMove" value="keep" checked><span><b>فقط تغییر نام</b>؛ دانش‌آموزان در همان کلاس فعلی می‌مانند<span class="tiny muted" style="display:block">اگر چند کلاس دختران خواسته‌اید، فقط دانش‌آموزان کلاس دختران بین آن‌ها تقسیم می‌شوند.</span></span></label>
-        <label class="row" style="gap:8px;align-items:flex-start"><input type="radio" name="gsMove" value="gender"><span><b>جابه‌جایی بر اساس جنسیت ثبت‌شده</b>؛ همهٔ پسرها در کلاس پسر و دخترها (به‌ترتیب حروف الفبا، یکی در میان) بین کلاس‌های دختر قرار می‌گیرند<span class="tiny muted" style="display:block">جنسیتی که هنگام ثبت‌نام خالی بوده «پسر» ثبت شده؛ پیش از اعمال، تعداد پسر و دختر هر کلاس را در پیش‌نمایش بررسی کنید.</span></span></label></fieldset>
-      <label class="row" style="gap:8px"><input type="checkbox" id="gsCopy" checked><span>معلم‌های کلاس دختران به کلاس‌های تازهٔ دختران هم اختصاص یابد <span class="tiny muted">(برنامهٔ هفتگی کپی نمی‌شود)</span></span></label>
+        <label class="row" style="gap:8px;align-items:flex-start"><input type="radio" name="gsMove" value="keep" checked><span><b>فقط تغییر نام</b>؛ دانش‌آموزان در همان کلاس فعلی می‌مانند<span class="tiny muted" style="display:block">اگر برای یک سمت چند کلاس خواسته‌اید، فقط دانش‌آموزان همان سمت بین کلاس‌هایش تقسیم می‌شوند.</span></span></label>
+        <label class="row" style="gap:8px;align-items:flex-start"><input type="radio" name="gsMove" value="gender"><span><b>جابه‌جایی بر اساس جنسیت ثبت‌شده</b>؛ همهٔ پسرها بین کلاس‌های پسر و دخترها بین کلاس‌های دختر قرار می‌گیرند (به‌ترتیب حروف الفبا، یکی در میان)<span class="tiny muted" style="display:block">جنسیتی که هنگام ثبت‌نام خالی بوده «پسر» ثبت شده؛ پیش از اعمال، تعداد پسر و دختر هر کلاس را در پیش‌نمایش بررسی کنید.</span></span></label></fieldset>
+      <label class="row" style="gap:8px"><input type="checkbox" id="gsCopy" checked><span>معلم‌های کلاس اول هر سمت به کلاس‌های تازهٔ همان سمت هم اختصاص یابد <span class="tiny muted">(برنامهٔ هفتگی کپی نمی‌شود)</span></span></label>
       <div id="gsOut"></div></div>`,
     actions: [{ label: 'انصراف', cls: 'ghost', value: false },
       { label: 'پیش‌نمایش', cls: 'soft', onClick: async (m) => {
-        const r = await post('/api/manager/classes/setup-gender', { ...read(m), dry_run: true });
+        const body = read(m);
+        if (!body.grades.length) { toast('دست‌کم یک پایه را انتخاب کنید', 'err'); return false; }
+        const r = await post('/api/manager/classes/setup-gender', { ...body, dry_run: true });
         $('#gsOut', m).innerHTML = out(r); $('[data-act="2"]', m).disabled = false; $('#gsOut', m).scrollIntoView({ block: 'nearest' }); return false;
       } },
       { label: 'اعمال تغییرات', onClick: async (m) => {
@@ -469,7 +475,7 @@ async function classManager(onChange = () => {}) {
     on(m, 'click', '[data-cren]', async (ev, b) => { if (await renameClass(cls(b.dataset.cren))) await redraw(); });
     on(m, 'click', '[data-cdel]', (ev, b) => busy(b, async () => { if (await deleteClass(cls(b.dataset.cdel))) await redraw(); }));
     on(m, 'click', '[data-cdet]', (ev, b) => busy(b, () => classDetails(cls(b.dataset.cdet))));
-    on(m, 'click', '[data-gsetup]', async () => { await genderSetup(null, null); await redraw(); });
+    on(m, 'click', '[data-gsetup]', async () => { await genderSetup(); await redraw(); });
     on(m, 'click', '[data-dist]', (ev, b) => busy(b, async () => {
       const g = Number(b.dataset.dist), cl = md.classes.filter((c) => c.grade === g);
       if (!(await confirmBox(`دانش‌آموزان پایهٔ ${gradeName(g)} به‌ترتیب حروف الفبا (دختر و پسر جداگانه) بین ${fa(cl.length)} کلاس پخش شوند؟ کلاس فعلی همهٔ آن‌ها تغییر می‌کند.`, 'تقسیم خودکار'))) return;
