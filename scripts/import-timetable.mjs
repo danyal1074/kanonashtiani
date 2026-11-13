@@ -8,6 +8,7 @@
 //  - ثبت فقط اضافه می‌کند: کلاس و جلسهٔ موجود (هم‌کلاس، هم‌روز، هم‌ساعت) دوباره ساخته نمی‌شود و چیزی حذف نمی‌شود.
 import { all, get, run, tx, closeDb } from '../server/db.js';
 import { makeBackup } from '../server/backup.js';
+import { classNameKey } from '../server/util.js';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
@@ -60,7 +61,14 @@ for (const s of sessions) {
 }
 
 const classKeys = [...new Set(sessions.map((s) => `${s.grade}|${s.name}`))].sort();
-const existingClasses = new Map(all('SELECT id, grade, name FROM classes WHERE center_id=?', center.id).map((c) => [`${c.grade}|${c.name}`, c.id]));
+// کلاس‌های موجود با نام نرمال‌شده تطبیق داده می‌شوند، تا کلاسی که مدیر در پنل ساخته یا تغییر نام داده دوباره ساخته نشود:
+// «دختر 1» ≡ «دختر ۱» (رقم فارسی/لاتین) و «پسر» بدون شماره ≡ «پسر 1». اگر هر دو شکل باشند، شکل شماره‌دار برنده است.
+const canon = (name) => { const k = classNameKey(name); return /^(دختر|پسر)$/.test(k) ? `${k} 1` : k; };
+const existingClasses = new Map();
+for (const c of all('SELECT id, grade, name FROM classes WHERE center_id=? ORDER BY id', center.id)) {
+  const k = `${c.grade}|${canon(c.name)}`;
+  if (!existingClasses.has(k) || classNameKey(c.name) === canon(c.name)) existingClasses.set(k, c.id);
+}
 const newClasses = classKeys.filter((k) => !existingClasses.has(k));
 const existingSessions = get('SELECT COUNT(*) n FROM schedule WHERE class_id IN (SELECT id FROM classes WHERE center_id=?)', center.id).n;
 

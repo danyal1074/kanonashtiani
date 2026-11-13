@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'roshd-classes-'));
 process.env.ROSHD_DATA_DIR = path.join(tmp, 'data');
 process.env.ROSHD_UPLOAD_DIR = path.join(tmp, 'uploads');
@@ -180,7 +181,7 @@ try {
     const r = await request(mgr, 'POST', '/api/manager/classes/setup-gender', { move: 'keep', girls_classes: 1 });
     assert.equal(r.status, 200);
     assert.deepEqual([r.data.summary.renamed, r.data.summary.created, r.data.summary.moved], [4, 0, 0]);
-    assert.deepEqual(names(7), ['پسر', 'دختر']); assert.deepEqual(names(8), ['پسر', 'دختر']);
+    assert.deepEqual(names(7), ['پسر 1', 'دختر 1']); assert.deepEqual(names(8), ['پسر 1', 'دختر 1']);
     assert.deepEqual(db.prepare('SELECT user_id,class_id FROM students ORDER BY user_id').all(), before);
     const g7 = r.data.grades.find((g) => g.grade === 7);
     assert.ok(g7.warnings.some((w) => /1 دانش‌آموز با جنسیت ثبت‌شدهٔ «دختر» در کلاس پسرها/.test(w)), 'mismatch is surfaced');
@@ -200,55 +201,109 @@ try {
     // ids of classes created during the preview are rolled back, so compare everything except ids and the dry_run flag
     const sameShape = (x) => JSON.parse(JSON.stringify({ ...x, dry_run: undefined }, (k, v) => (k === 'id' ? undefined : v)));
     assert.deepEqual(sameShape(preview.data), sameShape(real.data), 'the preview is exactly what is then applied');
-    assert.deepEqual(names(7), ['پسر', 'دختر ۱', 'دختر ۲']);
+    assert.deepEqual(names(7), ['پسر 1', 'دختر 1', 'دختر 2']);
     const cnt = (n) => db.prepare(`SELECT COUNT(*) n FROM students s JOIN classes c ON c.id=s.class_id JOIN users u ON u.id=s.user_id WHERE c.center_id=1 AND c.grade=7 AND c.name=? AND u.active=1`).get(n).n;
-    assert.equal(cnt('پسر'), 4); assert.equal(cnt('دختر ۱') + cnt('دختر ۲'), 5);
-    assert.ok(Math.abs(cnt('دختر ۱') - cnt('دختر ۲')) <= 1, 'balanced');
+    assert.equal(cnt('پسر 1'), 4); assert.equal(cnt('دختر 1') + cnt('دختر 2'), 5);
+    assert.ok(Math.abs(cnt('دختر 1') - cnt('دختر 2')) <= 1, 'balanced');
     assert.equal(real.data.summary.created, 1);
-    const second = db.prepare("SELECT id FROM classes WHERE center_id=1 AND grade=7 AND name='دختر ۲'").get().id;
+    const second = db.prepare("SELECT id FROM classes WHERE center_id=1 AND grade=7 AND name='دختر 2'").get().id;
     assert.equal(db.prepare('SELECT COUNT(*) n FROM teacher_classes WHERE class_id=?').get(second).n, 2, 'teachers copied to the new class');
     assert.equal(db.prepare('SELECT COUNT(*) n FROM schedule WHERE class_id=?').get(second).n, 0, 'timetable is not copied (would double-book teachers)');
   });
   await test('Rerun with one girls class folds the split classes back', async () => {
     const r = await request(mgr, 'POST', '/api/manager/classes/setup-gender', { grade: 7, girls_classes: 1, move: 'gender' });
     assert.equal(r.status, 200);
-    assert.ok(names(7).includes('دختر'));
+    assert.ok(names(7).includes('دختر 1'));
     const g7 = r.data.grades[0];
     assert.equal(g7.classes.find((c) => c.role === 'girls').girls, 6, '5 girls from ب + the girl who was registered in the boys class');
     assert.equal(g7.classes.find((c) => c.role === 'boys').girls, 0, 'the girl registered in the boys class moved out');
     assert.equal(g7.classes.find((c) => c.role === 'boys').boys, 3);
-    assert.ok(g7.others.some((c) => c.name === 'دختر ۲'), 'leftover class is reported so it can be deleted');
+    assert.ok(g7.others.some((c) => c.name === 'دختر 2'), 'leftover class is reported so it can be deleted');
   });
   await test('Move-by-gender sends the girl in «پسر» to the girls class', async () => {
     const sara = db.prepare("SELECT s.class_id FROM students s JOIN users u ON u.id=s.user_id WHERE u.full_name='سارا'").get();
-    assert.equal(db.prepare('SELECT name FROM classes WHERE id=?').get(sara.class_id).name, 'دختر');
-    assert.equal(classOf(db.prepare("SELECT id FROM users WHERE full_name='علی'").get().id), 'پسر');
+    assert.equal(db.prepare('SELECT name FROM classes WHERE id=?').get(sara.class_id).name, 'دختر 1');
+    assert.equal(classOf(db.prepare("SELECT id FROM users WHERE full_name='علی'").get().id), 'پسر 1');
   });
   // ---------------- bulk import after the rename ----------------
   const csv = (rows) => ['نام و نام خانوادگی,کد ملی,پایه,جنسیت,کلاس', ...rows].join('\n');
   const classNameOf = (nc) => db.prepare('SELECT c.name FROM users u JOIN students s ON s.user_id=u.id JOIN classes c ON c.id=s.class_id WHERE u.national_code=?').get(nc)?.name;
   await test('Import without a class: explicit gender goes to «پسر»/«دختر»; unknown gender keeps the old «الف» fallback', async () => {
-    const left = db.prepare("SELECT id FROM classes WHERE center_id=1 AND grade=7 AND name='دختر ۲'").get();
+    const left = db.prepare("SELECT id FROM classes WHERE center_id=1 AND grade=7 AND name='دختر 2'").get();
     if (left) assert.equal((await request(mgr, 'DELETE', `/api/manager/classes/${left.id}`)).status, 200);
     const r = await importStudents(1, csv(['پسر تست,1000000001,هفتم,پسر,', 'دختر تست,1000000002,هفتم,دختر,', 'نامعلوم تست,1000000003,هفتم,,']), { defaults: { lenient: true } });
     assert.equal(r.created, 3, JSON.stringify(r));
-    assert.equal(classNameOf('1000000001'), 'پسر');
-    assert.equal(classNameOf('1000000002'), 'دختر');
+    assert.equal(classNameOf('1000000001'), 'پسر 1');
+    assert.equal(classNameOf('1000000002'), 'دختر 1');
     assert.equal(classNameOf('1000000003'), 'الف', 'unknown gender is not guessed into a boys/girls class');
     assert.equal(r.classes_created, 1);
   });
-  await test('Import balances new girls across «دختر ۱/۲» and matches class names regardless of digit script', async () => {
-    await request(mgr, 'DELETE', `/api/manager/classes/${db.prepare("SELECT id FROM classes WHERE center_id=1 AND grade=7 AND name='الف'").get().id}?move_to=${db.prepare("SELECT id FROM classes WHERE center_id=1 AND grade=7 AND name='پسر'").get().id}&force=1`);
+  await test('Import balances new girls across «دختر ۱/۲» and matches class names written with Persian or Latin digits', async () => {
+    await request(mgr, 'DELETE', `/api/manager/classes/${db.prepare("SELECT id FROM classes WHERE center_id=1 AND grade=7 AND name='الف'").get().id}?move_to=${db.prepare("SELECT id FROM classes WHERE center_id=1 AND grade=7 AND name='پسر 1'").get().id}&force=1`);
     assert.equal((await request(mgr, 'POST', '/api/manager/classes/setup-gender', { grade: 7, girls_classes: 2, move: 'gender' })).status, 200);
     const before = db.prepare("SELECT COUNT(*) n FROM classes WHERE center_id=1 AND grade=7").get().n;
-    const r = await importStudents(1, csv(['دختر یک,1000000011,هفتم,دختر,', 'دختر دو,1000000012,هفتم,دختر,', 'دختر سه,1000000013,هفتم,دختر,', 'دختر لاتین,1000000014,هفتم,دختر,دختر 1']), { defaults: { lenient: true } });
+    const r = await importStudents(1, csv(['دختر یک,1000000011,هفتم,دختر,', 'دختر دو,1000000012,هفتم,دختر,', 'دختر سه,1000000013,هفتم,دختر,', 'دختر فارسی,1000000014,هفتم,دختر,دختر ۱']), { defaults: { lenient: true } });
     assert.equal(r.created, 4, JSON.stringify(r));
     assert.equal(r.classes_created, 0, 'no stray class was created');
     assert.equal(db.prepare("SELECT COUNT(*) n FROM classes WHERE center_id=1 AND grade=7").get().n, before);
-    assert.equal(classNameOf('1000000014'), 'دختر ۱', '«دختر 1» (Latin digit) is the same class as «دختر ۱»');
+    assert.equal(classNameOf('1000000014'), 'دختر 1', 'Persian-digit «دختر ۱» in a file is the same class as «دختر 1»');
     const cnt = (n) => db.prepare("SELECT COUNT(*) n FROM students s JOIN classes c ON c.id=s.class_id WHERE c.center_id=1 AND c.grade=7 AND c.name=?").get(n).n;
-    assert.ok(Math.abs(cnt('دختر ۱') - cnt('دختر ۲')) <= 2, `balanced enough: ${cnt('دختر ۱')} vs ${cnt('دختر ۲')}`);
+    assert.ok(Math.abs(cnt('دختر 1') - cnt('دختر 2')) <= 2, `balanced enough: ${cnt('دختر 1')} vs ${cnt('دختر 2')}`);
   });
+  // ---------------- the institute's real structure: counts differ per grade ----------------
+  await test('Per-grade plan: grade 7 = 1 boys + 2 girls, grade 8 = 2 boys + 1 girls; names match the timetable convention', async () => {
+    const r = await request(mgr, 'POST', '/api/manager/classes/setup-gender', { grades: [{ grade: 7, boys: 1, girls: 2 }, { grade: 8, boys: 2, girls: 1 }], move: 'gender' });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.deepEqual(names(7).sort(), ['دختر 1', 'دختر 2', 'پسر 1'].sort());
+    assert.deepEqual(names(8).sort(), ['دختر 1', 'پسر 1', 'پسر 2'].sort());
+    const g8 = r.data.grades.find((g) => g.grade === 8);
+    const boys8 = g8.classes.filter((c) => c.role === 'boys');
+    assert.deepEqual(boys8.map((c) => c.total), [1, 1], 'the two grade-8 boys are spread over the two boys classes');
+    assert.equal(g8.classes.find((c) => c.role === 'girls').girls, 2);
+    assert.equal(g8.warnings.length, 0);
+  });
+  await test('A bare legacy «پسر» becomes «پسر 1» (not a new class); numbered:false keeps single classes bare', async () => {
+    db.prepare("UPDATE classes SET name='پسر' WHERE center_id=1 AND grade=8 AND name='پسر 1'").run();
+    const bare = await request(mgr, 'POST', '/api/manager/classes/setup-gender', { grades: [{ grade: 8, boys: 2, girls: 1 }], move: 'keep' });
+    assert.equal(bare.data.grades[0].classes.find((c) => c.name === 'پسر 1').action, 'rename');
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM classes WHERE center_id=1 AND grade=8').get().n, 3);
+    const flat = await request(mgr, 'POST', '/api/manager/classes/setup-gender', { grades: [{ grade: 8, boys: 1, girls: 1 }], numbered: false, move: 'keep' });
+    assert.equal(flat.status, 200);
+    assert.ok(names(8).includes('پسر') && names(8).includes('دختر'), 'numbered:false gives bare names for single classes');
+    await request(mgr, 'POST', '/api/manager/classes/setup-gender', { grades: [{ grade: 8, boys: 2, girls: 1 }], move: 'keep' });
+    assert.deepEqual(names(8).sort(), ['دختر 1', 'پسر 1', 'پسر 2'].sort());
+  });
+  await test('Setup rejects duplicate/unknown grades; per-side counts are clamped to 1–4', async () => {
+    const post = (b) => request(mgr, 'POST', '/api/manager/classes/setup-gender', b);
+    assert.equal((await post({ grades: [{ grade: 7, boys: 1, girls: 1 }, { grade: 7, boys: 1, girls: 1 }] })).status, 400);
+    assert.equal((await post({ grades: [{ grade: 12, boys: 1, girls: 1 }] })).status, 400);
+    assert.equal((await post({ grades: [] })).status, 400);
+    const r = await post({ grades: [{ grade: 7, boys: 99, girls: 0 }], dry_run: true });
+    const side = (role) => r.data.grades[0].classes.filter((c) => c.role === role).length;
+    assert.deepEqual([side('boys'), side('girls')], [4, 1]);
+  });
+
+  // ---------------- the timetable script must attach sessions to the renamed classes, not create duplicates ----------------
+  await test('scripts/import-timetable.mjs reuses «پسر 1/دختر 1/دختر 2» whatever digit script or numbering they were saved with', async () => {
+    const { spawnSync } = await import('node:child_process');
+    // make the storage deliberately awkward: Persian digit in grade 7, a bare «پسر» in grade 8
+    db.prepare("UPDATE classes SET name='دختر ۲' WHERE center_id=1 AND grade=7 AND name='دختر 2'").run();
+    db.prepare("UPDATE classes SET name='پسر' WHERE center_id=1 AND grade=8 AND name='پسر 1'").run();
+    db.prepare("UPDATE centers SET slug='ashtiani' WHERE id=1").run();
+    const count = (g) => db.prepare('SELECT COUNT(*) n FROM classes WHERE center_id=1 AND grade=?').get(g).n;
+    const before = { 7: count(7), 8: count(8) };
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    const run = spawnSync(process.execPath, ['scripts/import-timetable.mjs', '--center', 'ashtiani', '--apply'], { cwd: ROOT, env: process.env, encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    assert.equal(count(7), before[7], 'grade 7 already had all three classes → nothing created');
+    assert.equal(count(8), before[8] + 1, 'grade 8 only gains «دختر 2», which genuinely did not exist (no «پسر 1» twin next to the bare «پسر»)');
+    assert.equal(db.prepare("SELECT name FROM classes WHERE center_id=1 AND grade=8 AND name NOT IN ('پسر','پسر 2','دختر 1')").get().name, 'دختر 2');
+    const sessions = (g, n) => db.prepare('SELECT COUNT(*) n FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE c.center_id=1 AND c.grade=? AND c.name=?').get(g, n).n;
+    assert.ok(sessions(7, 'دختر ۲') > 0, 'sessions landed on the existing «دختر ۲»');
+    assert.ok(sessions(8, 'پسر') > 0, 'sessions landed on the existing bare «پسر»');
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM classes WHERE center_id=1 AND grade=7 AND name='دختر 2'").get().n, 0, 'no Latin-digit twin was created');
+  });
+
   await test('Setup validates names and grade', async () => {
     for (const body of [{ boys_name: 'x', girls_name: 'x' }, { boys_from: 'الف', girls_from: 'الف' }, { grade: 3 }]) assert.equal((await request(mgr, 'POST', '/api/manager/classes/setup-gender', body)).status, 400, JSON.stringify(body));
   });
