@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
 import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
-import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
+import { fail, ymd, addDays, clampStr, normClassName, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
 import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
@@ -11,6 +11,7 @@ import { syncStudentsLater, removeStudentsLater, classroomEnabled, pendingRemova
 import { sendSms, smsProvider } from '../sms.js';
 import { setSession } from './common.js';
 import { parseQuestions, examWithResults, performanceList, studentDetail } from './teacher.js';
+import { classNameTaken } from './classes.js';
 
 const M = { roles: ['manager'] };
 const GRADES = [4, 5, 6, 7, 8, 9];
@@ -239,25 +240,20 @@ export default function register(r) {
     return {
       subjects: subjectsOf(cid),
       grades: GRADES,
-      classes: all(`SELECT c.*, (SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1) students FROM classes c WHERE center_id=? ORDER BY grade, name`, cid),
+      classes: all(`SELECT c.*, (SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1) students, (SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1 AND u.gender='f') girls, (SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1 AND (u.gender<>'f' OR u.gender IS NULL)) boys FROM classes c WHERE center_id=? ORDER BY grade, name`, cid),
       schools: all(`SELECT DISTINCT s.school FROM students s JOIN users u ON u.id=s.user_id WHERE u.center_id=? AND s.school<>'' ORDER BY s.school`, cid).map((x) => x.school),
-      teachers: all(`SELECT u.id, u.full_name, u.username, u.mobile, u.active, (SELECT GROUP_CONCAT(c.grade || c.name || ':' || tc.subject, '، ') FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=u.id) classes
+      teachers: all(`SELECT u.id, u.full_name, u.username, u.mobile, u.active, (SELECT GROUP_CONCAT(c.grade || ' ' || c.name || ':' || tc.subject, '، ') FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=u.id) classes
         FROM users u WHERE u.center_id=? AND u.role='teacher' ORDER BY u.full_name`, cid),
     };
   });
   r.post('/api/manager/classes', M, (ctx) => {
-    const grade = Number(ctx.body.grade), name = clampStr(ctx.body.name, 30);
+    const grade = Number(ctx.body.grade), name = normClassName(ctx.body.name);
     if (!GRADES.includes(grade) || !name) fail(400, 'پایه و نام کلاس را وارد کنید');
-    if (get('SELECT 1 FROM classes WHERE center_id=? AND grade=? AND name=?', ctx.user.center_id, grade, name)) fail(400, 'این کلاس وجود دارد');
-    run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', ctx.user.center_id, grade, name);
-    return { ok: true };
+    if (classNameTaken(ctx.user.center_id, grade, name)) fail(400, 'این کلاس وجود دارد');
+    const id = Number(run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', ctx.user.center_id, grade, name).lastInsertRowid);
+    return { ok: true, id };
   });
-  r.del('/api/manager/classes/:id', M, (ctx) => {
-    const c = ownClass(ctx, ctx.params.id);
-    if (get('SELECT COUNT(*) n FROM students WHERE class_id=?', c.id).n) fail(400, 'ابتدا دانش‌آموزان این کلاس را جابه‌جا کنید');
-    run('DELETE FROM classes WHERE id=?', c.id);
-    return { ok: true };
-  });
+  // تغییر نام، جزئیات و حذف امن کلاس و «راه‌اندازی پسر/دختر»: classes.js
 
   // ---------- مدیریت دانش‌آموزان ----------
   r.get('/api/manager/students', M, (ctx) => {
