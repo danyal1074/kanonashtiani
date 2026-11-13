@@ -51,7 +51,15 @@ function migrationPreservesData() {
     const preserved = ['users', 'students', 'points', 'messages', 'teacher_classes', 'exams', 'exam_results', 'pomodoros'];
     const before = Object.fromEntries(preserved.map(table => [table, old.prepare(`SELECT * FROM ${table} ORDER BY 1`).all()]));
     migrate(old);
-    for (const table of preserved) assert.deepEqual(old.prepare(`SELECT * FROM ${table} ORDER BY 1`).all(), before[table], `${table} rows must survive the upgrade`);
+    // Later migrations may add columns (e.g. users.ui_look); compare only the columns that existed before the upgrade.
+    for (const table of preserved) {
+      const cols = old.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+      assert.ok(before[table].length > 0, `${table} fixture must have rows`);
+      const legacyCols = Object.keys(before[table][0]);
+      for (const c of legacyCols) assert.ok(cols.includes(c), `${table}.${c} must survive the upgrade`);
+      const after = old.prepare(`SELECT ${legacyCols.map(c => `"${c}"`).join(',')} FROM ${table} ORDER BY 1`).all();
+      assert.deepEqual(after, before[table], `${table} rows must survive the upgrade`);
+    }
     assert.equal(old.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
     assert.deepEqual(old.prepare('PRAGMA foreign_key_check').all(), []);
     old.exec("INSERT INTO users(id,center_id,role,username,pass_hash,full_name) VALUES(3,1,'counselor','new_counselor','h','New Counselor')");
