@@ -36,7 +36,6 @@ export const nav = (me) => [
   { path: '/classes', icon: 'users', label: 'کلاس‌های من' },
   { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
   { path: '/exams', icon: 'file-check', label: 'آزمون‌ها' },
-  { path: '/manual-scores', icon: 'chart', label: 'نمرات' },
   { path: '/attendance', icon: 'user-check', label: 'حضور و غیاب' },
   { path: '/reports', icon: 'chart', label: 'گزارش‌ها' },
   { path: '/messages', icon: 'message', label: 'ارتباطات', badge: me.unread },
@@ -130,7 +129,7 @@ export async function home(el, _p, me) {
   const name = esc(lastName(me.user.full_name));
   const female = isFemale(me);
   const tiles = [
-    ['#/attendance', 'check-circle', 'حضور و غیاب', 'mint', 3, ''], ['#/manual-scores', 'file-text', 'ثبت نمره', 'lilac', 2, '<em>A+</em>'], ['#/assignments?new=1', 'clipboard', 'ثبت تکلیف', 'mint2', 1, ''],
+    ['#/attendance', 'check-circle', 'حضور و غیاب', 'mint', 3, ''], ['#/assignments?new=1', 'clipboard', 'ثبت تکلیف', 'mint2', 1, ''],
     ['#/materials', 'video', 'محتوای آموزشی', 'rose', 6, ''], ['#/exams', 'file-check', 'آزمون جدید', 'sand', 5, ''], ['#/messages', 'users', 'پیام به دانش‌آموزان', 'sky', 4, ''],
   ];
   const perf = classPerformance(d.classes, students).slice(0, 3);
@@ -183,7 +182,7 @@ export async function classes(el) {
     const list = tab === 'live' ? live : d.classes;
     el.innerHTML = `<div class="tp-tabs two" role="tablist"><button role="tab" aria-selected="${tab === 'live'}" class="${tab === 'live' ? 'on' : ''}" data-t="live">در حال برگزاری (${fa(live.length)})</button><button role="tab" aria-selected="${tab === 'all'}" class="${tab === 'all' ? 'on' : ''}" data-t="all">همه کلاس‌ها (${fa(d.classes.length)})</button></div>
     <div class="tp-classes">${list.map((c, i) => `<article class="tp-class"><a class="tp-class-top" href="#/students?class=${c.id}"><span class="tp-class-ic">${icon(ICONS[i % ICONS.length], { size: 58 })}</span><span class="grow"><b>${esc(clsTitle(c))}</b><small>${li('users', 19)}${fa(c.students)} دانش‌آموز</small></span><span class="tp-mini">${li('back', 18)}</span></a>
-      <div class="tp-chips"><a href="#/attendance/${c.id}">${icon('check-circle', { size: 22 })}حضور و غیاب</a><a href="#/assignments?class=${c.id}">${icon('file-text', { size: 22 })}تکلیف</a><a href="#/manual-scores"><em>A+</em>نمره</a></div></article>`).join('') || `<div class="tp-card">${empty('calendar', 'کلاسی برای نمایش نیست')}</div>`}</div>`;
+      <div class="tp-chips"><a href="#/attendance/${c.id}">${icon('check-circle', { size: 22 })}حضور و غیاب</a><a href="#/assignments?class=${c.id}">${icon('file-text', { size: 22 })}تکلیف</a></div></article>`).join('') || `<div class="tp-card">${empty('calendar', 'کلاسی برای نمایش نیست')}</div>`}</div>`;
   };
   draw();
   on(el, 'click', '[data-t]', (e, b) => { tab = b.dataset.t; draw(); });
@@ -267,7 +266,7 @@ export async function reports(el) {
 // ---------- موارد بیشتر ----------
 export function more(el) {
   setHead('موارد بیشتر', 'همه‌ی بخش‌های پنل معلم');
-  const items = [['#/assignments', 'clipboard', 'تکالیف'], ['#/exams', 'file-check', 'آزمون و اسکن پاسخ‌برگ'], ['#/manual-scores', 'file-text', 'نمرات مستمر کلاسی'], ['#/attendance', 'check-circle', 'حضور و غیاب'], ['#/hoosh-studio', 'sparkles', 'استودیوی هوش کمپلکس'], ['#/students', 'users', 'عملکرد دانش‌آموزان'], ['#/plans', 'timer', 'برنامه پومودوروی هفتگی'], ['#/materials', 'video', 'ویدیو و جزوه'], ['#/att-log', 'user-check', 'لاگ تغییر حضور'], ['#/messages', 'message', 'پیام‌ها'], ['#/announcements', 'megaphone', 'اطلاعیه‌ها'], ['#/account', 'sliders', 'حساب کاربری']];
+  const items = [['#/assignments', 'clipboard', 'تکالیف'], ['#/exams', 'file-check', 'آزمون و اسکن پاسخ‌برگ'], ['#/attendance', 'check-circle', 'حضور و غیاب'], ['#/hoosh-studio', 'sparkles', 'استودیوی هوش کمپلکس'], ['#/students', 'users', 'عملکرد دانش‌آموزان'], ['#/plans', 'timer', 'برنامه پومودوروی هفتگی'], ['#/materials', 'video', 'ویدیو و جزوه'], ['#/att-log', 'user-check', 'لاگ تغییر حضور'], ['#/messages', 'message', 'پیام‌ها'], ['#/announcements', 'megaphone', 'اطلاعیه‌ها'], ['#/account', 'sliders', 'حساب کاربری']];
   el.innerHTML = `<div class="tp-more">${items.map(([h, i, l]) => `<a class="tp-tile sky" href="${h}"><span class="tp-ti">${icon(i, { size: 46 })}</span><b>${l}</b></a>`).join('')}<button type="button" class="tp-tile sky pwa-install" data-pwa-install><span class="tp-ti"><img src="/icons/icon-192.png" alt="" width="46" height="46"></span><b>نصب در موبایل</b></button><button type="button" class="tp-tile rose" id="tpOut"><span class="tp-ti">${icon('logout', { size: 46 })}</span><b>خروج از حساب</b></button></div>`;
   $('#tpOut', el).onclick = () => $('#logoutBtn')?.click();
 }

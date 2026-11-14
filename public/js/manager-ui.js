@@ -15,7 +15,7 @@ const GROUPS = [
 ];
 const LABELS = {
   '/home': 'داشبورد', '/students': 'دانش‌آموزان', '/staff': 'معلمان و کلاس‌ها', '/timetable': 'برنامه هفتگی', '/counselors': 'مشاوران',
-  '/comprehensive': 'آزمون جامع', '/manual-scores': 'نمرات کلاسی', '/barpa': 'کارنامه‌های برپا', '/performance': 'عملکرد آموزشی',
+  '/comprehensive': 'آزمون جامع', '/manual-scores': 'بایگانی نمرات مستمر', '/barpa': 'کارنامه‌های برپا', '/performance': 'عملکرد آموزشی',
   '/fees': 'حق عضویت و رسیدها', '/accounting': 'حسابداری', '/invoices': 'فاکتورهای دوره‌ای',
   '/announcements': 'اطلاعیه‌ها', '/messages': 'پیام‌ها', '/sms-outbox': 'صندوق پیامک',
   '/hoosh-studio': 'استودیوی هوش', '/att-log': 'تغییرات حضور', '/shop': 'فروشگاه', '/settings': 'تنظیمات', '/account': 'حساب کاربری',

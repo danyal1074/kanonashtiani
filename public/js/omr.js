@@ -1,5 +1,6 @@
 // پاسخ‌برگ قابل چاپ + اسکن با دوربین گوشی و تصحیح خودکار (پردازش تصویر سمت مرورگر)
 import { esc, fa, $, on, modal, toast, printOverlay, icon } from './core.js';
+import { classifyFills } from './omr-classify.js';
 
 // مختصات برگه در فضای ۱۰۰۰×۱۴۱۴ (نسبت A4)
 const W = 1000, H = 1414;
@@ -128,7 +129,7 @@ export async function scanImage(src, count) {
 
   // سنجش میزان پر بودن هر حباب
   const n = Math.min(count, MAX_Q);
-  const answers = [], fills = [];
+  const answers = [], fills = [], status = [], confidence = [];
   for (let q = 0; q < n; q++) {
     const f = [];
     for (let o = 0; o < 4; o++) {
@@ -143,9 +144,8 @@ export async function scanImage(src, count) {
       }
       f.push(tot ? dk / tot : 0);
     }
-    const sorted = [...f].sort((a, b) => b - a);
-    const best = f.indexOf(sorted[0]);
-    answers.push(sorted[0] > 0.45 && sorted[1] < sorted[0] * 0.6 ? best : null);
+    const c = classifyFills(f);
+    answers.push(c.answer); status.push(c.status); confidence.push(c.confidence);
     fills.push(f);
   }
   // پیش‌نمایش با هم‌پوشانی نتیجه
@@ -155,10 +155,10 @@ export async function scanImage(src, count) {
     const [bx, by] = bubblePos(q, o);
     const [ix, iy] = map(bx, by);
     ctx.beginPath(); ctx.arc(ix, iy, 8 * (w / 1000) + 3, 0, Math.PI * 2);
-    ctx.strokeStyle = answers[q] === o ? '#22A867' : '#a78bfa55';
+    ctx.strokeStyle = status[q] === 'multi' || status[q] === 'weak' ? '#E8590C' : answers[q] === o ? '#22A867' : '#a78bfa55';
     ctx.stroke();
   }
-  return { answers, fills, preview: cv.toDataURL('image/jpeg', 0.75) };
+  return { answers, fills, status, confidence, preview: cv.toDataURL('image/jpeg', 0.75) };
 }
 
 // برگه پرشده آزمایشی برای نمایش (بدون دوربین)
@@ -177,61 +177,84 @@ export async function demoFilledSheet(count, answers) {
 }
 
 // ---------- رابط اسکن ----------
-// گزینه‌ها: exam (questions با answer)، students، onSave(studentId, answers)
+// گزینه‌ها: exam (questions با answer)، students، onSave(studentId, answers, omr)
+// omr = { blank, multi, weak, corrected } (اندیس سؤال‌ها) برای ثبت در لاگ ممیزی سرور
+const STATUS_FA = { blank: 'سفید', multi: 'چند علامت', weak: 'کم‌رنگ' };
 export function openScanner({ exam, students, onSave, preselect }) {
   const n = exam.questions.length;
-  let answers = Array(n).fill(null);
   const key = exam.questions.map((q) => q.answer);
-  const score = () => answers.filter((a, i) => a === key[i]).length;
+  let answers, status, corrected, demo, scanned;
+  const reset = () => { answers = Array(n).fill(null); status = Array(n).fill(null); corrected = new Set(); demo = false; scanned = false; };
+  reset();
+  const saved = new Set(students.filter((s) => s.done).map((s) => s.id));
+  const score = () => answers.filter((a, i) => a != null && a === key[i]).length;
+  const pending = () => status.reduce((list, st, q) => (st && st !== 'blank' && st !== 'ok' && !corrected.has(q) ? [...list, q] : list), []);
+  const label = (s) => `${esc(s.full_name)}${s.class_name ? ` (کلاس ${esc(s.class_name)})` : ''}${saved.has(s.id) ? ' — ثبت‌شده' : ''}`;
   return modal({
-    title: ' اسکن پاسخ‌برگ و تصحیح خودکار', wide: true,
+    title: 'اسکن پاسخ‌برگ و تصحیح خودکار', wide: true,
     body: `<div class="grid c2"><div class="stack">
-      <div class="field"><label>داوطلب</label><select class="input" id="omrStudent">${students.map((s) => `<option value="${s.id}" ${s.id === preselect ? 'selected' : ''}>${esc(s.full_name)}${s.class_name ? ` (کلاس ${esc(s.class_name)})` : ''}${s.done ? ' ' : ''}</option>`).join('')}</select></div>
+      <div class="field"><label for="omrStudent">داوطلب</label><select class="input" id="omrStudent">${students.map((s) => `<option value="${s.id}" ${s.id === preselect ? 'selected' : ''}>${label(s)}</option>`).join('')}</select></div>
       <label class="btn block">${icon('camera', { size: 16 })} گرفتن عکس با دوربین گوشی<input type="file" accept="image/*" capture="environment" id="omrFile" hidden></label>
-      <div class="row"><button class="btn soft sm grow" id="omrDemo">${icon('file-check', { size: 16 })} تست با برگه نمونه</button><button class="btn ghost sm grow" id="omrPrint">${icon('printer', { size: 16 })} چاپ پاسخ‌برگ خام</button></div>
-      <div class="omr-preview" id="omrPrev"><div class="empty" style="color:#bbb"><span class="big">${icon('receipt', { size: 16 })}</span>عکس پاسخ‌برگ اینجا نمایش داده می‌شود</div></div></div>
-      <div class="stack"><div class="row between"><b>پاسخ‌های تشخیص‌داده‌شده</b><span class="badge" id="omrScore"></span></div><div class="tiny muted">در صورت نیاز با لمس هر گزینه اصلاح کنید. حلقه سبز = کلید درست.</div><div class="ans-grid" id="omrAns"></div></div></div>`,
+      <div class="row"><button type="button" class="btn soft sm grow" id="omrDemo">${icon('file-check', { size: 16 })} آزمایش اسکنر با برگهٔ نمونه</button><button type="button" class="btn ghost sm grow" id="omrPrint">${icon('printer', { size: 16 })} چاپ پاسخ‌برگ خام</button></div>
+      <div class="omr-preview" id="omrPrev"><div class="empty" style="color:#bbb">${icon('receipt', { size: 16 })} عکس پاسخ‌برگ اینجا نمایش داده می‌شود</div></div></div>
+      <div class="stack"><div class="row between"><b>پاسخ‌های تشخیص‌داده‌شده</b><span class="badge" id="omrScore"></span></div>
+      <div class="tiny muted">ردیف‌های نارنجی (چند علامت یا کم‌رنگ) باید بازبینی شوند: گزینهٔ درست را لمس کنید یا با «تأیید سفید» آن را بی‌پاسخ بگذارید. حلقهٔ سبز کلید آزمون است.</div>
+      <div id="omrWarn" role="status"></div><div class="omr-ans" id="omrAns"></div></div></div>`,
     actions: [{ label: 'بستن', cls: 'ghost', value: null }, {
-      label: ' ثبت نمره', cls: 'green', onClick: async (m) => {
+      label: 'ثبت نمره', cls: 'green', onClick: async (m) => {
+        if (demo) { toast('برگهٔ نمونه فقط برای آزمایش اسکنر است و نمره‌ای از آن ثبت نمی‌شود', 'err'); return false; }
+        const left = pending();
+        if (left.length) { toast(`${fa(left.length)} سؤال نیاز به بازبینی دارد (سؤال ${left.slice(0, 5).map((q) => fa(q + 1)).join('، ')})`, 'err'); return false; }
         const sid = Number($('#omrStudent', m).value);
-        const r = await onSave(sid, answers);
+        const pick = (st) => status.map((x, q) => (x === st ? q : -1)).filter((q) => q >= 0);
+        const omr = scanned ? { blank: pick('blank'), multi: pick('multi'), weak: pick('weak'), corrected: [...corrected] } : { corrected: [...corrected] };
+        const r = await onSave(sid, answers, omr);
         toast(`نمره ثبت شد: ${fa(r.percent)}٪ — رتبه ${fa(r.rank)} از ${fa(r.of)}`, 'ok');
-        const opt = $(`#omrStudent option[value="${sid}"]`, m);
-        if (opt && !opt.textContent.endsWith('')) opt.textContent += ' ';
+        saved.add(sid);
+        const sel = $('#omrStudent', m), opt = sel.querySelector(`option[value="${sid}"]`);
+        if (opt) opt.textContent = opt.textContent.replace(/ — ثبت‌شده$/, '') + ' — ثبت‌شده';
         let next = opt?.nextElementSibling;
-        while (next && next.textContent.endsWith('')) next = next.nextElementSibling;
-        if (next) $('#omrStudent', m).value = next.value;
-        answers = Array(n).fill(null); drawAns(m);
-        $('#omrPrev', m).innerHTML = '<div class="empty" style="color:#bbb"><span class="big"></span>ثبت شد؛ پاسخ‌برگ بعدی را اسکن کنید</div>';
+        while (next && saved.has(Number(next.value))) next = next.nextElementSibling;
+        if (next) sel.value = next.value;
+        reset(); drawAns(m);
+        $('#omrPrev', m).innerHTML = '<div class="empty" style="color:#bbb">ثبت شد؛ پاسخ‌برگ بعدی را اسکن کنید</div>';
         return false;
       },
     }],
     onOpen: (m) => {
       drawAns(m);
-      const run = async (src) => {
-        $('#omrPrev', m).innerHTML = '<div class="empty" style="color:#ddd"><span class="big" style="animation:wobble 1s infinite"></span>در حال پردازش تصویر…</div>';
+      const run = async (src, isDemo = false) => {
+        $('#omrPrev', m).innerHTML = '<div class="empty" style="color:#999">در حال پردازش تصویر…</div>';
         try {
           const r = await scanImage(src, n);
-          answers = r.answers;
+          reset(); answers = r.answers; status = r.status; demo = isDemo; scanned = true;
           $('#omrPrev', m).innerHTML = `<img src="${r.preview}" alt="پیش‌نمایش اسکن" style="width:100%;display:block">`;
           drawAns(m);
-          toast(`اسکن انجام شد: ${fa(answers.filter((a) => a != null).length)} پاسخ تشخیص داده شد`, 'ok');
+          const review = pending().length;
+          toast(`اسکن انجام شد: ${fa(answers.filter((a) => a != null).length)} پاسخ${review ? ` — ${fa(review)} مورد نیاز به بازبینی` : ''}`, review ? '' : 'ok');
         } catch (e) {
-          $('#omrPrev', m).innerHTML = `<div class="empty" style="color:#fda4af"><span class="big">${icon('alert', { size: 16 })}</span>${esc(e.message)}</div>`;
+          $('#omrPrev', m).innerHTML = `<div class="empty" style="color:#c2410c">${icon('alert', { size: 16 })} ${esc(e.message)}</div>`;
         }
       };
-      $('#omrFile', m).onchange = (e) => { const f = e.target.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => run(rd.result); rd.readAsDataURL(f); e.target.value = ''; };
-      $('#omrDemo', m).onclick = async () => run(await demoFilledSheet(n, key.map((k) => (Math.random() < 0.75 ? k : Math.random() < 0.5 ? (k + 1) % 4 : null))));
+      $('#omrFile', m).onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 15 * 1024 * 1024) { toast('حجم تصویر بیش از ۱۵ مگابایت است', 'err'); return; } const rd = new FileReader(); rd.onload = () => run(rd.result); rd.readAsDataURL(f); e.target.value = ''; };
+      $('#omrDemo', m).onclick = async () => run(await demoFilledSheet(n, key.map((k) => (Math.random() < 0.75 ? k : Math.random() < 0.5 ? (k + 1) % 4 : null))), true);
       $('#omrPrint', m).onclick = () => printSheet({ title: exam.title, subtitle: `${fa(n)} سؤال`, count: n });
       on(m, 'click', '[data-a]', (e, b) => {
         const [q, o] = b.dataset.a.split(',').map(Number);
         answers[q] = answers[q] === o ? null : o;
+        corrected.add(q);
         drawAns(m);
       });
+      on(m, 'click', '[data-blank]', (e, b) => { const q = Number(b.dataset.blank); answers[q] = null; corrected.add(q); drawAns(m); });
     },
   });
   function drawAns(m) {
-    $('#omrAns', m).innerHTML = answers.map((a, q) => `<div class="ans-row"><span class="qn">${fa(q + 1)}</span>${[0, 1, 2, 3].map((o) => `<button class="${a === o ? 'on' : ''} ${key[q] === o ? 'key' : ''}" data-a="${q},${o}">${fa(o + 1)}</button>`).join('')}</div>`).join('');
+    $('#omrAns', m).innerHTML = answers.map((a, q) => {
+      const flag = status[q] && status[q] !== 'ok' && status[q] !== 'blank' && !corrected.has(q);
+      return `<div class="ans-row" ${flag ? 'style="background:#fff4e6;border-radius:8px"' : ''}><span class="qn">${fa(q + 1)}</span>${[0, 1, 2, 3].map((o) => `<button type="button" class="${a === o ? 'on' : ''} ${key[q] === o ? 'key' : ''}" data-a="${q},${o}" aria-pressed="${a === o}" aria-label="سؤال ${fa(q + 1)} گزینه ${fa(o + 1)}">${fa(o + 1)}</button>`).join('')}${flag ? `<span class="tiny" style="color:#c2410c">${STATUS_FA[status[q]]}</span> <button type="button" class="btn ghost sm" data-blank="${q}">تأیید سفید</button>` : corrected.has(q) ? '<span class="tiny muted">اصلاح دستی</span>' : ''}</div>`;
+    }).join('');
+    const left = pending().length;
+    $('#omrWarn', m).innerHTML = demo ? '<div class="badge orange">برگهٔ نمونه — قابل ثبت نیست</div>' : left ? `<div class="badge orange">${fa(left)} سؤال نیاز به بازبینی</div>` : '';
     $('#omrScore', m).textContent = `${fa(score())} از ${fa(n)} درست (${fa(Math.round((score() / n) * 100))}٪)`;
   }
 }

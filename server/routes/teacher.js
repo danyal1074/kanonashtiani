@@ -1,7 +1,7 @@
 // پنل معلم
 import { all, get, run, tx } from '../db.js';
 import { fail, ymd, addDays, weekStart, faWeekday, clampStr, saveUpload } from '../util.js';
-import { addPoints, totalPoints, levelOf, gradeRanking, saveExamResult, ensureLearningPath, generateLearningPath, subjectScores } from '../logic.js';
+import { addPoints, totalPoints, levelOf, gradeRanking, saveExamResult, omrMeta, ensureLearningPath, generateLearningPath, subjectScores } from '../logic.js';
 import { studentResults, studyWeek } from './student.js';
 
 const T = { roles: ['teacher'] };
@@ -254,7 +254,7 @@ export default function register(r) {
     if (st.grade !== e.grade || (e.class_id && st.class_id !== e.class_id)) fail(400, 'این دانش‌آموز در جامعه این آزمون نیست');
     const n = JSON.parse(e.questions).length;
     const answers = Array.from({ length: n }, (_, i) => { const v = ctx.body.answers?.[i]; return Number.isInteger(v) && v >= 0 && v <= 3 ? v : null; });
-    return saveExamResult(e, st.id, answers, 'scan');
+    return saveExamResult(e, st.id, answers, 'scan', { actorId: ctx.user.id, meta: omrMeta(ctx.body.omr, n) });
   });
 
   // ---------- دانش‌آموزان و مسیر یادگیری ----------
@@ -347,64 +347,11 @@ export default function register(r) {
     `, ...classIds);
   });
 
-  // ---------- ثبت نمرات مستمر دستی کلاسی (Option 8) ----------
-  r.get('/api/teacher/manual-scores', T, (ctx) => {
-    const classIds = classFilter(ctx.user.id, ctx.query).map((c) => c.id);
-    if (!classIds.length) return [];
-    const subject = ctx.query.subject ? clampStr(ctx.query.subject, 50) : null;
-    let sql = `
-      SELECT m.*, u.full_name student_name, c.name class_name
-      FROM manual_scores m
-      JOIN users u ON u.id=m.student_id
-      LEFT JOIN classes c ON c.id=m.class_id
-      WHERE m.class_id IN (${classIds.map(() => '?').join(',')})
-    `;
-    const params = [...classIds];
-    if (subject) {
-      sql += ' AND m.subject = ?';
-      params.push(subject);
-    }
-    sql += ' ORDER BY m.id DESC LIMIT 300';
-    return all(sql, ...params);
-  });
-
-  r.post('/api/teacher/manual-scores', T, (ctx) => {
-    const b = ctx.body;
-    const c = ownClass(ctx.user.id, b.class_id);
-    const subject = clampStr(b.subject, 50);
-    const title = clampStr(b.title, 100);
-    if (!subject || !title) fail(400, 'نام درس و عنوان نمره مستمر الزامی است');
-
-    const records = Array.isArray(b.records) ? b.records : (b.student_id != null ? [{ student_id: b.student_id, score: b.score }] : []);
-    if (!records.length) fail(400, 'حداقل یک نمره ارسال کنید');
-
-    const validStudents = new Set(all('SELECT user_id FROM students WHERE class_id=?', c.id).map((s) => s.user_id));
-    const insertedIds = [];
-
-    tx(() => {
-      for (const rec of records) {
-        const sid = Number(rec.student_id);
-        if (!validStudents.has(sid)) continue;
-        const score = Number(rec.score);
-        if (isNaN(score) || score < 0 || score > 20) fail(400, 'نمره باید عددی بین ۰ تا ۲۰ باشد');
-        const res = run(`
-          INSERT INTO manual_scores (center_id, student_id, teacher_id, class_id, subject, title, score)
-          VALUES (?,?,?,?,?,?,?)
-        `, ctx.user.center_id, sid, ctx.user.id, c.id, subject, title, score);
-        insertedIds.push(res.lastInsertRowid);
-      }
-    });
-
-    return { ok: true, count: insertedIds.length, ids: insertedIds };
-  });
-
-  r.del('/api/teacher/manual-scores/:id', T, (ctx) => {
-    const score = get('SELECT * FROM manual_scores WHERE id=?', Number(ctx.params.id));
-    if (!score) fail(404, 'نمره یافت نشد');
-    if (score.teacher_id !== ctx.user.id) {
-      fail(403, 'شما دسترسی حذف این نمره را ندارید');
-    }
-    run('DELETE FROM manual_scores WHERE id=?', score.id);
-    return { ok: true };
-  });
+  // ---------- نمرات مستمر کلاسی: بازنشسته ----------
+  // سیاست کانون: ارزشیابی تحصیلی فقط از آزمون‌های رسمی آنلاین، کلاسی و جامع است.
+  // ردیف‌های قبلی جدول manual_scores حذف نمی‌شوند و فقط در بایگانی مدیر (فقط‌خواندنی) دیده می‌شوند.
+  const retired = () => fail(410, 'نمرات مستمر/کلاسی دیگر بخشی از ارزشیابی نیست؛ ارزشیابی فقط از آزمون‌های آنلاین، کلاسی و جامع انجام می‌شود');
+  r.get('/api/teacher/manual-scores', T, retired);
+  r.post('/api/teacher/manual-scores', T, retired);
+  r.del('/api/teacher/manual-scores/:id', T, retired);
 }

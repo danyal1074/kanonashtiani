@@ -307,10 +307,9 @@ export async function counselor(el, _p, me) {
 
 // ================= دانش‌آموز: نمرات، فاکتورها، کارنامه برپا =================
 export async function records(el) {
-  setHead('نمرات و فاکتورها', 'نمره‌های مستمر کلاس، فاکتورهای دوره‌ای و کارنامه‌های آزمون جامع');
-  const [s, i, b, fee] = await Promise.all([api('/api/student/manual-scores'), api('/api/student/invoices'), api('/api/barpa-exams/reports'), api('/api/student/payment').catch(() => null)]);
-  el.innerHTML = `<section class="card" style="margin-bottom:16px"><div class="card-title">نمرات مستمر کلاسی</div>${scoresTable(s)}</section>
-  <section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i, { pay: true })}</section>
+  setHead('فاکتورها و کارنامه جامع', 'فاکتورهای دوره‌ای و کارنامه‌های آزمون جامع');
+  const [i, b, fee] = await Promise.all([api('/api/student/invoices'), api('/api/barpa-exams/reports'), api('/api/student/payment').catch(() => null)]);
+  el.innerHTML = `<section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i, { pay: true })}</section>
   <section class="card"><div class="card-title">کارنامه آزمون جامع برپا</div>${barpaList(b)}</section>`;
   on(el, 'click', '[data-payinv]', (e, btn) => modal({
     title: 'پرداخت فاکتور',
@@ -329,40 +328,10 @@ export async function records(el) {
 export const barpaView = (el, p) => barpaDetail(el, p);
 
 // ================= معلم: نمرات مستمر و لاگ حضور =================
-export async function teacherScores(el) {
-  setHead('نمرات مستمر کلاسی', 'ثبت نمره از ۲۰ برای هر دانش‌آموز');
-  const ov = await api('/api/teacher/overview');
-  if (!ov.classes.length) { el.innerHTML = empty('users', 'کلاسی به شما اختصاص داده نشده'); return; }
-  let cls = ov.classes[0].id;
-  const draw = async () => {
-    const [att, list] = await Promise.all([api(`/api/teacher/attendance?class_id=${cls}`), api(`/api/teacher/manual-scores?class_id=${cls}`)]);
-    $('#msBody', el).innerHTML = `<form id="msForm" class="card" style="margin-bottom:16px"><div class="row wrap" style="gap:10px;margin-bottom:12px"><div class="field grow"><label for="msSub">درس</label><input class="input" id="msSub" name="subject" required maxlength="50"></div><div class="field grow"><label for="msTit">عنوان (مثلاً پرسش کلاسی)</label><input class="input" id="msTit" name="title" required maxlength="100"></div></div>
-      <div class="table-wrap"><table class="table"><thead><tr><th>دانش‌آموز</th><th style="width:140px">نمره (۰ تا ۲۰)</th></tr></thead><tbody>${att.students.map((s) => `<tr><td>${esc(s.full_name)}</td><td><input class="input" type="number" min="0" max="20" step="0.25" inputmode="decimal" data-sid="${s.id}" aria-label="نمره ${esc(s.full_name)}"></td></tr>`).join('')}</tbody></table></div>
-      <button class="btn" type="submit" style="margin-top:12px">${icon('check-circle', { size: 16 })} ثبت نمره‌ها</button></form>
-      <section class="card"><div class="card-title">نمرات ثبت‌شده</div>${list.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>دانش‌آموز</th><th>درس</th><th>عنوان</th><th>نمره</th><th>تاریخ</th><th></th></tr></thead><tbody>${list.map((m) => `<tr><td>${esc(m.student_name)}</td><td>${esc(m.subject)}</td><td>${esc(m.title)}</td><td><b>${score20(m.score)}</b></td><td class="tiny muted">${dt(m.created_at)}</td><td><button class="btn sm ghost" data-del="${m.id}" aria-label="حذف نمره ${esc(m.student_name)}">${icon('trash', { size: 14 })}</button></td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'نمره‌ای ثبت نشده')}</section>`;
-    $('#msForm', el).onsubmit = (e) => { e.preventDefault(); const f = e.target; const records = $$('[data-sid]', f).filter((i) => i.value !== '').map((i) => ({ student_id: Number(i.dataset.sid), score: Number(i.value) }));
-      if (!records.length) return toast('حداقل یک نمره وارد کن');
-      busy(e.submitter, async () => { const r = await post('/api/teacher/manual-scores', { class_id: cls, subject: f.subject.value, title: f.title.value, records }); toast(`${fa(r.count)} نمره ثبت شد`, 'ok'); draw(); }); };
-  };
-  el.innerHTML = `<div class="row wrap" style="margin-bottom:16px;gap:10px"><label for="msCls" class="bold">کلاس:</label><select class="input" id="msCls" style="width:auto">${ov.classes.map((c) => `<option value="${c.id}">${esc(c.name)} · پایه ${gradeName(c.grade)}</option>`).join('')}</select></div><div id="msBody">${loading()}</div>`;
-  $('#msCls', el).onchange = (e) => { cls = Number(e.target.value); draw(); };
-  on(el, 'click', '[data-del]', async (e, b) => { if (await confirmBox('این نمره حذف شود؟')) busy(b, async () => { await del(`/api/teacher/manual-scores/${b.dataset.del}`); toast('حذف شد', 'ok'); draw(); }); });
-  draw();
-}
-const ST = { present: 'حاضر', absent: 'غایب', excused: 'موجه' };
 export async function attLog(el, _p, me) {
   setHead('لاگ تغییرات حضور و غیاب', 'هر بار که وضعیت یک دانش‌آموز عوض شود اینجا ثبت می‌شود');
   const rows = await api(`/api/${me.user.role}/attendance/changes`);
   el.innerHTML = `<section class="card">${rows.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>دانش‌آموز</th><th>کلاس</th><th>تاریخ حضور</th><th>تغییر</th><th>ویرایشگر</th><th>زمان ثبت</th></tr></thead><tbody>${rows.map((c) => `<tr><td>${esc(c.student_name)}</td><td>${esc(c.class_name || '')}</td><td>${c.date ? jdate(c.date) : '—'}</td><td>${ST[c.old_status] || esc(c.old_status)} ← <b>${ST[c.new_status] || esc(c.new_status)}</b></td><td>${esc(c.actor_name)}</td><td class="tiny muted">${dt(c.changed_at || c.created_at)}</td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'تغییری ثبت نشده')}</section>`;
-}
-
-// ================= ولی: نمرات، فاکتورها، کارنامه فرزند =================
-export async function parentRecords(el, _p, me, child) {
-  setHead('نمرات و فاکتورها', `${esc(child.full_name)} · پایه ${gradeName(child.grade)}`);
-  const [s, i, b] = await Promise.all([api(`/api/parent/children/${child.id}/manual-scores`), api(`/api/parent/children/${child.id}/invoices`), api(`/api/parent/children/${child.id}/barpa-reports`)]);
-  el.innerHTML = `<section class="card" style="margin-bottom:16px"><div class="card-title">نمرات مستمر کلاسی</div>${scoresTable(s)}</section>
-  <section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i)}</section>
-  <section class="card"><div class="card-title">کارنامه آزمون جامع برپا</div>${barpaList(b)}</section>`;
 }
 
 // ================= مدیر: فاکتورها، پیامک، کارنامه برپا، نمرات =================
@@ -1289,6 +1258,6 @@ export async function hooshStudio(el) {
 }
 
 export async function mgrScores(el) {
-  setHead('نمرات مستمر کلاسی', 'همه‌ی نمرات ثبت‌شده‌ی معلمان کانون');
-  el.innerHTML = `<section class="card">${scoresTable(await api('/api/manager/manual-scores'), { student: true })}</section>`;
+  setHead('بایگانی نمرات مستمر', 'سوابق قبلی؛ فقط‌خواندنی و خارج از ارزشیابی، رتبه و کارنامه');
+  el.innerHTML = `<div class="card" role="note" style="margin-bottom:12px">ارزشیابی تحصیلی کانون فقط از آزمون‌های آنلاین، کلاسی و جامع انجام می‌شود. ثبت نمرهٔ مستمر جدید غیرفعال است و این سوابق صرفاً برای حفظ تاریخچه نگه‌داری می‌شوند.</div><section class="card">${scoresTable(await api('/api/manager/manual-scores'), { student: true })}</section>`;
 }

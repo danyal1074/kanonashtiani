@@ -112,31 +112,8 @@ export const CURATED_QUESTIONS = [
 export function buildSelfExamQuestions({ subject = null, count = 5, grade = null }) {
   const pool = [];
 
-  // ۱) استخراج سوالات پایگاه داده از آزمون‌های موجود
-  try {
-    const dbExams = all('SELECT questions, subject, grade FROM exams WHERE questions IS NOT NULL');
-    for (const e of dbExams) {
-      if (grade && e.grade && e.grade !== grade) continue;
-      if (subject && e.subject && e.subject !== subject && subject !== 'عمومی') continue;
-      try {
-        const qs = JSON.parse(e.questions);
-        if (Array.isArray(qs)) {
-          for (const q of qs) {
-            if (q.text && Array.isArray(q.options) && q.options.length >= 2 && q.answer != null) {
-              pool.push({
-                text: q.text,
-                options: q.options,
-                answer: Number(q.answer),
-                subject: e.subject || q.subject || 'عمومی',
-                explanation: q.explanation || 'بر اساس مفاهیم کتاب درسی.'
-              });
-            }
-          }
-        }
-      } catch { /* نادیده گرفتن خطای json */ }
-    }
-  } catch { /* */ }
-
+  // امنیت: سؤال‌های آزمون‌های رسمی (جدول exams) هرگز وارد خودسنجی نمی‌شوند؛ در غیر این صورت
+  // کلید آزمون‌های آینده و آزمون‌های کانون‌های دیگر به دانش‌آموز نشت می‌کرد.
   // ۲) افزودن سوالات برگزیده
   for (const q of CURATED_QUESTIONS) {
     if (!subject || subject === 'عمومی' || q.subject === subject) {

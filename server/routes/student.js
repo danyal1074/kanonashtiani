@@ -70,10 +70,13 @@ export default function register(r) {
   r.post('/api/student/counselor-sessions', S, (ctx) => {
     const title=clampStr(ctx.body.title,200), start=counselorSessionStart(ctx.body.starts_at);
     if (!title) fail(400,'موضوع درخواست جلسه را وارد کنید');
+    // Only a counselor assigned to the student's class can receive the request.
+    const assigned=`SELECT u.id FROM users u JOIN counselor_classes cc ON cc.counselor_id=u.id JOIN students s ON s.class_id=cc.class_id
+      WHERE s.user_id=? AND u.center_id=? AND u.role='counselor' AND u.active=1`;
     const counselor=ctx.body.counselor_id == null
-      ? get("SELECT id FROM users WHERE center_id=? AND role='counselor' AND active=1 ORDER BY id LIMIT 1",ctx.user.center_id)
-      : get("SELECT id FROM users WHERE id=? AND center_id=? AND role='counselor' AND active=1",Number(ctx.body.counselor_id),ctx.user.center_id);
-    if (!counselor) fail(404,'مشاور فعال در کانون یافت نشد');
+      ? get(`${assigned} ORDER BY u.id LIMIT 1`,ctx.user.id,ctx.user.center_id)
+      : get(`${assigned} AND u.id=?`,ctx.user.id,ctx.user.center_id,Number(ctx.body.counselor_id));
+    if (!counselor) fail(404,'مشاوری برای کلاس شما تعیین نشده است');
     const result=run("INSERT INTO counselor_sessions(student_id,counselor_id,title,starts_at,status,notes) VALUES (?,?,?,?,'requested','')",ctx.user.id,counselor.id,title,start);
     return {ok:true,id:Number(result.lastInsertRowid)};
   });
@@ -479,16 +482,8 @@ export default function register(r) {
     };
   });
 
-  // ---------- ثبت نمرات مستمر دستی کلاسی (Option 8) ----------
-  r.get('/api/student/manual-scores', S, (ctx) => {
-    return all(`
-      SELECT m.id, m.subject, m.title, m.score, m.created_at, u.full_name teacher_name, c.name class_name
-      FROM manual_scores m
-      JOIN users u ON u.id=m.teacher_id
-      LEFT JOIN classes c ON c.id=m.class_id
-      WHERE m.student_id=? ORDER BY m.id DESC
-    `, ctx.user.id);
-  });
+  // نمرات مستمر کلاسی بازنشسته است (بخشی از کارنامهٔ تحصیلی نیست)
+  r.get('/api/student/manual-scores', S, () => fail(410, 'نمرات مستمر/کلاسی دیگر بخشی از ارزشیابی نیست؛ ارزشیابی فقط از آزمون‌های آنلاین، کلاسی و جامع انجام می‌شود'));
 
   // ---------- فاکتورهای بدهی دوره‌ای (Option 10) ----------
   r.get('/api/student/invoices', S, (ctx) => {

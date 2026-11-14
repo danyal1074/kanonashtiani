@@ -1,5 +1,5 @@
 // منطق دامنه: امتیاز، سطح، رتبه، قفل پنل، اطلاعیه‌ها، مسیر یادگیری، جریمه‌های خودکار
-import { all, get, run, tx } from './db.js';
+import { all, get, run, tx, audit } from './db.js';
 import { ymd, addDays, weekStart, faWeekday, nowIso, jMonthOf, JMONTHS } from './util.js';
 
 export const LEVELS = [
@@ -152,11 +152,22 @@ export function gradeExam(questions, answers) {
 }
 export const examPoints = (percent) => Math.round(percent / 10) + (percent >= 100 ? 5 : 0);
 
-export function saveExamResult(exam, studentId, answers, source) {
+// خلاصهٔ ایمن فرادادهٔ اسکن OMR برای لاگ ممیزی (فقط اعداد کوچک؛ تصویر ذخیره نمی‌شود)
+export function omrMeta(raw, n) {
+  if (!raw || typeof raw !== 'object') return null;
+  const idx = (a) => (Array.isArray(a) ? [...new Set(a.map(Number).filter((x) => Number.isInteger(x) && x >= 0 && x < n))].slice(0, n) : []);
+  return { blank: idx(raw.blank), multi: idx(raw.multi), weak: idx(raw.weak), corrected: idx(raw.corrected) };
+}
+
+// ثبت نتیجه؛ اگر نتیجهٔ قبلی وجود داشته باشد، تصحیح با مقدار قبلی و بعدی در audit_log ثبت می‌شود.
+export function saveExamResult(exam, studentId, answers, source, { actorId = null, meta = null } = {}) {
   const questions = JSON.parse(exam.questions);
   const g = gradeExam(questions, answers);
   const pts = examPoints(g.percent);
   tx(() => {
+    const prev = get('SELECT answers, percent, source FROM exam_results WHERE exam_id=? AND student_id=?', exam.id, studentId);
+    if (prev || meta) audit(exam.center_id, actorId, prev ? 'exam_result.correct' : 'exam_result.create', 'exam_result', `${exam.id}:${studentId}`,
+      { source, ...(prev ? { before: { percent: prev.percent, answers: JSON.parse(prev.answers || '[]'), source: prev.source } } : {}), after: { percent: g.percent, answers }, ...(meta ? { omr: meta } : {}) });
     run(`INSERT INTO exam_results (exam_id, student_id, answers, correct, wrong, blank, percent, points, source) VALUES (?,?,?,?,?,?,?,?,?)
       ON CONFLICT(exam_id, student_id) DO UPDATE SET answers=excluded.answers, correct=excluded.correct, wrong=excluded.wrong, blank=excluded.blank, percent=excluded.percent, points=excluded.points, source=excluded.source, created_at=datetime('now')`,
     exam.id, studentId, JSON.stringify(answers), g.correct, g.wrong, g.blank, g.percent, pts, source);
@@ -228,9 +239,15 @@ export function ensureLearningPath(sid) {
 // ---------- پیام‌رسان: مخاطبان مجاز (بدون نمایش شماره تلفن) ----------
 export function contactsOf(user) {
   const counselors = all(`SELECT id, full_name name, 'counselor' role, 'مشاور تحصیلی' sub FROM users WHERE center_id=? AND role='counselor' AND active=1 AND id<>? ORDER BY full_name`, user.center_id, user.id);
-  if (user.role === 'counselor') return all(`SELECT u.id,u.full_name name,u.role,s.avatar,CASE u.role WHEN 'student' THEN 'دانش‌آموز' WHEN 'teacher' THEN 'دبیر' WHEN 'manager' THEN 'مدیر کانون' WHEN 'counselor' THEN 'مشاور تحصیلی' ELSE 'ولی دانش‌آموز' END sub FROM users u LEFT JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.active=1 AND u.id<>? AND u.role IN ('student','teacher','manager','parent','counselor') ORDER BY u.full_name`, user.center_id, user.id);
+  // مشاور: کارکنان کانون + فقط دانش‌آموزان کلاس‌های تخصیص‌یافته و والدین آنان
+  if (user.role === 'counselor') return all(`SELECT u.id,u.full_name name,u.role,s.avatar,CASE u.role WHEN 'student' THEN 'دانش‌آموز' WHEN 'teacher' THEN 'دبیر' WHEN 'manager' THEN 'مدیر کانون' WHEN 'counselor' THEN 'مشاور تحصیلی' ELSE 'ولی دانش‌آموز' END sub FROM users u LEFT JOIN students s ON s.user_id=u.id
+    WHERE u.center_id=? AND u.active=1 AND u.id<>? AND (u.role IN ('teacher','manager','counselor')
+      OR (u.role='student' AND s.class_id IN (SELECT class_id FROM counselor_classes WHERE counselor_id=?))
+      OR (u.role='parent' AND u.id IN (SELECT pc.parent_id FROM parent_children pc JOIN students cs ON cs.user_id=pc.student_id WHERE cs.class_id IN (SELECT class_id FROM counselor_classes WHERE counselor_id=?))))
+    ORDER BY u.full_name`, user.center_id, user.id, user.id, user.id);
   if (user.role === 'student') {
     const s = get('SELECT class_id FROM students WHERE user_id=?', user.id);
+    const counselors = all(`SELECT u.id, u.full_name name, 'counselor' role, 'مشاور تحصیلی' sub FROM users u JOIN counselor_classes cc ON cc.counselor_id=u.id WHERE cc.class_id=? AND u.center_id=? AND u.role='counselor' AND u.active=1 ORDER BY u.full_name`, s?.class_id ?? -1, user.center_id);
     const teachers = all(`SELECT DISTINCT u.id, u.full_name name, 'teacher' role, GROUP_CONCAT(DISTINCT tc.subject) sub FROM teacher_classes tc JOIN users u ON u.id=tc.teacher_id WHERE tc.class_id=? GROUP BY u.id`, s?.class_id ?? -1);
     const mates = all(`SELECT u.id, u.full_name name, 'student' role, st.avatar, 'هم‌کلاسی' sub FROM students st JOIN users u ON u.id=st.user_id WHERE st.class_id=? AND u.id<>? AND u.active=1 ORDER BY u.full_name`, s?.class_id ?? -1, user.id);
     const managers = all(`SELECT id, full_name name, 'manager' role, 'مدیر کانون' sub FROM users WHERE center_id=? AND role='manager' AND active=1`, user.center_id);

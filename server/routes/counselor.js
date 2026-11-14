@@ -1,6 +1,7 @@
 // Independent counselor panel. Every read/write is scoped to an active student
-// in the signed-in counselor's center; meetings and private notes also to their author.
-import { all, get, run, tx } from '../db.js';
+// in the signed-in counselor's center whose class is assigned to that counselor
+// (counselor_classes); meetings and private notes also to their author.
+import { all, get, run, tx, audit } from '../db.js';
 import { fail, clampStr, toEnDigits, normalizeIranianMobile, hashPasswordAsync, ymd, addDays } from '../util.js';
 
 const C = { roles: ['counselor'] };
@@ -13,10 +14,12 @@ function daysOf(q) {
   if (![1, 7, 30, 90].includes(days)) fail(400, 'بازه زمانی نامعتبر است');
   return days;
 }
+// SQL condition limiting a students/users join (aliases u, s) to the counselor's assigned classes.
+export const ASSIGNED = `s.class_id IN (SELECT cc.class_id FROM counselor_classes cc JOIN classes ac ON ac.id=cc.class_id WHERE cc.counselor_id=? AND ac.center_id=u.center_id)`;
 function ownStudent(ctx, id) {
   const student = get(`SELECT u.id,u.full_name,u.mobile,s.grade,s.class_id,s.avatar,s.school,c.name class_name
     FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id
-    WHERE u.id=? AND u.center_id=? AND u.role='student' AND u.active=1`, Number(id), ctx.user.center_id);
+    WHERE u.id=? AND u.center_id=? AND u.role='student' AND u.active=1 AND ${ASSIGNED}`, Number(id), ctx.user.center_id, ctx.user.id);
   if (!student) fail(404, 'دانش‌آموز یافت نشد');
   return student;
 }
@@ -32,14 +35,15 @@ export function counselorSessionStart(value) {
   if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(s)) fail(400, 'منطقه زمانی جلسه را مشخص کنید');
   return new Date(s).toISOString();
 }
-function examRows(cid) {
+function examRows(ctx) {
+  const cid = ctx.user.center_id, me = ctx.user.id;
   return all(`SELECT er.id,er.student_id,e.id exam_id,e.title,e.kind,COALESCE(e.subject,'عمومی') subject,er.percent,COALESCE(e.exam_date,er.created_at) date,'native' source
-    FROM exam_results er JOIN exams e ON e.id=er.exam_id JOIN users u ON u.id=er.student_id
-    WHERE u.center_id=? AND e.center_id=? AND u.role='student' AND u.active=1
+    FROM exam_results er JOIN exams e ON e.id=er.exam_id JOIN users u ON u.id=er.student_id JOIN students s ON s.user_id=u.id
+    WHERE u.center_id=? AND e.center_id=? AND u.role='student' AND u.active=1 AND ${ASSIGNED}
     UNION ALL
     SELECT -r.id,r.student_id,r.exam_id,r.exam_title,'comprehensive','جامع',r.overall_percentage,r.created_at,'barpa'
-    FROM comprehensive_exam_reports r JOIN users u ON u.id=r.student_id
-    WHERE u.center_id=? AND r.center_id=? AND u.role='student' AND u.active=1 ORDER BY date`, cid, cid, cid, cid);
+    FROM comprehensive_exam_reports r JOIN users u ON u.id=r.student_id JOIN students s ON s.user_id=u.id
+    WHERE u.center_id=? AND r.center_id=? AND u.role='student' AND u.active=1 AND ${ASSIGNED} ORDER BY date`, cid, cid, me, cid, cid, me);
 }
 function aggregateExams(rows) {
   const groups = new Map();
@@ -54,9 +58,9 @@ function aggregateExams(rows) {
 function studentRows(ctx) {
   const students = all(`SELECT u.id,u.full_name,s.grade,s.class_id,s.avatar,c.name class_name FROM users u
     JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id
-    WHERE u.center_id=? AND u.role='student' AND u.active=1 ORDER BY s.grade,u.full_name`, ctx.user.center_id);
-  const study = new Map(all(`SELECT p.student_id,COUNT(*) pomodoros FROM pomodoros p JOIN users u ON u.id=p.student_id WHERE u.center_id=? AND u.active=1 GROUP BY p.student_id`, ctx.user.center_id).map((x) => [x.student_id, x.pomodoros]));
-  const results = examRows(ctx.user.center_id);
+    WHERE u.center_id=? AND u.role='student' AND u.active=1 AND ${ASSIGNED} ORDER BY s.grade,u.full_name`, ctx.user.center_id, ctx.user.id);
+  const study = new Map(all(`SELECT p.student_id,COUNT(*) pomodoros FROM pomodoros p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.active=1 AND ${ASSIGNED} GROUP BY p.student_id`, ctx.user.center_id, ctx.user.id).map((x) => [x.student_id, x.pomodoros]));
+  const results = examRows(ctx);
   return students.map((student) => {
     const exams = results.filter((e) => e.student_id === student.id && e.percent != null);
     const trend = exams.map((e) => e.percent).slice(-7), last = trend.at(-1), previous = trend.at(-2);
@@ -67,9 +71,9 @@ function studentRows(ctx) {
 }
 function studyData(ctx) {
   const days = daysOf(ctx.query), end = ymd(), start = addDays(end, 1 - days);
-  let where = "u.center_id=? AND u.role='student' AND u.active=1 AND p.date>=? AND p.date<=?", params = [ctx.user.center_id, start, end];
+  let where = `u.center_id=? AND u.role='student' AND u.active=1 AND ${ASSIGNED} AND p.date>=? AND p.date<=?`, params = [ctx.user.center_id, ctx.user.id, start, end];
   if (ctx.query.student_id) { ownStudent(ctx, ctx.query.student_id); where += ' AND p.student_id=?'; params.push(Number(ctx.query.student_id)); }
-  const rows = all(`SELECT p.* FROM pomodoros p JOIN users u ON u.id=p.student_id WHERE ${where} ORDER BY p.date,p.id`, ...params);
+  const rows = all(`SELECT p.* FROM pomodoros p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id WHERE ${where} ORDER BY p.date,p.id`, ...params);
   const trend = Array.from({ length: days }, (_, i) => {
     const date = addDays(start, i), daily = rows.filter((p) => p.date === date);
     return { date, pomodoros: count(daily), minutes: daily.reduce((sum, p) => sum + p.minutes, 0) };
@@ -86,7 +90,7 @@ function overallStats(students, study) {
 }
 function sessionRows(ctx) {
   return all(`SELECT cs.*,u.full_name,s.grade,s.avatar FROM counselor_sessions cs JOIN users u ON u.id=cs.student_id JOIN students s ON s.user_id=u.id
-    WHERE cs.counselor_id=? AND u.center_id=? AND u.role='student' AND u.active=1 ORDER BY cs.starts_at`, ctx.user.id, ctx.user.center_id);
+    WHERE cs.counselor_id=? AND u.center_id=? AND u.role='student' AND u.active=1 AND ${ASSIGNED} ORDER BY cs.starts_at`, ctx.user.id, ctx.user.center_id, ctx.user.id);
 }
 function managementCenter(ctx) {
   const cid = ctx.user.role === 'admin' ? Number(ctx.body.center_id || ctx.query.center_id) : ctx.user.center_id;
@@ -104,13 +108,13 @@ export default function register(r) {
   });
   r.get('/api/counselor/dashboard', C, (ctx) => {
     const students = studentRows(ctx), study = studyData(ctx);
-    return { stats: overallStats(students, study), students, trend: study.trend, recent_exams: aggregateExams(examRows(ctx.user.center_id)).slice(0, 5), attention: students.filter((s) => ['attention','risk'].includes(s.status)), sessions: sessionRows(ctx).filter((s) => s.status === 'scheduled').slice(0, 5) };
+    return { stats: overallStats(students, study), students, trend: study.trend, recent_exams: aggregateExams(examRows(ctx)).slice(0, 5), attention: students.filter((s) => ['attention','risk'].includes(s.status)), sessions: sessionRows(ctx).filter((s) => s.status === 'scheduled').slice(0, 5) };
   });
   r.get('/api/counselor/study', C, studyData);
   r.get('/api/counselor/pomodoros', C, studyData);
   r.get('/api/counselor/students/:id', C, (ctx) => {
     const student = ownStudent(ctx, ctx.params.id), summarized = studentRows(ctx).find((s) => s.id === student.id);
-    const exams = examRows(ctx.user.center_id).filter((e) => e.student_id === student.id);
+    const exams = examRows(ctx).filter((e) => e.student_id === student.id);
     const pomodoros = all('SELECT id,subject,minutes,date FROM pomodoros WHERE student_id=? ORDER BY date DESC,id DESC', student.id);
     const active_days = new Set(pomodoros.map((p) => p.date)).size;
     const subjects = [...new Set(exams.map((e) => e.subject))].map((subject) => ({ subject, average: avg(exams.filter((e) => e.subject === subject && e.percent != null).map((e) => e.percent)) }));
@@ -126,13 +130,13 @@ export default function register(r) {
     return { ok: true, id: Number(result.lastInsertRowid) };
   });
   r.get('/api/counselor/exams', C, (ctx) => {
-    let exams = aggregateExams(examRows(ctx.user.center_id));
+    let exams = aggregateExams(examRows(ctx));
     if (ctx.query.kind && ctx.query.kind !== 'all') exams = exams.filter((e) => e.kind === ctx.query.kind);
     return exams;
   });
   r.get('/api/counselor/reports', C, (ctx) => {
     const students = studentRows(ctx), study = studyData(ctx);
-    const studyByGrade = new Map(all(`SELECT s.grade,COUNT(*) pomodoros FROM pomodoros p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1 AND p.date>=? AND p.date<=? GROUP BY s.grade`, ctx.user.center_id,study.start,study.end).map((row) => [row.grade,row.pomodoros]));
+    const studyByGrade = new Map(all(`SELECT s.grade,COUNT(*) pomodoros FROM pomodoros p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1 AND ${ASSIGNED} AND p.date>=? AND p.date<=? GROUP BY s.grade`, ctx.user.center_id,ctx.user.id,study.start,study.end).map((row) => [row.grade,row.pomodoros]));
     const grades = [...new Set(students.map((s) => s.grade))].map((grade) => {
       const rows = students.filter((s) => s.grade === grade);
       return { grade, students: rows.length, pomodoros: studyByGrade.get(grade) || 0, average: avg(rows.filter((s) => s.exam_average != null).map((s) => s.exam_average)), progress: avg(rows.filter((s) => s.progress != null).map((s) => s.progress)) };
@@ -140,7 +144,7 @@ export default function register(r) {
     return { stats: overallStats(students, study), grades, students, trend: study.trend };
   });
   r.get('/api/counselor/plans', C, (ctx) => {
-    const params = [ctx.user.center_id], filters = ["u.center_id=?", "u.active=1", "u.role='student'"];
+    const params = [ctx.user.center_id, ctx.user.id], filters = ["u.center_id=?", ASSIGNED, "u.active=1", "u.role='student'"];
     if (ctx.query.student_id) { ownStudent(ctx, ctx.query.student_id); filters.push('p.student_id=?'); params.push(Number(ctx.query.student_id)); }
     if (ctx.query.week_start) { filters.push('p.week_start=?'); params.push(dateOnly(ctx.query.week_start)); }
     return all(`SELECT p.*,u.full_name,s.grade FROM counselor_plans p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id WHERE ${filters.join(' AND ')} ORDER BY p.week_start DESC,u.full_name`, ...params)
@@ -182,7 +186,33 @@ export default function register(r) {
   });
 
   // Managers can provision counselors in their own center. Admins must select one.
-  r.get('/api/manager/counselors', M, (ctx) => all(`SELECT id,full_name,username,mobile,active,created_at FROM users WHERE center_id=? AND role='counselor' ORDER BY full_name`, managementCenter(ctx)));
+  r.get('/api/manager/counselors', M, (ctx) => {
+    const cid = managementCenter(ctx);
+    const assigned = all(`SELECT cc.counselor_id,c.id,c.name,c.grade,(SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1) students
+      FROM counselor_classes cc JOIN classes c ON c.id=cc.class_id WHERE cc.center_id=? AND c.center_id=? ORDER BY c.grade,c.name`, cid, cid);
+    return all(`SELECT id,full_name,username,mobile,active,created_at FROM users WHERE center_id=? AND role='counselor' ORDER BY full_name`, cid).map((c) => {
+      const classes = assigned.filter((a) => a.counselor_id === c.id).map(({ counselor_id, ...cls }) => cls);
+      return { ...c, classes, students: classes.reduce((n, x) => n + x.students, 0) };
+    });
+  });
+  // Replace the full set of classes assigned to a counselor (all classes must belong to the same center).
+  r.put('/api/manager/counselors/:id/classes', M, (ctx) => {
+    const cid = managementCenter(ctx), id = Number(ctx.params.id);
+    if (!get("SELECT id FROM users WHERE id=? AND center_id=? AND role='counselor'", id, cid)) fail(404, 'مشاور یافت نشد');
+    const ids = ctx.body.class_ids;
+    if (!Array.isArray(ids) || ids.length > 500) fail(400, 'فهرست کلاس‌ها نامعتبر است');
+    const wanted = [...new Set(ids.map(Number))];
+    if (wanted.some((x) => !Number.isInteger(x) || x <= 0)) fail(400, 'شناسهٔ کلاس نامعتبر است');
+    for (const classId of wanted) if (!get('SELECT id FROM classes WHERE id=? AND center_id=?', classId, cid)) fail(400, 'کلاس انتخاب‌شده متعلق به این کانون نیست');
+    return tx(() => {
+      const before = all('SELECT class_id FROM counselor_classes WHERE counselor_id=?', id).map((x) => x.class_id);
+      const added = wanted.filter((x) => !before.includes(x)), removed = before.filter((x) => !wanted.includes(x));
+      for (const classId of removed) run('DELETE FROM counselor_classes WHERE counselor_id=? AND class_id=?', id, classId);
+      for (const classId of added) run('INSERT INTO counselor_classes(center_id,counselor_id,class_id,assigned_by) VALUES (?,?,?,?)', cid, id, classId, ctx.user.id);
+      if (added.length || removed.length) audit(cid, ctx.user.id, 'counselor.classes', 'user', id, { added, removed });
+      return { ok: true, added: added.length, removed: removed.length };
+    });
+  });
   r.post('/api/manager/counselors', M, async (ctx) => {
     const cid = managementCenter(ctx), b = ctx.body, username = toEnDigits(clampStr(b.username, 40)).toLowerCase(), name = clampStr(b.full_name, 80);
     if (!name || !/^[a-z0-9_.]{3,40}$/.test(username)) fail(400, 'نام و نام کاربری لاتین (حداقل سه حرف) لازم است');

@@ -692,7 +692,45 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     const cols = database.prepare('PRAGMA table_info(centers)').all().map((c) => c.name);
     if (!cols.includes('subjects')) database.exec('ALTER TABLE centers ADD COLUMN subjects TEXT');
   },
+  // نسخه ۱۹: تخصیص کلاس به مشاور و لاگ ممیزی عملیات حساس.
+  // برای جلوگیری از قطع ناگهانی کار، هر مشاورِ موجود به همهٔ کلاس‌های فعلی کانونش تخصیص می‌یابد
+  // (همان دسترسی قبلی، اکنون صریح و قابل ویرایش). کلاس‌های جدید خودکار تخصیص نمی‌یابند.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER REFERENCES centers(id) ON DELETE CASCADE,
+        actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        action TEXT NOT NULL,
+        entity TEXT NOT NULL,
+        entity_id TEXT,
+        detail_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS ix_audit_center ON audit_log(center_id, id);
+      CREATE INDEX IF NOT EXISTS ix_audit_entity ON audit_log(entity, entity_id);
+      CREATE TABLE IF NOT EXISTS counselor_classes (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        counselor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        assigned_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(counselor_id, class_id)
+      );
+      CREATE INDEX IF NOT EXISTS ix_counselor_classes_class ON counselor_classes(class_id);
+      INSERT OR IGNORE INTO counselor_classes(center_id, counselor_id, class_id)
+        SELECT u.center_id, u.id, c.id FROM users u JOIN classes c ON c.center_id = u.center_id
+        WHERE u.role = 'counselor' AND u.center_id IS NOT NULL;
+    `);
+  },
 ];
+
+// ثبت رویداد در لاگ ممیزی (در همان تراکنش فراخواننده اجرا می‌شود)
+export function audit(centerId, actorId, action, entity, entityId, detail = {}) {
+  run('INSERT INTO audit_log(center_id,actor_id,action,entity,entity_id,detail_json) VALUES (?,?,?,?,?,?)',
+    centerId ?? null, actorId ?? null, action, entity, entityId == null ? null : String(entityId), JSON.stringify(detail));
+}
 
 export function migrate(database = db) {
   let version = Number(database.prepare('PRAGMA user_version').get()?.user_version || 0);

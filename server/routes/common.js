@@ -305,7 +305,10 @@ export default function register(r) {
 
   // ---------- مشاور تحصیلی کانون (Option 3) ----------
   r.get('/api/counselor', { allowLocked: true }, (ctx) => {
-    const c = get(`SELECT id, full_name, role FROM users WHERE center_id=? AND role IN ('counselor','manager') AND active=1 ORDER BY CASE role WHEN 'counselor' THEN 0 ELSE 1 END, id ASC LIMIT 1`, ctx.user.center_id);
+    // دانش‌آموز: مشاورِ تخصیص‌یافته به کلاس خودش؛ در نبود آن، مدیر کانون (بدون امکان درخواست جلسه)
+    const c = (ctx.user.role === 'student' ? get(`SELECT u.id, u.full_name, u.role FROM users u JOIN counselor_classes cc ON cc.counselor_id=u.id JOIN students s ON s.class_id=cc.class_id
+        WHERE s.user_id=? AND u.center_id=? AND u.role='counselor' AND u.active=1 ORDER BY u.id LIMIT 1`, ctx.user.id, ctx.user.center_id) : null)
+      || get(`SELECT id, full_name, role FROM users WHERE center_id=? AND role='manager' AND active=1 ORDER BY id ASC LIMIT 1`, ctx.user.center_id);
     if (!c) return { id: null };
     return {
       id: c.id,

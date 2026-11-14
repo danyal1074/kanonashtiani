@@ -30,7 +30,8 @@ const backupPath = path.join(tmpDir, 'backup.db');
 const mainDbPath = path.join(process.cwd(), 'data', 'roshd.db');
 
 if (fs.existsSync(mainDbPath)) {
-  fs.copyFileSync(mainDbPath, backupPath);
+  // VACUUM INTO captures committed pages still in the WAL file; a plain file copy can miss them.
+  { const src = new DatabaseSync(mainDbPath); src.exec(`VACUUM INTO '${backupPath.replaceAll("'", "''")}'`); src.close(); }
   const bakDb = new DatabaseSync(backupPath);
   
   // قبل از مهاجرت: ثبت آمار داده‌ها

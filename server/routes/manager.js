@@ -4,7 +4,7 @@ import path from 'node:path';
 import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
 import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
 import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
-import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
+import { feeStatus, announcementAudience, saveExamResult, omrMeta, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
 import { syncStudentsLater, removeStudentsLater, classroomEnabled, pendingRemovals, fullSync, ClassroomError } from '../classroom.js';
@@ -749,7 +749,7 @@ export default function register(r) {
     if (!st || st.grade !== e.grade) fail(400, 'داوطلب نامعتبر است');
     const n = JSON.parse(e.questions).length;
     const answers = Array.from({ length: n }, (_, i) => { const v = ctx.body.answers?.[i]; return Number.isInteger(v) && v >= 0 && v <= 3 ? v : null; });
-    return saveExamResult(e, st.id, answers, 'scan');
+    return saveExamResult(e, st.id, answers, 'scan', { actorId: ctx.user.id, meta: omrMeta(ctx.body.omr, n) });
   });
   r.del('/api/manager/comprehensive/:id', M, (ctx) => {
     const e = ownComp(ctx);
@@ -973,7 +973,7 @@ export default function register(r) {
     `, ctx.user.center_id);
   });
 
-  // ---------- نمرات مستمر دستی کلاسی برای مدیر (Option 8) ----------
+  // ---------- بایگانی فقط‌خواندنی نمرات مستمر قبلی (در ارزشیابی، رتبه و کارنامه استفاده نمی‌شود) ----------
   r.get('/api/manager/manual-scores', M, (ctx) => {
     return all(`
       SELECT m.*, u.full_name student_name, t.full_name teacher_name, c.name class_name

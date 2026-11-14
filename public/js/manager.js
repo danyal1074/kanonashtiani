@@ -20,7 +20,7 @@ export const nav = (me) => [
   { path: '/sms-outbox', icon: 'message', label: 'صندوق پیامک' },
   { path: '/barpa', icon: 'trophy', label: 'کارنامه‌های برپا' },
   { path: '/hoosh-studio', icon: 'sparkles', label: 'استودیوی هوش کمپلکس' },
-  { path: '/manual-scores', icon: 'clipboard', label: 'نمرات مستمر کلاسی' },
+  { path: '/manual-scores', icon: 'clipboard', label: 'بایگانی نمرات مستمر' },
   { path: '/att-log', icon: 'user-check', label: 'لاگ تغییر حضور' },
   { path: '/comprehensive', icon: 'trophy', label: 'آزمون جامع کانون' },
   { path: '/performance', icon: 'trend', label: 'عملکرد دانش‌آموزان' },
@@ -646,7 +646,7 @@ async function compDetail(el, { id }, me) {
   const drawRank = (rs) => { $('#rank', el).innerHTML = rs.map((r) => `<tr><td><b><span class="badge ${r.rank <= 3 ? 'yellow' : 'gray'}" style="min-width:28px;justify-content:center">${fa(r.rank)}</span></b></td><td>${esc(r.full_name)}</td><td>${esc(r.class_name || '')}</td><td><span class="pos">${fa(r.correct)}</span> / <span class="neg">${fa(r.wrong)}</span> / ${fa(r.blank)}</td><td><b>${pct(r.percent)}</b></td><td class="tiny">${timeAgo(r.created_at)}</td></tr>`).join('') || `<tr><td colspan="6">${empty('clock', 'هنوز پاسخ‌برگی تصحیح نشده؛ با «اسکن و تصحیح» شروع کنید')}</td></tr>`; };
   drawRank(e.results);
   const iv = setInterval(async () => { if (!document.body.contains(el)) return clearInterval(iv); try { const x = await api(`/api/manager/comprehensive/${id}`); drawRank(x.results); } catch { clearInterval(iv); } }, 8000);
-  $('#scan').onclick = () => openScanner({ exam: e, students: e.students.map((s) => ({ ...s, done: done.has(s.id) })), onSave: (sid, answers) => post(`/api/manager/comprehensive/${id}/result`, { student_id: sid, answers }) }).then(() => compDetail(el, { id }, me));
+  $('#scan').onclick = () => openScanner({ exam: e, students: e.students.map((s) => ({ ...s, done: done.has(s.id) })), onSave: (sid, answers, omr) => post(`/api/manager/comprehensive/${id}/result`, { student_id: sid, answers, omr }) }).then(() => compDetail(el, { id }, me));
   $('#sheet').onclick = () => printSheet({ title: `${e.title} - ${me.center.name}`, subtitle: `پایه ${gradeName(e.grade)} • ${fa(e.questions.length)} سؤال`, count: e.questions.length });
   $('#cards').onclick = () => printCards(e, me);
 }
@@ -707,9 +707,24 @@ async function shopAdmin(el, _p, me) {
 async function counselors(el, params, me) {
   setHead('مدیریت مشاوران', 'ساخت حساب مشاور تحصیلی برای دانش‌آموزان کانون', '<button class="btn sm" id="newCounselor">مشاور جدید</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllCo" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ مشاوران…</button></div></details>');
   $('#delAllCo').onclick = () => deleteAll('counselors', 'مشاوران', () => counselors(el, params, me));
-  const data = await api('/api/manager/counselors');
+  const [data, meta] = await Promise.all([api('/api/manager/counselors'), api('/api/manager/meta')]);
   const list = Array.isArray(data) ? data : data.counselors;
-  el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>مشاور</th><th>نام کاربری</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>${list.map(c => `<tr><td><div class="row">${nameAvatar(c.full_name)}<b>${esc(c.full_name)}</b></div></td><td><bdi>${esc(c.username || c.national_code || '—')}</bdi></td><td><span class="badge ${c.active ? 'green' : 'red'}">${c.active ? 'فعال' : 'غیرفعال'}</span></td><td><button class="btn sm ghost" data-edit-counselor="${c.id}">${icon('edit')} ویرایش</button></td></tr>`).join('') || `<tr><td colspan="4">${empty('users', 'هنوز مشاوری ثبت نشده؛ با «مشاور جدید» حساب بسازید.')}</td></tr>`}</tbody></table></div></div>`;
+  const covered = new Set(list.flatMap(c => (c.classes || []).map(x => x.id)));
+  const uncovered = meta.classes.filter(c => !covered.has(c.id));
+  const classChips = c => (c.classes || []).length ? c.classes.map(x => `<span class="badge blue">${esc(gradeName(x.grade))} • ${esc(x.name)}</span>`).join(' ') : '<span class="badge orange">بدون کلاس — به هیچ دانش‌آموزی دسترسی ندارد</span>';
+  el.innerHTML = `${uncovered.length ? `<div class="card" role="status" style="margin-bottom:12px">${fa(uncovered.length)} کلاس هنوز مشاور ندارد: ${uncovered.map(c => esc(`${gradeName(c.grade)} ${c.name}`)).join('، ')}</div>` : ''}
+    <div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>مشاور</th><th>نام کاربری</th><th>کلاس‌های تحت پوشش</th><th>دانش‌آموزان</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>${list.map(c => `<tr><td><div class="row">${nameAvatar(c.full_name)}<b>${esc(c.full_name)}</b></div></td><td><bdi>${esc(c.username || c.national_code || '—')}</bdi></td><td>${classChips(c)}</td><td>${fa(c.students || 0)}</td><td><span class="badge ${c.active ? 'green' : 'red'}">${c.active ? 'فعال' : 'غیرفعال'}</span></td><td><div class="row"><button class="btn sm" data-assign-counselor="${c.id}">${icon('users')} تخصیص کلاس</button><button class="btn sm ghost" data-edit-counselor="${c.id}">${icon('edit')} ویرایش</button></div></td></tr>`).join('') || `<tr><td colspan="6">${empty('users', 'هنوز مشاوری ثبت نشده؛ با «مشاور جدید» حساب بسازید.')}</td></tr>`}</tbody></table></div></div>`;
+  const assign = c => modal({
+    title: `کلاس‌های ${c.full_name}`,
+    body: meta.classes.length ? `<form class="stack" id="ccForm"><p class="small muted">مشاور فقط دانش‌آموزان کلاس‌های انتخاب‌شده را می‌بیند. یادداشت‌ها و جلسات قبلی حذف نمی‌شوند.</p>${meta.classes.map(x => `<label class="row"><input type="checkbox" name="cls" value="${x.id}" ${(c.classes || []).some(y => y.id === x.id) ? 'checked' : ''}> ${esc(gradeName(x.grade))} • ${esc(x.name)} <span class="tiny muted">(${fa(x.students)} دانش‌آموز${list.some(o => o.id !== c.id && (o.classes || []).some(y => y.id === x.id)) ? ' • مشاور دیگری هم دارد' : ''})</span></label>`).join('')}</form>` : empty('school', 'ابتدا از «معلمان و کلاس‌ها» کلاس بسازید.'),
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, ...(meta.classes.length ? [{ label: 'ذخیره تخصیص', onClick: async m => {
+      const ids = [...m.querySelectorAll('input[name=cls]:checked')].map(i => Number(i.value));
+      const r = await put(`/api/manager/counselors/${c.id}/classes`, { class_ids: ids });
+      toast(r.added || r.removed ? `تخصیص به‌روز شد (${fa(r.added)} افزوده، ${fa(r.removed)} برداشته)` : 'تغییری ایجاد نشد', 'ok');
+      await counselors(el, params, me);
+    } }] : [])],
+  });
+  on(el, 'click', '[data-assign-counselor]', (_e, b) => assign(list.find(c => c.id === Number(b.dataset.assignCounselor))));
   const edit = (c = {}) => modal({
     title: c.id ? 'ویرایش مشاور' : 'مشاور جدید',
     body: `<form class="stack" id="counselorForm"><div class="field"><label>نام و نام خانوادگی</label><input class="input" name="full_name" required maxlength="80" value="${esc(c.full_name || '')}"></div><div class="field"><label>نام کاربری</label><input class="input ltr" name="username" autocomplete="off" required maxlength="40" pattern="[a-zA-Z0-9_.]{3,40}" value="${esc(c.username || '')}" ${c.id ? 'readonly' : ''}></div><div class="field"><label>${c.id ? 'رمز جدید (برای حفظ رمز خالی بگذارید)' : 'رمز عبور (حداقل ۶ نویسه)'}</label><input class="input ltr" type="password" name="password" autocomplete="new-password" minlength="6" ${c.id ? '' : 'required'}></div><div class="field"><label>وضعیت حساب</label><select class="input" name="active"><option value="1">فعال</option><option value="0" ${c.active === 0 ? 'selected' : ''}>غیرفعال</option></select></div></form>`,

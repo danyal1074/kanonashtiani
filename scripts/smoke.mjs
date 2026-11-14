@@ -380,9 +380,10 @@ const myOverview = (await call(teacherFresh.ck, 'GET', '/api/teacher/overview'))
 const myClass = myOverview.classes[0];
 const myAtt = (await call(teacherFresh.ck, 'GET', `/api/teacher/attendance?class_id=${myClass.id}`)).data;
 const testStuId = myAtt.students[0].id;
+// سیاست جدید: نمرات مستمر/شفاهی بخشی از ارزشیابی نیست؛ ثبت و حذف آن غیرفعال (410) است.
 const newScore = await call(teacherFresh.ck, 'POST', '/api/teacher/manual-scores', { class_id: myClass.id, subject: 'ریاضی', title: 'پرسش مستمر', student_id: testStuId, score: 19 });
-const delScore = await call(teacherFresh.ck, 'DELETE', `/api/teacher/manual-scores/${newScore.data.ids[0]}`);
-check('بند ۱۵: دبیر نمره ثبت‌شده خود را با موفقیت حذف می‌کند', delScore.status === 200 && delScore.data.ok);
+const delScore = await call(teacherFresh.ck, 'DELETE', '/api/teacher/manual-scores/1');
+check('بند ۱۵: ثبت و حذف نمرهٔ مستمر بازنشسته است (410)', newScore.status === 410 && delScore.status === 410);
 
 // ==================== ارزیابی ۸ بند اصلاحات مرحله دوم ====================
 

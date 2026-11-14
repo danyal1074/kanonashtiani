@@ -20,6 +20,10 @@
     "review": "node scripts/review.mjs",
     "test:counselor": "node scripts/test-counselor.mjs",
     "test:classroom": "node scripts/test-classroom.mjs",
+    "test:platform": "node scripts/test-platform.mjs",
+    "test:migrations": "node scripts/test-migrations.mjs",
+    "test:profile-photo": "node --experimental-vm-modules scripts/test-profile-photo.mjs",
+    "test": "node scripts/test-migrations.mjs && node scripts/test-counselor.mjs && node scripts/test-platform.mjs && node scripts/test-classroom.mjs && node --experimental-vm-modules scripts/test-profile-photo.mjs",
     "sync:classroom": "node scripts/sync-classroom.mjs"
   }
 }

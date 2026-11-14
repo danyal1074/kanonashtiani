@@ -72,6 +72,22 @@ function migrationPreservesData() {
   } finally { old.close(); }
 }
 
+// v19 backfill: existing counselors keep exactly the classes of their own center, explicitly.
+function counselorBackfill() {
+  const d = new DatabaseSync(':memory:');
+  try {
+    const target = migrations.length;
+    const v19 = migrations.findIndex((m) => String(m).includes('counselor_classes'));
+    assert.ok(v19 > 0);
+    for (let i = 0; i < v19; i++) { d.exec('BEGIN'); migrations[i](d); d.exec(`PRAGMA user_version=${i + 1}; COMMIT`); }
+    d.exec(`INSERT INTO centers(id,name,slug) VALUES(1,'A','a'),(2,'B','b');
+      INSERT INTO classes(id,center_id,grade,name) VALUES(1,1,7,'x'),(2,1,8,'y'),(3,2,7,'z');
+      INSERT INTO users(id,center_id,role,username,pass_hash,full_name) VALUES(5,1,'counselor','c','h','C'),(6,1,'teacher','t','h','T');`);
+    assert.equal(migrate(d), target);
+    assert.deepEqual(d.prepare('SELECT counselor_id,class_id FROM counselor_classes ORDER BY class_id').all().map((r) => ({ ...r })), [{ counselor_id: 5, class_id: 1 }, { counselor_id: 5, class_id: 2 }]);
+  } finally { d.close(); }
+}
+
 function fixture() {
   const insertUser = db.prepare('INSERT INTO users(id,center_id,role,username,pass_hash,full_name,active) VALUES(?,?,?,?,?,?,?)');
   db.exec(`INSERT INTO centers(id,name,slug) VALUES(1,'کانون آشتیانی','ashtiani'),(2,'Other center','other'),(3,'Empty center','empty');
@@ -90,6 +106,7 @@ function fixture() {
     [61, 1, 'teacher', 't-one', 'Teacher', 1],
   ]) insertUser.run(id, center, role, username, passHash, name, active);
   db.exec(`INSERT INTO teacher_classes(teacher_id,class_id,subject) VALUES(61,1,'ریاضی');
+    INSERT INTO counselor_classes(center_id,counselor_id,class_id) VALUES(1,31,1),(2,32,2);
     INSERT INTO students(user_id,grade,class_id,avatar) VALUES(11,7,1,'star'),(12,7,1,'book'),(13,7,1,'star'),(21,8,2,'star');
     INSERT INTO exams(id,center_id,title,kind,grade,class_id,questions,exam_date) VALUES
       (1,1,'آزمون ریاضی','online',7,1,'[]','2026-11-01'),
@@ -107,6 +124,7 @@ function fixture() {
 
 try {
   test('Upgrade preserves users and dependent rows, constraints and foreign keys', migrationPreservesData);
+  test('Upgrade assigns existing counselors only to their own center classes', counselorBackfill);
   fixture();
   const router = new Router();
   [registerCommon, registerCounselor, registerAdmin, registerStudent, registerTeacher, registerManager].forEach(register => register(router));
@@ -338,6 +356,42 @@ try {
   const newCounselor = managedCounselors.data.find(row => row.username === 'new_counselor');
   test('Provisioned counselor appears in center management', () => assert.ok(newCounselor));
   const newlySignedInCounselor = await login('counselor', 'new_counselor');
+  const unassignedList = await get(newlySignedInCounselor, '/api/counselor/students');
+  const unassignedChecks = await Promise.all(['/students/11', '/pomodoros?student_id=11', '/plans?student_id=11'].map(uri => get(newlySignedInCounselor, '/api/counselor' + uri)));
+  const unassignedWrites = await Promise.all([
+    request(newlySignedInCounselor, 'POST', '/api/counselor/students/11/notes', { body: 'x' }),
+    request(newlySignedInCounselor, 'PUT', '/api/counselor/plans/11', planBody),
+    request(newlySignedInCounselor, 'POST', '/api/counselor/sessions', sessionBody),
+  ]);
+  const unassignedDash = await get(newlySignedInCounselor, '/api/counselor/dashboard');
+  const unassignedContacts = await get(newlySignedInCounselor, '/api/messages/contacts');
+  test('Counselor without assigned classes cannot read or write same-center students (IDOR)', () => {
+    assert.deepEqual(unassignedList.data, []);
+    for (const r of unassignedChecks) assert.equal(r.status, 404, JSON.stringify(r.data));
+    for (const r of unassignedWrites) assert.equal(r.status, 404, JSON.stringify(r.data));
+    assert.equal(unassignedDash.data.stats.students, 0);
+    assert.equal(unassignedDash.data.stats.exam_average, null);
+    assert.ok(!unassignedContacts.data.some(row => row.role === 'student'));
+  });
+  const foreignClassAssign = await request(manager, 'PUT', `/api/manager/counselors/${newCounselor.id}/classes`, { class_ids: [2] });
+  const crossCenterAssign = await request(otherManager, 'PUT', `/api/manager/counselors/${newCounselor.id}/classes`, { class_ids: [2] });
+  const counselorAssignSelf = await request(newlySignedInCounselor, 'PUT', `/api/manager/counselors/${newCounselor.id}/classes`, { class_ids: [1] });
+  test('Class assignment rejects foreign classes, foreign managers and non-managers', () => {
+    assert.equal(foreignClassAssign.status, 400);
+    assert.equal(crossCenterAssign.status, 404);
+    assert.equal(counselorAssignSelf.status, 403);
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM counselor_classes WHERE counselor_id=?').get(newCounselor.id).n, 0);
+  });
+  const assign = await request(manager, 'PUT', `/api/manager/counselors/${newCounselor.id}/classes`, { class_ids: [1, 1] });
+  const afterAssign = await get(manager, '/api/manager/counselors');
+  test('Manager assigns a class; workload and audit log are recorded', () => {
+    assert.equal(assign.status, 200, JSON.stringify(assign.data));
+    const row = afterAssign.data.find(c => c.id === newCounselor.id);
+    assert.deepEqual(row.classes.map(c => c.id), [1]);
+    assert.equal(row.students, 2); // the inactive student in class 1 is not counted
+    const log = db.prepare("SELECT * FROM audit_log WHERE action='counselor.classes' AND entity_id=?").get(String(newCounselor.id));
+    assert.deepEqual(JSON.parse(log.detail_json), { added: [1], removed: [] });
+  });
   const colleagueDetail = await get(newlySignedInCounselor, '/api/counselor/students/11');
   const colleagueSessions = await get(newlySignedInCounselor, '/api/counselor/sessions');
   test('Another counselor in same center cannot see private notes or meetings', () => {

@@ -171,7 +171,7 @@ async function examDetail(el, { id }) {
     <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('award', { size: 18 })}</span>رتبه‌بندی و نتایج</div><div class="table-wrap"><table class="table"><thead><tr><th>رتبه</th><th>دانش‌آموز</th><th>کلاس</th><th>درست/غلط/نزده</th><th>درصد</th><th>روش</th></tr></thead><tbody>
     ${e.results.map((r) => `<tr><td><b><span class="badge ${r.rank <= 3 ? 'yellow' : 'gray'}" style="min-width:28px;justify-content:center">${fa(r.rank)}</span></b></td><td>${esc(r.full_name)}</td><td>${esc(r.class_name || '')}</td><td><span class="pos">${fa(r.correct)}</span> / <span class="neg">${fa(r.wrong)}</span> / ${fa(r.blank)}</td><td><b>${pct(r.percent)}</b></td><td><span class="badge ${r.source === 'online' ? 'blue' : 'orange'}">${r.source === 'online' ? 'آنلاین' : 'اسکن'}</span></td></tr>`).join('') || `<tr><td colspan="6">${empty('clock', 'هنوز نتیجه‌ای ثبت نشده')}</td></tr>`}</tbody></table></div></div>
     <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('clock', { size: 18 })}</span>بدون نتیجه (${fa(e.students.length - done.size)})</div><div class="chips">${e.students.filter((s) => !done.has(s.id)).map((s) => `<button class="chip" data-scan="${s.id}">${esc(s.full_name)}</button>`).join('') || '—'}</div></div>`;
-  const scanner = (pre) => openScanner({ exam: e, students: e.students.map((s) => ({ ...s, done: done.has(s.id) })), preselect: pre, onSave: (sid, answers) => post(`/api/teacher/exams/${id}/result`, { student_id: sid, answers }) }).then(() => examDetail(el, { id }));
+  const scanner = (pre) => openScanner({ exam: e, students: e.students.map((s) => ({ ...s, done: done.has(s.id) })), preselect: pre, onSave: (sid, answers, omr) => post(`/api/teacher/exams/${id}/result`, { student_id: sid, answers, omr }) }).then(() => examDetail(el, { id }));
   $('#scan').onclick = () => scanner();
   on(el, 'click', '[data-scan]', (ev, b) => scanner(Number(b.dataset.scan)));
   $('#printSheet').onclick = () => printSheet({ title: e.title, subtitle: `پایه ${gradeName(e.grade)} • ${fa(e.questions.length)} سؤال`, count: e.questions.length });
@@ -298,7 +298,6 @@ export const routes = [
   { path: '/students/:id', view: studentDetail },
   { path: '/plans', view: plans },
   { path: '/materials', view: materials },
-  { path: '/manual-scores', view: L.teacherScores },
   { path: '/att-log', view: L.attLog },
   { path: '/messages', view: messagesView },
   { path: '/messages/:id', view: messagesView },

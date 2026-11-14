@@ -49,7 +49,7 @@ export const nav = (me) => [
   { path: '/games', icon: 'gamepad', label: 'بازی و داستان' },
   { path: '/self-exams', icon: 'target', label: 'آزمون خودسنجی' },
   { path: '/roadmap', icon: 'award', label: 'نقشه راه رشد' },
-  { path: '/records', icon: 'receipt', label: 'نمرات و فاکتورها' },
+  { path: '/records', icon: 'receipt', label: 'فاکتورها و کارنامه' },
   { path: '/counselor', icon: 'message', label: 'مشاور تحصیلی' },
   { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
   { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌ها', open: true },
