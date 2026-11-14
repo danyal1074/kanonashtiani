@@ -6,6 +6,7 @@ import { messagesView, accountView } from './common.js';
 import { studentDetailHtml } from './teacher.js';
 import { managerTimetable, KINDS, kindOf } from './timetable.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
+import { financeView } from './finance.js';
 
 export const nav = (me) => [
   { path: '/home', icon: 'chart', label: 'داشبورد' },
@@ -17,6 +18,7 @@ export const nav = (me) => [
   { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌رسانی' },
   { path: '/accounting', icon: 'wallet', label: 'حسابداری' },
   { path: '/invoices', icon: 'receipt', label: 'فاکتورهای دوره‌ای' },
+  { path: '/finance', icon: 'wallet', label: 'حساب دانش‌آموزان و بوفه' },
   { path: '/sms-outbox', icon: 'message', label: 'صندوق پیامک' },
   { path: '/barpa', icon: 'trophy', label: 'کارنامه‌های برپا' },
   { path: '/hoosh-studio', icon: 'sparkles', label: 'استودیوی هوش کمپلکس' },
@@ -1075,6 +1077,7 @@ export const routes = [
   { path: '/announcements', view: announcements },
   { path: '/accounting', view: (el, p, me) => (isNewLook() ? accounting : accountingClassic)(el, p, me) },
   { path: '/invoices', view: L.mgrInvoices },
+  { path: '/finance', view: financeView },
   { path: '/sms-outbox', view: L.smsOutbox },
   { path: '/barpa', view: L.mgrBarpa },
   { path: '/barpa/:id', view: L.barpaView },

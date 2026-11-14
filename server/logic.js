@@ -80,10 +80,11 @@ export function feeStatus(sid) {
 
 export function recalcInvoice(invoiceId) {
   if (!invoiceId) return null;
-  const inv = get('SELECT id, amount FROM fee_invoices WHERE id=?', invoiceId);
+  const inv = get('SELECT id, amount, status FROM fee_invoices WHERE id=?', invoiceId);
   if (!inv) return null;
   const approvedSum = get("SELECT COALESCE(SUM(amount), 0) s FROM payments WHERE invoice_id=? AND status='approved'", invoiceId)?.s || 0;
-  const status = approvedSum >= inv.amount ? 'paid' : (approvedSum > 0 ? 'partial' : 'issued');
+  // فاکتور باطل‌شده باطل می‌ماند؛ «پرداخت مازاد» (بیش از مبلغ) به‌صورت paid با مانده منفی گزارش می‌شود
+  const status = inv.status === 'void' ? 'void' : approvedSum >= inv.amount ? 'paid' : (approvedSum > 0 ? 'partial' : 'issued');
   run('UPDATE fee_invoices SET paid=?, status=? WHERE id=?', approvedSum, status, inv.id);
   return { id: inv.id, paid: approvedSum, status, remaining: Math.max(0, inv.amount - approvedSum) };
 }

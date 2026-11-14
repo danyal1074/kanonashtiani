@@ -724,6 +724,63 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
         WHERE u.role = 'counselor' AND u.center_id IS NOT NULL;
     `);
   },
+  // نسخه ۲۰: حساب یکپارچهٔ مالی دانش‌آموز روی همان fee_invoices/payments/transactions.
+  // واحد پول همهٔ مبالغ: «تومان» به‌صورت عدد صحیح (همان واحد موجود در fee_settings و payments).
+  // - fee_invoice_lines: اقلام فاکتور (شهریه، بوفه، خدمات، تخفیف منفی، تعدیل ±). جمع اقلام = مبلغ فاکتور.
+  // - charge_items: کاتالوگ قیمت بوفه و خدمات (دفتر حساب جدیدی نیست).
+  // - idempotency_keys: جلوگیری از ثبت تکراری خرید/هزینه با تلاش مجدد یا دوبار کلیک.
+  // فاکتورهای قبلی هرکدام یک قلم معادل مبلغ خود دریافت می‌کنند؛ مبالغ و پرداخت‌ها تغییر نمی‌کند.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS fee_invoice_lines (
+        id INTEGER PRIMARY KEY,
+        invoice_id INTEGER NOT NULL REFERENCES fee_invoices(id) ON DELETE CASCADE,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('tuition','buffet','service','other','discount','adjustment')),
+        title TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+        unit_price INTEGER NOT NULL,
+        amount INTEGER NOT NULL,
+        item_id INTEGER,
+        note TEXT,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        CHECK (amount = quantity * unit_price),
+        CHECK ((kind = 'discount' AND amount < 0) OR (kind = 'adjustment' AND amount <> 0) OR (kind NOT IN ('discount','adjustment') AND amount > 0))
+      );
+      CREATE INDEX IF NOT EXISTS ix_fee_lines_invoice ON fee_invoice_lines(invoice_id);
+      CREATE TABLE IF NOT EXISTS charge_items (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        category TEXT NOT NULL CHECK (category IN ('buffet','service','other')),
+        title TEXT NOT NULL,
+        unit_price INTEGER NOT NULL CHECK (unit_price > 0),
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (center_id, category, title)
+      );
+      CREATE TABLE IF NOT EXISTS idempotency_keys (
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        scope TEXT NOT NULL,
+        response_json TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (center_id, key)
+      );
+    `);
+    const cols = database.prepare('PRAGMA table_info(fee_invoices)').all().map((c) => c.name);
+    if (!cols.includes('voided_at')) database.exec('ALTER TABLE fee_invoices ADD COLUMN voided_at TEXT');
+    if (!cols.includes('voided_by')) database.exec('ALTER TABLE fee_invoices ADD COLUMN voided_by INTEGER REFERENCES users(id)');
+    if (!cols.includes('void_reason')) database.exec('ALTER TABLE fee_invoices ADD COLUMN void_reason TEXT');
+    const pc = database.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
+    if (!pc.includes('method')) database.exec("ALTER TABLE payments ADD COLUMN method TEXT NOT NULL DEFAULT 'receipt'");
+    database.exec(`INSERT INTO fee_invoice_lines(invoice_id, center_id, kind, title, quantity, unit_price, amount)
+      SELECT i.id, i.center_id,
+        CASE WHEN i.fee_type IN ('tuition','buffet','service') THEN i.fee_type ELSE 'other' END,
+        i.fee_type || ' — ' || i.period, 1, i.amount, i.amount
+      FROM fee_invoices i WHERE NOT EXISTS (SELECT 1 FROM fee_invoice_lines l WHERE l.invoice_id = i.id)`);
+  },
 ];
 
 // ثبت رویداد در لاگ ممیزی (در همان تراکنش فراخواننده اجرا می‌شود)

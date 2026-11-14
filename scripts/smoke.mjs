@@ -314,7 +314,8 @@ check('بند ۷: جزییات تک‌کارنامه شامل پاسخ‌برگ 
 check('بند ۸: فاکتور زدن برای دانش‌آموز کانون دیگر یا ناموجود رد می‌شود (۴۰۴)', (await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: 999999, fee_type: 'tuition', period: 'تست', amount: 50000 })).status === 404);
 const invCreate = await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: stuUser.id, fee_type: 'tuition', period: 'بهار ۱۴۰۴', amount: 800000 });
 const invUpdate = await call(S.manager.ck, 'POST', '/api/manager/invoices', { student_id: stuUser.id, fee_type: 'tuition', period: 'بهار ۱۴۰۴', amount: 850000 });
-check('بند ۸: بروزرسانی فاکتور شناسه معتبر و یکسان بازمی‌گرداند', invCreate.status === 200 && invUpdate.status === 200 && invCreate.data.id === invUpdate.data.id);
+// سیاست مالی جدید: صدور دوباره همان شناسه را برمی‌گرداند ولی مبلغ فاکتور موجود را بازنویسی نمی‌کند (تغییر فقط با قلم تعدیل)
+check('بند ۸: صدور دوبارهٔ فاکتور شناسهٔ یکسان برمی‌گرداند و مبلغ را بازنویسی نمی‌کند', invCreate.status === 200 && invUpdate.status === 200 && invCreate.data.id === invUpdate.data.id && invUpdate.data.skipped === 1);
 
 // [بند ۹] پرداخت دانش‌آموز با invoice_id و به‌روزرسانی فاکتور
 const payInv = await call(S.student.ck, 'POST', '/api/student/payment', { invoice_id: invCreate.data.id, amount: 850000, file: { name: 'rec.png', data: png } });

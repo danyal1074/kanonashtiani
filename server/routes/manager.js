@@ -4,6 +4,7 @@ import path from 'node:path';
 import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
 import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
 import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
+import { FEE_LABELS } from './finance.js';
 import { feeStatus, announcementAudience, saveExamResult, omrMeta, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
@@ -329,8 +330,12 @@ export default function register(r) {
     setSession(ctx, u, { imp: ctx.user.id });
     return { ok: true };
   });
+  // دانش‌آموزی که سابقهٔ مالی تسویه‌شده دارد حذف فیزیکی نمی‌شود (حفظ سوابق حسابداری)؛ باید غیرفعال شود.
+  const hasFinancialHistory = (sid) => !!get(`SELECT 1 x FROM payments WHERE student_id=? AND status IN ('approved','reversed')
+    UNION ALL SELECT 1 FROM fee_invoices WHERE student_id=? AND (paid>0 OR status IN ('paid','partial')) LIMIT 1`, sid, sid);
   r.del('/api/manager/students/:id', M, (ctx) => {
     const s = ownStudent(ctx, ctx.params.id);
+    if (hasFinancialHistory(s.id)) fail(409, 'این دانش‌آموز سابقهٔ پرداخت تأییدشده دارد و برای حفظ سوابق مالی حذف نمی‌شود؛ حساب را غیرفعال کنید');
     tx(() => {
       run('DELETE FROM users WHERE id=?', s.id);
       // حذف والد بدون فرزند
@@ -382,14 +387,15 @@ export default function register(r) {
   });
   r.post('/api/manager/students/delete', M, (ctx) => {
     if (ctx.body.confirm !== true) fail(400, 'تأیید حذف لازم است');
-    const ids = pickStudents(ctx);
-    if (!ids.length) fail(400, 'دانش‌آموزی برای حذف نیست');
+    const picked = pickStudents(ctx);
+    if (!picked.length) fail(400, 'دانش‌آموزی برای حذف نیست');
+    const ids = picked.filter((id) => !hasFinancialHistory(id)), kept = picked.length - ids.length;
     tx(() => {
       for (const id of ids) run('DELETE FROM users WHERE id=?', id);
       run(`DELETE FROM users WHERE role='parent' AND center_id=? AND NOT EXISTS (SELECT 1 FROM parent_children pc WHERE pc.parent_id=users.id)`, ctx.user.center_id);
     });
     removeStudentsLater(ids);
-    return { ok: true, deleted: ids.length };
+    return { ok: true, deleted: ids.length, kept };
   });
   // تقسیم دانش‌آموزان یک پایه بین چند کلاس (به‌ترتیب حروف الفبا، یکی در میان؛ دختر/پسر جداگانه متعادل می‌شوند)
   r.post('/api/manager/classes/distribute', M, (ctx) => {
@@ -852,20 +858,22 @@ export default function register(r) {
     }
     if (!studentIds.length) fail(400, 'دانش‌آموز یا کلاس انتخاب نشده است');
 
-    const createdIds = [];
+    if (!Number.isSafeInteger(amount) || amount > 10_000_000_000) fail(400, 'مبلغ باید عدد صحیح (تومان) باشد');
+    const createdIds = [], existingIds = [];
+    let skipped = 0;
     tx(() => {
       for (const sid of studentIds) {
-        run(`
-          INSERT INTO fee_invoices (center_id, student_id, fee_type, period, amount)
-          VALUES (?,?,?,?,?)
-          ON CONFLICT(student_id, fee_type, period) DO UPDATE SET amount=excluded.amount
-        `, ctx.user.center_id, sid, fee_type, period, amount);
-        const inv = get('SELECT id FROM fee_invoices WHERE student_id=? AND fee_type=? AND period=?', sid, fee_type, period);
-        createdIds.push(inv.id);
+        // فاکتور موجود (همان دانش‌آموز، نوع و دوره) بازنویسی نمی‌شود؛ تغییر مبلغ فقط با قلم تعدیل/تخفیف ثبت می‌شود.
+        const existing = get('SELECT id FROM fee_invoices WHERE student_id=? AND fee_type=? AND period=?', sid, fee_type, period);
+        if (existing) { skipped++; existingIds.push(existing.id); continue; }
+        const id = Number(run('INSERT INTO fee_invoices (center_id, student_id, fee_type, period, amount) VALUES (?,?,?,?,?)', ctx.user.center_id, sid, fee_type, period, amount).lastInsertRowid);
+        const kind = ['tuition', 'buffet', 'service'].includes(fee_type) ? fee_type : 'other';
+        run('INSERT INTO fee_invoice_lines (invoice_id, center_id, kind, title, quantity, unit_price, amount, created_by) VALUES (?,?,?,?,?,?,?,?)', id, ctx.user.center_id, kind, `${FEE_LABELS[fee_type] || fee_type} — ${period}`, 1, amount, amount, ctx.user.id);
+        createdIds.push(id);
       }
     });
 
-    return { ok: true, id: createdIds[0], count: createdIds.length, ids: createdIds };
+    return { ok: true, id: createdIds[0] ?? existingIds[0] ?? null, count: createdIds.length, skipped, ids: createdIds, existing_ids: existingIds };
   });
 
   // ---------- صندوق خروجی و صف پیامک‌ها (Option 12) ----------

@@ -9,20 +9,20 @@ const CONCEPT = 'b';
 const GROUPS = [
   { paths: ['/home', '/students'] },
   { title: 'آموزش', paths: ['/staff', '/timetable', '/counselors', '/comprehensive', '/manual-scores', '/barpa', '/performance'] },
-  { title: 'مالی', paths: ['/fees', '/accounting', '/invoices'] },
+  { title: 'مالی', paths: ['/fees', '/finance', '/accounting', '/invoices'] },
   { title: 'ارتباطات', paths: ['/announcements', '/messages', '/sms-outbox'] },
   { title: 'بیشتر', more: true, paths: ['/hoosh-studio', '/att-log', '/shop'] },
 ];
 const LABELS = {
   '/home': 'داشبورد', '/students': 'دانش‌آموزان', '/staff': 'معلمان و کلاس‌ها', '/timetable': 'برنامه هفتگی', '/counselors': 'مشاوران',
   '/comprehensive': 'آزمون جامع', '/manual-scores': 'بایگانی نمرات مستمر', '/barpa': 'کارنامه‌های برپا', '/performance': 'عملکرد آموزشی',
-  '/fees': 'حق عضویت و رسیدها', '/accounting': 'حسابداری', '/invoices': 'فاکتورهای دوره‌ای',
+  '/fees': 'حق عضویت و رسیدها', '/accounting': 'حسابداری', '/invoices': 'فاکتورهای دوره‌ای', '/finance': 'حساب‌ها و بوفه',
   '/announcements': 'اطلاعیه‌ها', '/messages': 'پیام‌ها', '/sms-outbox': 'صندوق پیامک',
   '/hoosh-studio': 'استودیوی هوش', '/att-log': 'تغییرات حضور', '/shop': 'فروشگاه', '/settings': 'تنظیمات', '/account': 'حساب کاربری',
 };
 const ICONS = {
   '/home': 'dashboard', '/students': 'graduation', '/staff': 'school', '/timetable': 'calendar', '/counselors': 'users', '/comprehensive': 'file-check',
-  '/manual-scores': 'clipboard', '/barpa': 'award', '/performance': 'chart-line', '/fees': 'card', '/accounting': 'wallet', '/invoices': 'receipt',
+  '/manual-scores': 'clipboard', '/barpa': 'award', '/performance': 'chart-line', '/fees': 'card', '/accounting': 'wallet', '/invoices': 'receipt', '/finance': 'wallet',
   '/announcements': 'megaphone', '/messages': 'message', '/sms-outbox': 'send', '/hoosh-studio': 'sparkles', '/att-log': 'history', '/shop': 'bag',
   '/settings': 'sliders', '/account': 'user',
 };

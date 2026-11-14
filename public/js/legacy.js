@@ -2,6 +2,7 @@
 // لاگ حضور و غیاب و صندوق پیامک. فقط رابط کاربری؛ منطق و دسترسی‌ها سمت سرور است.
 import { api, post, del, esc, fa, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, empty, loading, jdate, jdatetime, icon, progress, gradeName, fileToData, dateField, readDate, tehranIso, ymdOf } from './core.js';
 import { sproutArt } from './icons.js';
+import { studentStatementSection } from './finance.js';
 
 const dt = (s) => (s ? jdatetime(/^\d+(\.\d+)?$/.test(String(s)) ? new Date(Number(s)).toISOString() : String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z') : '—');
 const tabs = (items, cur) => `<div class="seg" style="margin-bottom:16px" role="tablist">${items.map(([k, l]) => `<button role="tab" aria-selected="${k === cur}" data-tab="${k}" class="${k === cur ? 'on' : ''}">${l}</button>`).join('')}</div>`;
@@ -307,10 +308,11 @@ export async function counselor(el, _p, me) {
 
 // ================= دانش‌آموز: نمرات، فاکتورها، کارنامه برپا =================
 export async function records(el) {
-  setHead('فاکتورها و کارنامه جامع', 'فاکتورهای دوره‌ای و کارنامه‌های آزمون جامع');
+  setHead('فاکتورها و کارنامه جامع', 'حساب من، فاکتورهای دوره‌ای و کارنامه‌های آزمون جامع');
   const [i, b, fee] = await Promise.all([api('/api/student/invoices'), api('/api/barpa-exams/reports'), api('/api/student/payment').catch(() => null)]);
-  el.innerHTML = `<section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i, { pay: true })}</section>
+  el.innerHTML = `<div id="stSlot"></div><section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i, { pay: true })}</section>
   <section class="card"><div class="card-title">کارنامه آزمون جامع برپا</div>${barpaList(b)}</section>`;
+  await studentStatementSection($('#stSlot', el)).catch(() => {});
   on(el, 'click', '[data-payinv]', (e, btn) => modal({
     title: 'پرداخت فاکتور',
     body: `<p class="small" style="margin-top:0">مبلغ مانده: <b>${money(Number(btn.dataset.rem))}</b>${fee?.card_number ? `<br>شماره کارت: <b dir="ltr">${esc(fee.card_number)}</b> به نام ${esc(fee.card_holder || '')}` : ''}</p>
