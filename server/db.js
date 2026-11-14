@@ -936,6 +936,31 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     const qc = database.prepare('PRAGMA table_info(question_bank)').all().map((c) => c.name);
     if (!qc.includes('ai_flags')) database.exec('ALTER TABLE question_bank ADD COLUMN ai_flags TEXT');
   },
+  // نسخه ۲۳: ارزیابی کارکنان — بازخورد ذهنی مدیر (جدا از شاخص‌های اندازه‌گیری‌شده) و وزن‌های قابل تنظیم هر کانون
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS staff_feedback (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        staff_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        comment TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS ix_staff_feedback ON staff_feedback(staff_id, period_end);
+      CREATE TABLE IF NOT EXISTS staff_eval_settings (
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK (role IN ('teacher','counselor')),
+        weights_json TEXT NOT NULL,
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (center_id, role)
+      );
+    `);
+  },
 ];
 
 // ثبت رویداد در لاگ ممیزی (در همان تراکنش فراخواننده اجرا می‌شود)

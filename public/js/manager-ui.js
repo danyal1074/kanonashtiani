@@ -8,21 +8,21 @@ const CONCEPT = 'b';
 // گروه‌بندی منو: هیچ مسیری حذف نشده؛ آنچه در گروه‌ها نیست به «بیشتر» می‌رود.
 const GROUPS = [
   { paths: ['/home', '/students'] },
-  { title: 'آموزش', paths: ['/staff', '/timetable', '/counselors', '/bank', '/comprehensive', '/manual-scores', '/barpa', '/performance'] },
+  { title: 'آموزش', paths: ['/staff', '/timetable', '/counselors', '/bank', '/comprehensive', '/manual-scores', '/barpa', '/performance', '/staff-eval'] },
   { title: 'مالی', paths: ['/fees', '/finance', '/accounting', '/invoices'] },
   { title: 'ارتباطات', paths: ['/announcements', '/messages', '/sms-outbox'] },
   { title: 'بیشتر', more: true, paths: ['/hoosh-studio', '/att-log', '/shop'] },
 ];
 const LABELS = {
   '/home': 'داشبورد', '/students': 'دانش‌آموزان', '/staff': 'معلمان و کلاس‌ها', '/timetable': 'برنامه هفتگی', '/counselors': 'مشاوران',
-  '/bank': 'بانک سؤال', '/comprehensive': 'آزمون جامع', '/manual-scores': 'بایگانی نمرات مستمر', '/barpa': 'کارنامه‌های برپا', '/performance': 'عملکرد آموزشی',
+  '/bank': 'بانک سؤال', '/comprehensive': 'آزمون جامع', '/manual-scores': 'بایگانی نمرات مستمر', '/barpa': 'کارنامه‌های برپا', '/performance': 'عملکرد آموزشی', '/staff-eval': 'ارزیابی کارکنان',
   '/fees': 'حق عضویت و رسیدها', '/accounting': 'حسابداری', '/invoices': 'فاکتورهای دوره‌ای', '/finance': 'حساب‌ها و بوفه',
   '/announcements': 'اطلاعیه‌ها', '/messages': 'پیام‌ها', '/sms-outbox': 'صندوق پیامک',
   '/hoosh-studio': 'استودیوی هوش', '/att-log': 'تغییرات حضور', '/shop': 'فروشگاه', '/settings': 'تنظیمات', '/account': 'حساب کاربری',
 };
 const ICONS = {
   '/home': 'dashboard', '/students': 'graduation', '/staff': 'school', '/timetable': 'calendar', '/counselors': 'users', '/bank': 'book', '/comprehensive': 'file-check',
-  '/manual-scores': 'clipboard', '/barpa': 'award', '/performance': 'chart-line', '/fees': 'card', '/accounting': 'wallet', '/invoices': 'receipt', '/finance': 'wallet',
+  '/manual-scores': 'clipboard', '/barpa': 'award', '/performance': 'chart-line', '/staff-eval': 'award', '/fees': 'card', '/accounting': 'wallet', '/invoices': 'receipt', '/finance': 'wallet',
   '/announcements': 'megaphone', '/messages': 'message', '/sms-outbox': 'send', '/hoosh-studio': 'sparkles', '/att-log': 'history', '/shop': 'bag',
   '/settings': 'sliders', '/account': 'user',
 };

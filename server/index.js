@@ -20,6 +20,7 @@ import registerCounselor from './routes/counselor.js';
 import registerFinance from './routes/finance.js';
 import registerBank from './routes/bank.js';
 import registerAi from './routes/ai.js';
+import registerStaff from './routes/staff.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.ROSHD_HOST || '0.0.0.0';
@@ -36,7 +37,7 @@ const ALLOWED_ORIGINS = new Set((process.env.ROSHD_ALLOWED_ORIGINS || '').split(
 const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' https: data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
 
 const router = new Router();
-[registerCommon, registerStudent, registerTeacher, registerManager, registerAdmin, registerCounselor, registerFinance, registerBank, registerAi].forEach((r) => r(router));
+[registerCommon, registerStudent, registerTeacher, registerManager, registerAdmin, registerCounselor, registerFinance, registerBank, registerAi, registerStaff].forEach((r) => r(router));
 router.get('/api/health', { auth: false }, () => {
   get('SELECT 1 x'); // اتصال به پایگاه داده زنده است
   return { ok: true, uptime_s: Math.round((Date.now() - metrics.started) / 1000) };

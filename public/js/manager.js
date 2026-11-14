@@ -8,6 +8,7 @@ import { managerTimetable, KINDS, kindOf } from './timetable.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
 import { financeView } from './finance.js';
 import { bankView } from './bank-ui.js';
+import { staffEvalView } from './staff-eval.js';
 
 export const nav = (me) => [
   { path: '/home', icon: 'chart', label: 'داشبورد' },
@@ -28,6 +29,7 @@ export const nav = (me) => [
   { path: '/comprehensive', icon: 'trophy', label: 'آزمون جامع کانون' },
   { path: '/bank', icon: 'book', label: 'بانک سؤال' },
   { path: '/performance', icon: 'trend', label: 'عملکرد دانش‌آموزان' },
+  { path: '/staff-eval', icon: 'award', label: 'ارزیابی کارکنان' },
   { path: '/shop', icon: 'bag', label: 'مدیریت فروشگاه' },
   { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
   { path: '/settings', icon: 'sliders', label: 'تنظیمات کانون' },
@@ -1091,6 +1093,7 @@ export const routes = [
   { path: '/bank', view: bankView },
   { path: '/comprehensive/:id', view: compDetail },
   { path: '/performance', view: performance },
+  { path: '/staff-eval', view: staffEvalView },
   { path: '/shop', view: shopAdmin },
   { path: '/settings', view: settings },
   { path: '/messages', view: messagesView },
