@@ -30,12 +30,13 @@ const LINE = {
 };
 export const li = (name, size = 24) => `<svg class="tp-li" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${LINE[name] || ''}</svg>`;
 
-const NAV_LINE = { '/home': 'home', '/classes': 'users', '/assignments': 'clipboard', '/exams': 'exam', '/manual-scores': 'chart', '/attendance': 'check', '/reports': 'chart', '/messages': 'message', '/materials': 'play', '/plans': 'calendar', '/more': 'grid', '/account': 'user' };
+const NAV_LINE = { '/home': 'home', '/classes': 'users', '/assignments': 'clipboard', '/exams': 'exam', '/bank': 'book', '/manual-scores': 'chart', '/attendance': 'check', '/reports': 'chart', '/messages': 'message', '/materials': 'play', '/plans': 'calendar', '/more': 'grid', '/account': 'user' };
 export const nav = (me) => [
   { path: '/home', icon: 'home', label: 'خانه' },
   { path: '/classes', icon: 'users', label: 'کلاس‌های من' },
   { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
   { path: '/exams', icon: 'file-check', label: 'آزمون‌ها' },
+  { path: '/bank', icon: 'book', label: 'بانک سؤال' },
   { path: '/attendance', icon: 'user-check', label: 'حضور و غیاب' },
   { path: '/reports', icon: 'chart', label: 'گزارش‌ها' },
   { path: '/messages', icon: 'message', label: 'ارتباطات', badge: me.unread },

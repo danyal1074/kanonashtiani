@@ -1,5 +1,6 @@
 // پنل معلم
 import { teacherTimetable } from './timetable.js';
+import { bankView } from './bank-ui.js';
 import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, progress, ring, empty, cdHtml, jdate, jtime, jshort,
   timeAgo, subjIcon, gradeName, dateField, readDate, tehranIso, fileToData, barChart, lineChart, WEEKDAYS, addDays, formData, state, en, icon, kpiCard, nameAvatar, JMONTHS, jparts } from './core.js';
@@ -293,6 +294,7 @@ export const routes = [
   { path: '/assignments/report', view: asgReport },
   { path: '/exams', view: exams },
   { path: '/exams/:id', view: examDetail },
+  { path: '/bank', view: bankView },
   { path: '/hoosh-studio', view: L.hooshStudio },
   { path: '/students', view: students },
   { path: '/students/:id', view: studentDetail },

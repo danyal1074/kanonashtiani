@@ -7,6 +7,7 @@ import { studentDetailHtml } from './teacher.js';
 import { managerTimetable, KINDS, kindOf } from './timetable.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
 import { financeView } from './finance.js';
+import { bankView } from './bank-ui.js';
 
 export const nav = (me) => [
   { path: '/home', icon: 'chart', label: 'داشبورد' },
@@ -25,6 +26,7 @@ export const nav = (me) => [
   { path: '/manual-scores', icon: 'clipboard', label: 'بایگانی نمرات مستمر' },
   { path: '/att-log', icon: 'user-check', label: 'لاگ تغییر حضور' },
   { path: '/comprehensive', icon: 'trophy', label: 'آزمون جامع کانون' },
+  { path: '/bank', icon: 'book', label: 'بانک سؤال' },
   { path: '/performance', icon: 'trend', label: 'عملکرد دانش‌آموزان' },
   { path: '/shop', icon: 'bag', label: 'مدیریت فروشگاه' },
   { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
@@ -1085,6 +1087,7 @@ export const routes = [
   { path: '/manual-scores', view: L.mgrScores },
   { path: '/att-log', view: L.attLog },
   { path: '/comprehensive', view: comprehensive },
+  { path: '/bank', view: bankView },
   { path: '/comprehensive/:id', view: compDetail },
   { path: '/performance', view: performance },
   { path: '/shop', view: shopAdmin },

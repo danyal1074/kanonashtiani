@@ -29,6 +29,8 @@ async function open(page, hash) {
   await page.goto(`${BASE}/#${hash}`);
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(300);
+  // Dismiss full-screen announcements / birthday cards that block the panel for real users too.
+  for (let i = 0; i < 10 && await page.locator('.fullscreen [data-ok]').count(); i++) { await page.locator('.fullscreen [data-ok]').first().click(); await page.waitForTimeout(200); }
 }
 const shot = (page, name) => page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: false });
 const mod = {};

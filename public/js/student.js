@@ -1,4 +1,5 @@
 import { studentAvatarAsset } from './student-avatars.js';
+import { practiceHome, practiceSession } from './practice.js';
 matchMedia('(min-width:1100px)').addEventListener('change', () => {
   if (document.body.classList.contains('student-ui')) document.querySelector('.scrim')?.click();
 });
@@ -47,7 +48,7 @@ export const nav = (me) => [
   { path: '/study', icon: 'timer', label: 'مطالعه و پومودورو' },
   { path: '/path', icon: 'sparkles', label: 'مسیر یادگیری هوشمند' },
   { path: '/games', icon: 'gamepad', label: 'بازی و داستان' },
-  { path: '/self-exams', icon: 'target', label: 'آزمون خودسنجی' },
+  { path: '/self-exams', icon: 'target', label: 'تمرین آزاد' },
   { path: '/roadmap', icon: 'award', label: 'نقشه راه رشد' },
   { path: '/records', icon: 'receipt', label: 'فاکتورها و کارنامه' },
   { path: '/counselor', icon: 'message', label: 'مشاور تحصیلی' },
@@ -458,8 +459,8 @@ const baseRoutes = [
   { path: '/account', view: profile },
   { path: '/payment', view: payment, open: true },
   { path: '/shop', view: panelShop },
-  { path: '/self-exams', view: L.selfExams },
-  { path: '/self-exam/:id', view: L.selfExam },
+  { path: '/self-exams', view: practiceHome },
+  { path: '/self-exam/:id', view: practiceSession },
   { path: '/roadmap', view: studentDesign.roadmap },
   { path: '/counselor', view: L.counselor },
   { path: '/records', view: L.records },

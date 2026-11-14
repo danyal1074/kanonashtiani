@@ -781,6 +781,111 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
         i.fee_type || ' — ' || i.period, 1, i.amount, i.amount
       FROM fee_invoices i WHERE NOT EXISTS (SELECT 1 FROM fee_invoice_lines l WHERE l.invoice_id = i.id)`);
   },
+  // نسخه ۲۱: بانک سؤال مرکزی (کتاب ← فصل ← مبحث)، نسخه‌بندی سؤال، تصاویر سؤال، پیوند سؤال به آزمون رسمی
+  // و گسترش خودسنجی موجود به «تمرین آزاد» (حالت یادگیری / آزمون شخصی) با پاسخ هر سؤال برای تحلیل مبحث.
+  // نتایج تمرین آزاد هیچ اثری بر نمره یا رتبهٔ رسمی ندارد.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS educational_books (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        grade INTEGER NOT NULL,
+        subject TEXT NOT NULL,
+        title TEXT NOT NULL,
+        publisher TEXT,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (center_id, grade, subject, title)
+      );
+      CREATE TABLE IF NOT EXISTS book_chapters (
+        id INTEGER PRIMARY KEY,
+        book_id INTEGER NOT NULL REFERENCES educational_books(id) ON DELETE CASCADE,
+        ord INTEGER NOT NULL DEFAULT 0,
+        title TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS ix_chapters_book ON book_chapters(book_id, ord);
+      CREATE TABLE IF NOT EXISTS book_topics (
+        id INTEGER PRIMARY KEY,
+        chapter_id INTEGER NOT NULL REFERENCES book_chapters(id) ON DELETE CASCADE,
+        ord INTEGER NOT NULL DEFAULT 0,
+        title TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS ix_topics_chapter ON book_topics(chapter_id, ord);
+      CREATE TABLE IF NOT EXISTS question_bank (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        grade INTEGER NOT NULL,
+        subject TEXT NOT NULL,
+        book_id INTEGER REFERENCES educational_books(id) ON DELETE SET NULL,
+        chapter_id INTEGER REFERENCES book_chapters(id) ON DELETE SET NULL,
+        topic_id INTEGER REFERENCES book_topics(id) ON DELETE SET NULL,
+        difficulty TEXT NOT NULL DEFAULT 'medium' CHECK (difficulty IN ('easy','medium','hard')),
+        qtype TEXT NOT NULL DEFAULT 'mcq4' CHECK (qtype IN ('mcq4','mcq4_image')),
+        text TEXT NOT NULL,
+        image TEXT,
+        options_json TEXT NOT NULL,
+        correct_option INTEGER NOT NULL CHECK (correct_option BETWEEN 0 AND 3),
+        explanation TEXT,
+        source_page INTEGER,
+        source_ref TEXT,
+        ai_generated INTEGER NOT NULL DEFAULT 0,
+        ai_job_id INTEGER,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','review','published','rejected','archived')),
+        practice_allowed INTEGER NOT NULL DEFAULT 1,
+        version INTEGER NOT NULL DEFAULT 1,
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        content_hash TEXT NOT NULL,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        reviewed_at TEXT,
+        review_note TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_qbank_hash ON question_bank(center_id, content_hash) WHERE status <> 'archived';
+      CREATE INDEX IF NOT EXISTS ix_qbank_lookup ON question_bank(center_id, status, grade, subject, topic_id, difficulty);
+      CREATE TABLE IF NOT EXISTS question_versions (
+        id INTEGER PRIMARY KEY,
+        question_id INTEGER NOT NULL REFERENCES question_bank(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (question_id, version)
+      );
+      CREATE TABLE IF NOT EXISTS exam_question_links (
+        exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        question_id INTEGER NOT NULL REFERENCES question_bank(id) ON DELETE RESTRICT,
+        version INTEGER NOT NULL,
+        PRIMARY KEY (exam_id, position)
+      );
+      CREATE INDEX IF NOT EXISTS ix_eql_question ON exam_question_links(question_id);
+      CREATE TABLE IF NOT EXISTS practice_answers (
+        id INTEGER PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES self_exams(id) ON DELETE CASCADE,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        question_id INTEGER REFERENCES question_bank(id) ON DELETE SET NULL,
+        position INTEGER NOT NULL,
+        topic_id INTEGER,
+        subject TEXT,
+        chosen INTEGER,
+        is_correct INTEGER NOT NULL DEFAULT 0,
+        answered_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (session_id, position)
+      );
+      CREATE INDEX IF NOT EXISTS ix_practice_student ON practice_answers(student_id, topic_id);
+    `);
+    const cols = database.prepare('PRAGMA table_info(self_exams)').all().map((c) => c.name);
+    const add = (name, def) => { if (!cols.includes(name)) database.exec(`ALTER TABLE self_exams ADD COLUMN ${name} ${def}`); };
+    add('mode', "TEXT NOT NULL DEFAULT 'test'");
+    add('grade', 'INTEGER');
+    add('book_id', 'INTEGER');
+    add('chapter_id', 'INTEGER');
+    add('topic_id', 'INTEGER');
+    add('difficulty', 'TEXT');
+    add('timed', 'INTEGER NOT NULL DEFAULT 1');
+  },
 ];
 
 // ثبت رویداد در لاگ ممیزی (در همان تراکنش فراخواننده اجرا می‌شود)

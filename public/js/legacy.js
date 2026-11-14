@@ -218,48 +218,7 @@ export async function barpaDetail(el, p) {
 }
 
 // ================= دانش‌آموز: خودسنجی =================
-export async function selfExams(el) {
-  setHead('آزمون خودسنجی', 'آزمون شخصی بساز، بدون استرس تمرین کن و امتیاز بگیر');
-  const list = await api('/api/student/self-exams');
-  el.innerHTML = `<div class="grid c3"><section class="card" aria-labelledby="seN"><div class="card-title"><span class="ib green">${icon('sparkles', { size: 18 })}</span><span id="seN">آزمون تازه</span></div>
-    <form id="seForm" class="stack"><div class="field"><label for="seSub">درس</label><select class="input" id="seSub" name="subject">${['ریاضی', 'علوم', 'فارسی', 'هوش و استعداد', 'عمومی'].map((s) => `<option>${s}</option>`).join('')}</select></div>
-    <div class="field"><label for="seCnt">تعداد سؤال</label><input class="input" id="seCnt" name="count" type="number" min="3" max="30" value="5"></div>
-    <div class="field"><label for="seDur">مدت (دقیقه)</label><input class="input" id="seDur" name="duration_minutes" type="number" min="5" max="60" value="15"></div>
-    <label class="row" style="gap:8px"><input type="checkbox" name="negative_marking"> نمره منفی (هر سه غلط، یک درست کم می‌کند)</label>
-    <button class="btn" type="submit">${icon('play', { size: 16 })} شروع آزمون</button></form></section>
-    <section class="card span2" aria-labelledby="seH"><div class="card-title"><span class="ib">${icon('clipboard', { size: 18 })}</span><span id="seH">سابقه‌ی آزمون‌ها</span></div>
-    ${list.length ? `<div class="list">${list.map((e) => `<a class="list-item" href="#/self-exam/${e.id}"><div class="grow"><b>${esc(e.title)}</b><div class="tiny muted">${esc(e.subject)} · ${fa(e.question_count)} سؤال · ${dt(e.created_at)}</div></div>${e.status === 'completed' ? `<span class="badge green">${pct(e.percentage)}</span><span class="badge yellow">+${fa(e.points_awarded)}</span>` : '<span class="badge orange">ادامه بده</span>'}</a>`).join('')}</div>` : empty('inbox', 'هنوز آزمونی نساخته‌ای')}</section></div>`;
-  $('#seForm', el).onsubmit = (e) => { e.preventDefault(); const f = e.target; busy(e.submitter, async () => {
-    const r = await post('/api/student/self-exams', { subject: f.subject.value, count: Number(f.count.value), duration_minutes: Number(f.duration_minutes.value), negative_marking: f.negative_marking.checked });
-    location.hash = `#/self-exam/${r.id}`;
-  }); };
-}
-export async function selfExam(el, p) {
-  const e = await api(`/api/student/self-exams/${p.id}`);
-  if (e.status === 'completed') return selfExamResult(el, e.evaluation, e);
-  setHead(esc(e.title), `${fa(e.question_count)} سؤال · ${fa(e.duration_minutes)} دقیقه${e.negative_marking ? ' · نمره منفی دارد' : ''}`, '<a class="btn ghost sm" href="#/self-exams">← خودسنجی</a>');
-  const ans = {};
-  el.innerHTML = `<div class="card" style="position:sticky;top:8px;z-index:5;margin-bottom:12px"><div class="row between"><b id="seLeft" aria-live="off">—</b><span class="muted small" id="seDone">۰ از ${fa(e.questions.length)} پاسخ داده شد</span></div>${progress(0, 'green')}</div>
-  <form id="seQ" class="stack">${e.questions.map((q, i) => `<fieldset class="card" style="border:0"><legend class="bold" style="padding:0 4px">${fa(i + 1)}. ${esc(q.text || q.q)}</legend><div class="stack" style="gap:6px;margin-top:8px">${q.options.map((o, k) => `<label class="list-item" style="cursor:pointer"><input type="radio" name="q${q.id}" value="${k}"> <span>${esc(o)}</span></label>`).join('')}</div></fieldset>`).join('')}
-  <button class="btn" type="submit">${icon('check-circle', { size: 16 })} ثبت پاسخ‌ها</button></form>`;
-  const submit = (btn) => busy(btn, async () => {
-    const r = await post(`/api/student/self-exams/${e.id}/submit`, { answers: ans });
-    clearInterval(timer); toast(`ثبت شد؛ ${fa(r.pointsAwarded)} امتیاز گرفتی`, 'ok'); selfExamResult(el, r, e);
-  });
-  on(el, 'change', 'input[type=radio]', (ev, r) => { ans[r.name.slice(1)] = Number(r.value); const n = Object.keys(ans).length; $('#seDone', el).textContent = `${fa(n)} از ${fa(e.questions.length)} پاسخ داده شد`; $('.progress i', el).style.width = `${(n / e.questions.length) * 100}%`; });
-  $('#seQ', el).onsubmit = (ev) => { ev.preventDefault(); submit(ev.submitter); };
-  let left = e.duration_minutes * 60;
-  const tick = () => { const m = Math.floor(left / 60), s = left % 60; $('#seLeft', el).textContent = `زمان باقی‌مانده: ${fa(String(m).padStart(2, '0'))}:${fa(String(s).padStart(2, '0'))}`; if (left-- <= 0) { clearInterval(timer); toast('زمان تمام شد؛ پاسخ‌ها ثبت می‌شود'); submit($('#seQ button[type=submit]', el)); } };
-  const timer = setInterval(() => { if (!document.body.contains($('#seLeft', el))) return clearInterval(timer); tick(); }, 1000); tick();
-}
-function selfExamResult(el, r, e) {
-  setHead(`نتیجه‌ی «${esc(e.title)}»`, `${esc(e.subject)}`, '<a class="btn ghost sm" href="#/self-exams">← خودسنجی</a>');
-  const st = (l, v, c = '') => `<div class="card" style="text-align:center"><div class="muted small">${l}</div><div style="font-size:26px;font-weight:900" class="${c}">${v}</div></div>`;
-  el.innerHTML = `<div class="grid c4" style="margin-bottom:16px">${st('درصد', pct(r.percentage))}${st('درست', fa(r.correctCount), 'green-t')}${st('غلط', fa(r.wrongCount), 'red-t')}${st('نزده', fa(r.blankCount))}</div>
-  <div class="stack">${r.analysis.map((a, i) => `<section class="card ${a.is_correct ? '' : 'tint-pink'}"><div class="row wrap" style="gap:8px"><b class="grow">${fa(i + 1)}. ${esc(a.text)}</b><span class="badge ${a.is_correct ? 'green' : a.is_blank ? 'orange' : 'red'}">${a.is_correct ? 'درست' : a.is_blank ? 'بدون پاسخ' : 'غلط'}</span></div>
-  <ol class="small" style="margin:8px 0;padding-inline-start:22px">${a.options.map((o, k) => `<li style="${k === a.correct ? 'font-weight:800;color:var(--green-600)' : k === a.chosen ? 'color:var(--red,#c0392b)' : ''}">${esc(o)}${k === a.correct ? ' ✓' : k === a.chosen ? ' (انتخاب تو)' : ''}</li>`).join('')}</ol>
-  ${a.explanation ? `<div class="tiny muted">${esc(a.explanation)}</div>` : ''}</section>`).join('')}</div>`;
-}
+// تمرین آزاد / خودسنجی: public/js/practice.js
 
 // ================= دانش‌آموز: نقشه راه =================
 export async function roadmap(el) {

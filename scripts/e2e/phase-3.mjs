@@ -1,0 +1,77 @@
+// Phase 3: teacher builds book/chapter/topic and questions in the UI; student practices in learning mode.
+export default async function ({ session, open, shot, check }) {
+  const t = await session('teacher', 'teacher');
+  const p = t.page;
+  const stamp = Date.now() % 100000;
+  await open(p, '/bank');
+  await p.click('#bkBooks');
+  await p.fill('#bkF [name=subject]', 'ریاضی');
+  await p.selectOption('#bkF [name=grade]', '7');
+  await p.fill('#bkF [name=title]', `ریاضی هفتم ${stamp}`);
+  await p.click('#bkF button');
+  await p.waitForTimeout(700);
+  await p.click('#bkBooks');
+  const bookCard = p.locator('.modal section.card', { hasText: `ریاضی هفتم ${stamp}` });
+  await bookCard.locator('form[data-chapter] [name=title]').fill('فصل یک');
+  await bookCard.locator('form[data-chapter] button').click();
+  await p.waitForTimeout(700);
+  await p.click('#bkBooks');
+  const bookCard2 = p.locator('.modal section.card', { hasText: `ریاضی هفتم ${stamp}` });
+  await bookCard2.locator('form[data-topic] [name=title]').fill('اعداد صحیح');
+  await bookCard2.locator('form[data-topic] button').click();
+  await p.waitForTimeout(700);
+  const books = await (await p.request.get('/api/bank/books')).json();
+  const book = books.find((b) => b.title === `ریاضی هفتم ${stamp}`);
+  check('Book, chapter and topic created through the UI', !!book?.chapters?.[0]?.topics?.[0], JSON.stringify(book?.chapters));
+  for (let i = 0; i < 4; i++) {
+    await p.click('#bkNewQ');
+    await p.selectOption('#qForm [name=grade]', '7');
+    await p.fill('#qForm [name=subject]', 'ریاضی');
+    await p.locator('#qForm [name=subject]').dispatchEvent('change');
+    await p.selectOption('#qForm [name=book_id]', String(book.id));
+    await p.selectOption('#qForm [name=topic_id]', String(book.chapters[0].topics[0].id));
+    await p.fill('#qForm [name=text]', `حاصل ${i} + ${stamp} چیست؟ (${stamp}-${i})`);
+    for (let k = 0; k < 4; k++) await p.fill(`#qForm [name=opt${k}]`, String(i + stamp + k));
+    await p.check('#qForm [name=correct_option][value="0"]');
+    await p.fill('#qForm [name=explanation]', 'جمع ساده');
+    await p.selectOption('#qForm [name=status]', 'published');
+    if (i === 0) await shot(p, 'p3-question-modal');
+    await p.click('.modal-foot .btn:not(.ghost)');
+    await p.waitForTimeout(600);
+  }
+  const mine = await (await p.request.get(`/api/bank/questions?book_id=${book.id}`)).json();
+  check('Four questions published through the UI', mine.filter((q) => q.status === 'published').length === 4, String(mine.length));
+  await open(p, `/bank?book_id=${book.id}`);
+  await shot(p, 'p3-bank-list');
+  check('No page errors in the teacher bank', !t.errors.length, t.errors.join(' | '));
+
+  const s = await session('student', 'student');
+  await open(s.page, '/self-exams');
+  await s.page.selectOption('#pxForm [name=grade]', '7');
+  await s.page.selectOption('#pxForm [name=subject]', 'ریاضی').catch(() => {});
+  await s.page.selectOption('#pxForm [name=book_id]', String(book.id));
+  await s.page.selectOption('#pxForm [name=chapter_id]', String(book.chapters[0].id));
+  await s.page.selectOption('#pxForm [name=topic_id]', String(book.chapters[0].topics[0].id));
+  await s.page.fill('#pxForm [name=count]', '4');
+  await shot(s.page, 'p3-practice-form');
+  await s.page.click('#pxForm button[type=submit]');
+  await s.page.waitForSelector('[data-q]');
+  await s.page.locator('[data-q="0"]').first().click();
+  await s.page.waitForSelector('#lq0 [role=status]');
+  const feedback = await s.page.locator('#lq0 [role=status]').innerText();
+  check('Learning mode shows immediate feedback with explanation', /جمع ساده/.test(feedback), feedback);
+  await shot(s.page, 'p3-learning');
+  await s.page.click('#lqEnd');
+  await s.page.waitForTimeout(800);
+  check('Result page shows the practice-only notice', await s.page.locator('text=در نمره و رتبهٔ رسمی اثری ندارد').count() > 0);
+  await open(s.page, '/self-exams');
+  check('Practice overview shows topic mastery', await s.page.locator('text=تسلط مبحثی').count() === 1);
+  await shot(s.page, 'p3-practice-home');
+  check('No page errors in student practice', !s.errors.length, s.errors.join(' | '));
+  const sm = await session('student', 'student', '123456', { width: 390, height: 844 });
+  await open(sm.page, '/self-exams');
+  const overflow = await sm.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check('Practice page has no horizontal scroll on phone', overflow <= 1, `overflow=${overflow}px`);
+  await shot(sm.page, 'p3-practice-mobile');
+  for (const x of [t, s, sm]) await x.ctx.close();
+}

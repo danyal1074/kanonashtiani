@@ -32,9 +32,11 @@ export function addPoints(studentId, amount, category, reason, ref = null) {
 
 export const totalPoints = (sid) => get('SELECT COALESCE(SUM(amount),0) t FROM points WHERE student_id=?', sid).t;
 
+// امتیاز تمرین آزاد (خودسنجی) فقط در سطح/نقشهٔ راه شمرده می‌شود و هرگز در رتبهٔ کلاس/پایه/کانون اثر ندارد.
+export const RANKED_POINTS = "(p.ref IS NULL OR p.ref NOT LIKE 'self_exam:%')";
 export function gradeRanking(centerId, grade) {
   return all(`SELECT u.id, u.full_name, s.avatar, s.class_id, COALESCE(SUM(p.amount),0) total
-    FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN points p ON p.student_id=u.id
+    FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN points p ON p.student_id=u.id AND ${RANKED_POINTS}
     WHERE u.center_id=? AND s.grade=? AND u.active=1 GROUP BY u.id ORDER BY total DESC, u.full_name`, centerId, grade);
 }
 
@@ -47,7 +49,7 @@ export function rankOf(centerId, grade, sid) {
 // Class and center standings follow the same points/name ordering as grade rankings.
 export function studentRankings(centerId, classId, studentId) {
   const students = all(`SELECT u.id, s.class_id, COALESCE(SUM(p.amount), 0) total
-    FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN points p ON p.student_id=u.id
+    FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN points p ON p.student_id=u.id AND ${RANKED_POINTS}
     WHERE u.center_id=? AND u.active=1 GROUP BY u.id ORDER BY total DESC, u.full_name, u.id`, centerId);
   const standing = rows => {
     const index = rows.findIndex(row => row.id === studentId);
