@@ -7,6 +7,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/danyal1074/kanonashtiani/claude/zealous-noether-ywiqoi/scripts/deploy/demo/deploy-demo.sh -o /tmp/deploy-demo.sh
 #   bash /tmp/deploy-demo.sh                 # اولین بار یا به‌روزرسانی (دادهٔ دمو حفظ می‌شود)
 #   RESEED=1 bash /tmp/deploy-demo.sh        # بازسازی دادهٔ نمونهٔ دمو از صفر
+#   یا خودکار از GitHub Actions: .github/workflows/deploy-demo.yml
 set -euo pipefail
 
 REPO="${REPO:-https://github.com/danyal1074/kanonashtiani.git}"
@@ -22,13 +23,19 @@ command -v node >/dev/null && [[ $(node -v | cut -d. -f1 | tr -d v) -ge 22 ]] ||
 echo "=== ۱. دریافت کد شاخهٔ $BRANCH ==="
 id -u roshd &>/dev/null || useradd -r -s /usr/sbin/nologin -d /srv/roshd -M roshd
 mkdir -p "$APP/data" "$APP/uploads"
-if [[ -d "$APP/app/.git" ]]; then
+if [[ -n "${SRC:-}" ]]; then
+  # کد ارسال‌شده از GitHub Actions (مخزن خصوصی؛ سرور به git دسترسی لازم ندارد)
+  [[ -f "$SRC/server/index.js" ]] || { echo "کد در $SRC یافت نشد"; exit 1; }
+  rm -rf "$APP/app.new" && cp -a "$SRC" "$APP/app.new" && rm -rf "$APP/app" && mv "$APP/app.new" "$APP/app"
+  echo "نسخه: ${DEMO_REV:-نامشخص}"
+elif [[ -d "$APP/app/.git" ]]; then
   git -C "$APP/app" fetch --depth 1 origin "$BRANCH"
   git -C "$APP/app" checkout -q -B demo FETCH_HEAD
+  echo "نسخه: $(git -C "$APP/app" log -1 --format='%h %s')"
 else
   git clone -q --depth 1 --branch "$BRANCH" "$REPO" "$APP/app"
+  echo "نسخه: $(git -C "$APP/app" log -1 --format='%h %s')"
 fi
-echo "نسخه: $(git -C "$APP/app" log -1 --format='%h %s')"
 
 echo "=== ۲. پشتیبان دادهٔ دمو (در صورت وجود) ==="
 if [[ -f "$APP/data/roshd.db" ]]; then

@@ -1,0 +1,86 @@
+# استقرار خودکار نسخهٔ دمو روی demo.kanonashtiani.ir (هرگز سامانهٔ اصلی)
+# پیش‌نیاز (Settings → Secrets and variables → Actions):
+#   DEMO_SSH_HOST         آی‌پی یا نام سرور
+#   DEMO_SSH_KEY          کلید خصوصی SSH (کاربر root یا کاربری با sudo بدون رمز)
+#   DEMO_SSH_KNOWN_HOSTS  خروجی دستور  ssh-keyscan -p <port> <host>  (برای تأیید هویت سرور)
+#   DEMO_SSH_USER         اختیاری؛ پیش‌فرض root
+#   DEMO_SSH_PORT         اختیاری؛ پیش‌فرض 22
+# بدون این Secretها، اجرا با پیام راهنما متوقف می‌شود و کاری روی سرور انجام نمی‌دهد.
+name: Deploy demo
+
+on:
+  push:
+    branches: [claude/zealous-noether-ywiqoi]
+  workflow_dispatch:
+    inputs:
+      reseed:
+        description: 'بازسازی دادهٔ نمونهٔ دمو از صفر (1 = بله)'
+        required: false
+        default: '0'
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        id: cfg
+        env:
+          HOST: ${{ secrets.DEMO_SSH_HOST }}
+          KEY: ${{ secrets.DEMO_SSH_KEY }}
+          KNOWN: ${{ secrets.DEMO_SSH_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$KEY" ] || [ -z "$KNOWN" ]; then
+            echo "::warning::Secretهای DEMO_SSH_HOST، DEMO_SSH_KEY و DEMO_SSH_KNOWN_HOSTS تنظیم نشده‌اند؛ استقرار انجام نشد."
+            echo "ready=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tests before deploy
+        if: steps.cfg.outputs.ready == '1'
+        run: |
+          node --version
+          node scripts/test-migrations.mjs
+          node scripts/test-counselor.mjs
+          node scripts/test-platform.mjs
+
+      - name: Deploy to demo server
+        if: steps.cfg.outputs.ready == '1'
+        env:
+          HOST: ${{ secrets.DEMO_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEMO_SSH_USER || 'root' }}
+          SSH_PORT: ${{ secrets.DEMO_SSH_PORT || '22' }}
+          KEY: ${{ secrets.DEMO_SSH_KEY }}
+          KNOWN: ${{ secrets.DEMO_SSH_KNOWN_HOSTS }}
+          RESEED: ${{ github.event.inputs.reseed || '0' }}
+          REV: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/demo_key && chmod 600 ~/.ssh/demo_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          SSH="ssh -i $HOME/.ssh/demo_key -p $SSH_PORT -o StrictHostKeyChecking=yes -o BatchMode=yes $SSH_USER@$HOST"
+          SUDO=""; [ "$SSH_USER" != "root" ] && SUDO="sudo"
+          INCOMING="/tmp/roshd-demo-incoming-$REV"
+          git archive --format=tar HEAD | $SSH "rm -rf $INCOMING && mkdir -p $INCOMING && tar -x -C $INCOMING"
+          $SSH "$SUDO env SRC=$INCOMING DEMO_REV=${REV:0:7} RESEED=$RESEED bash $INCOMING/scripts/deploy/demo/deploy-demo.sh; rc=\$?; $SUDO rm -rf $INCOMING; exit \$rc"
+          rm -f ~/.ssh/demo_key
+
+      - name: Smoke check
+        if: steps.cfg.outputs.ready == '1'
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS https://demo.kanonashtiani.ir/api/health; then exit 0; fi
+            sleep 10
+          done
+          echo "::warning::دمو روی HTTPS پاسخ نداد؛ رکورد DNS و گواهی SSL را بررسی کنید (سرویس روی سرور بالا آمده است)."
