@@ -5,6 +5,7 @@ import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
 import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
 import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
 import { FEE_LABELS } from './finance.js';
+import { transition, bankSnapshot, linkBank } from '../exam_lifecycle.js';
 import { feeStatus, announcementAudience, saveExamResult, omrMeta, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
@@ -734,16 +735,24 @@ export default function register(r) {
     const b = ctx.body, title = clampStr(b.title, 150), grade = Number(b.grade);
     if (!title || !GRADES.includes(grade)) fail(400, 'عنوان و پایه را وارد کنید');
     if (b.exam_date && !isDate(b.exam_date)) fail(400, 'تاریخ آزمون نامعتبر است');
-    const qs = parseQuestions(b.questions, false);
-    const res = run('INSERT INTO exams (center_id, title, kind, grade, duration_min, questions, exam_date, location, created_by) VALUES (?,?,?,?,?,?,?,?,?)',
-      ctx.user.center_id, title, 'comprehensive', grade, Math.max(10, Number(b.duration_min) || 90), JSON.stringify(qs), b.exam_date || null, clampStr(b.location, 150), ctx.user.id);
-    return { ok: true, id: Number(res.lastInsertRowid) };
+    const manual = Array.isArray(b.questions) && b.questions.length ? parseQuestions(b.questions, false) : [];
+    const fromBank = Array.isArray(b.bank_question_ids) && b.bank_question_ids.length ? bankSnapshot(ctx, b.bank_question_ids, grade) : [];
+    const qs = [...fromBank, ...manual];
+    if (!qs.length || qs.length > 60) fail(400, 'تعداد سؤال‌ها باید بین ۱ تا ۶۰ باشد');
+    // آزمون جامع کاغذی است: پس از ساخت آمادهٔ اسکن (منتشرشده) است؛ کارنامه با «انتشار کارنامه» برای دانش‌آموز آزاد می‌شود.
+    return tx(() => {
+      const id = Number(run("INSERT INTO exams (center_id, title, kind, grade, duration_min, questions, exam_date, location, created_by, status, published_at) VALUES (?,?,?,?,?,?,?,?,?,'published',datetime('now'))",
+        ctx.user.center_id, title, 'comprehensive', grade, Math.max(10, Number(b.duration_min) || 90), JSON.stringify(qs), b.exam_date || null, clampStr(b.location, 150), ctx.user.id).lastInsertRowid);
+      linkBank(id, qs);
+      return { ok: true, id };
+    });
   });
   const ownComp = (ctx) => {
     const e = get(`SELECT * FROM exams WHERE id=? AND center_id=? AND kind='comprehensive'`, Number(ctx.params.id), ctx.user.center_id);
     if (!e) fail(404, 'آزمون یافت نشد');
     return e;
   };
+  r.post('/api/manager/comprehensive/:id/release', M, (ctx) => transition(ctx, ownComp(ctx), 'results_released'));
   r.get('/api/manager/comprehensive/:id', M, (ctx) => {
     const e = examWithResults(ownComp(ctx));
     e.students = e.students.map((s, i) => ({ ...s, seat: e.id * 1000 + i + 1 }));
@@ -759,6 +768,7 @@ export default function register(r) {
   });
   r.del('/api/manager/comprehensive/:id', M, (ctx) => {
     const e = ownComp(ctx);
+    if (get('SELECT 1 x FROM exam_results WHERE exam_id=? LIMIT 1', e.id)) fail(409, 'این آزمون نتیجهٔ ثبت‌شده دارد و برای حفظ سوابق حذف نمی‌شود');
     tx(() => { run('DELETE FROM points WHERE ref=?', `exam:${e.id}`); run('DELETE FROM exams WHERE id=?', e.id); });
     return { ok: true };
   });

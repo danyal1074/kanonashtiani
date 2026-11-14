@@ -175,7 +175,8 @@ export function saveExamResult(exam, studentId, answers, source, { actorId = nul
       ON CONFLICT(exam_id, student_id) DO UPDATE SET answers=excluded.answers, correct=excluded.correct, wrong=excluded.wrong, blank=excluded.blank, percent=excluded.percent, points=excluded.points, source=excluded.source, created_at=datetime('now')`,
     exam.id, studentId, JSON.stringify(answers), g.correct, g.wrong, g.blank, g.percent, pts, source);
     run('DELETE FROM points WHERE student_id=? AND ref=?', studentId, `exam:${exam.id}`);
-    if (pts > 0) addPoints(studentId, pts, 'آزمون', `نتیجه آزمون «${exam.title}» (${g.percent}٪)`, `exam:${exam.id}`);
+    // امتیاز انگیزشی فقط پس از انتشار کارنامه (آزمون‌های قبلی کارنامهٔ منتشرشده دارند)
+    if (pts > 0 && exam.results_released_at) addPoints(studentId, pts, 'آزمون', `نتیجه آزمون «${exam.title}» (${g.percent}٪)`, `exam:${exam.id}`);
   });
   const rank = get('SELECT COUNT(*)+1 r FROM exam_results WHERE exam_id=? AND percent>?', exam.id, g.percent).r;
   const of = get('SELECT COUNT(*) n FROM exam_results WHERE exam_id=?', exam.id).n;
@@ -184,7 +185,7 @@ export function saveExamResult(exam, studentId, answers, source, { actorId = nul
 
 // نمره هر درس (از ۲۰) به تفکیک ماه برای کارنامه و نمودار پیشرفت
 export function subjectScores(sid, sinceDate = null) {
-  const rows = all(`SELECT r.answers, r.created_at, e.questions, e.subject FROM exam_results r JOIN exams e ON e.id=r.exam_id WHERE r.student_id=? ${sinceDate ? 'AND r.created_at>=?' : ''} ORDER BY r.created_at`, ...(sinceDate ? [sid, sinceDate] : [sid]));
+  const rows = all(`SELECT r.answers, r.created_at, e.questions, e.subject FROM exam_results r JOIN exams e ON e.id=r.exam_id WHERE r.student_id=? AND e.results_released_at IS NOT NULL ${sinceDate ? 'AND r.created_at>=?' : ''} ORDER BY r.created_at`, ...(sinceDate ? [sid, sinceDate] : [sid]));
   return rows.map((r) => {
     const qs = JSON.parse(r.questions).map((q) => ({ ...q, subject: q.subject || r.subject || 'عمومی' }));
     return { date: r.created_at.slice(0, 10), ...gradeExam(qs, JSON.parse(r.answers)) };

@@ -1,5 +1,7 @@
 // پنل معلم
 import { all, get, run, tx } from '../db.js';
+import { audit } from '../db.js';
+import { examState, isEditable, acceptsResults, transition, bankSnapshot, linkBank } from '../exam_lifecycle.js';
 import { fail, ymd, addDays, weekStart, faWeekday, clampStr, saveUpload } from '../util.js';
 import { addPoints, totalPoints, levelOf, gradeRanking, saveExamResult, omrMeta, ensureLearningPath, generateLearningPath, subjectScores } from '../logic.js';
 import { studentResults, studyWeek } from './student.js';
@@ -220,9 +222,9 @@ export default function register(r) {
   });
 
   // ---------- آزمون ----------
-  r.get('/api/teacher/exams', T, (ctx) => all(`SELECT e.id, e.title, e.kind, e.subject, e.grade, e.duration_min, e.created_at, c.name class_name,
+  r.get('/api/teacher/exams', T, (ctx) => all(`SELECT e.id, e.title, e.kind, e.subject, e.grade, e.duration_min, e.created_at, e.status, e.starts_at, e.ends_at, e.results_released_at, c.name class_name,
     json_array_length(e.questions) qcount, (SELECT COUNT(*) FROM exam_results r WHERE r.exam_id=e.id) results, (SELECT AVG(percent) FROM exam_results r WHERE r.exam_id=e.id) avg
-    FROM exams e LEFT JOIN classes c ON c.id=e.class_id WHERE e.created_by=? ORDER BY e.id DESC`, ctx.user.id));
+    FROM exams e LEFT JOIN classes c ON c.id=e.class_id WHERE e.created_by=? ORDER BY e.id DESC`, ctx.user.id).map((e) => ({ ...e, state: examState(e) })));
   r.post('/api/teacher/exams', T, (ctx) => {
     const b = ctx.body;
     const kind = b.kind === 'paper' ? 'paper' : 'online';
@@ -232,24 +234,60 @@ export default function register(r) {
     const grade = Number(b.grade);
     if (!cls.some((c) => c.grade === grade)) fail(403, 'این پایه را تدریس نمی‌کنید');
     const classId = b.class_id ? ownClass(ctx.user.id, b.class_id).id : null;
-    const qs = parseQuestions(b.questions, kind === 'online');
-    const res = run('INSERT INTO exams (center_id, title, kind, subject, grade, class_id, duration_min, questions, created_by) VALUES (?,?,?,?,?,?,?,?,?)',
-      ctx.user.center_id, title, kind, clampStr(b.subject, 40), grade, classId, Math.max(1, Math.min(180, Number(b.duration_min) || 15)), JSON.stringify(qs), ctx.user.id);
-    return { ok: true, id: Number(res.lastInsertRowid) };
+    // سؤال‌ها: دستی، از بانک سؤال (با نسخهٔ ثابت) یا ترکیبی از هر دو
+    const manual = Array.isArray(b.questions) && b.questions.length ? parseQuestions(b.questions, kind === 'online') : [];
+    const fromBank = Array.isArray(b.bank_question_ids) && b.bank_question_ids.length ? bankSnapshot(ctx, b.bank_question_ids, grade) : [];
+    const qs = [...fromBank, ...manual];
+    if (!qs.length || qs.length > 60) fail(400, 'تعداد سؤال‌ها باید بین ۱ تا ۶۰ باشد');
+    // آزمون جدید همیشه «پیش‌نویس» است و تا انتشار برای دانش‌آموز دیده نمی‌شود
+    return tx(() => {
+      const id = Number(run("INSERT INTO exams (center_id, title, kind, subject, grade, class_id, duration_min, questions, created_by, status) VALUES (?,?,?,?,?,?,?,?,?,'draft')",
+        ctx.user.center_id, title, kind, clampStr(b.subject, 40), grade, classId, Math.max(1, Math.min(180, Number(b.duration_min) || 15)), JSON.stringify(qs), ctx.user.id).lastInsertRowid);
+      linkBank(id, qs);
+      audit(ctx.user.center_id, ctx.user.id, 'exam.create', 'exam', id, { questions: qs.length, from_bank: fromBank.length });
+      return { ok: true, id, status: 'draft' };
+    });
   });
+  // ویرایش فقط در پیش‌نویس، بازبینی یا آماده (پس از انتشار، سؤال‌ها ثابت می‌مانند)
+  r.put('/api/teacher/exams/:id', T, (ctx) => {
+    const e = ownExam(ctx), b = ctx.body;
+    if (!isEditable(e)) fail(409, 'آزمون منتشرشده قابل ویرایش نیست');
+    const title = b.title == null ? e.title : clampStr(b.title, 150);
+    if (!title) fail(400, 'عنوان آزمون را وارد کنید');
+    const classId = b.class_id === undefined ? e.class_id : b.class_id ? ownClass(ctx.user.id, b.class_id).id : null;
+    let qs = JSON.parse(e.questions);
+    if (b.questions !== undefined || b.bank_question_ids !== undefined) {
+      const manual = Array.isArray(b.questions) && b.questions.length ? parseQuestions(b.questions, e.kind === 'online') : [];
+      const fromBank = Array.isArray(b.bank_question_ids) && b.bank_question_ids.length ? bankSnapshot(ctx, b.bank_question_ids, e.grade) : [];
+      qs = [...fromBank, ...manual];
+      if (!qs.length || qs.length > 60) fail(400, 'تعداد سؤال‌ها باید بین ۱ تا ۶۰ باشد');
+    }
+    return tx(() => {
+      run('UPDATE exams SET title=?, class_id=?, duration_min=?, questions=?, status=CASE WHEN status=\'ready\' THEN \'review\' ELSE status END WHERE id=?', title, classId,
+        b.duration_min == null ? e.duration_min : Math.max(1, Math.min(180, Number(b.duration_min) || 15)), JSON.stringify(qs), e.id);
+      linkBank(e.id, qs);
+      audit(e.center_id, ctx.user.id, 'exam.edit', 'exam', e.id, { questions: qs.length });
+      return { ok: true };
+    });
+  });
+  r.post('/api/teacher/exams/:id/status', T, (ctx) => transition(ctx, ownExam(ctx), String(ctx.body.to || ''), ctx.body));
   const ownExam = (ctx) => {
     const e = get('SELECT * FROM exams WHERE id=? AND created_by=?', Number(ctx.params.id), ctx.user.id);
     if (!e) fail(404, 'آزمون یافت نشد');
     return e;
   };
-  r.get('/api/teacher/exams/:id', T, (ctx) => examWithResults(ownExam(ctx)));
+  r.get('/api/teacher/exams/:id', T, (ctx) => { const e = ownExam(ctx); return { ...examWithResults(e), state: examState(e) }; });
   r.del('/api/teacher/exams/:id', T, (ctx) => {
     const e = ownExam(ctx);
+    // نتایج تاریخی هرگز با حذف آزمون از بین نمی‌روند
+    if (get('SELECT 1 x FROM exam_results WHERE exam_id=? UNION ALL SELECT 1 FROM exam_attempts WHERE exam_id=? LIMIT 1', e.id, e.id)) fail(409, 'این آزمون نتیجه یا شرکت‌کننده دارد و برای حفظ سوابق حذف نمی‌شود');
+    audit(e.center_id, ctx.user.id, 'exam.delete', 'exam', e.id, { title: e.title });
     tx(() => { run('DELETE FROM points WHERE ref=?', `exam:${e.id}`); run('DELETE FROM exams WHERE id=?', e.id); });
     return { ok: true };
   });
   r.post('/api/teacher/exams/:id/result', T, (ctx) => {
     const e = ownExam(ctx);
+    if (!acceptsResults(e)) fail(409, 'ابتدا آزمون را منتشر کنید');
     const st = ownStudent(ctx.user.id, ctx.body.student_id);
     if (st.grade !== e.grade || (e.class_id && st.class_id !== e.class_id)) fail(400, 'این دانش‌آموز در جامعه این آزمون نیست');
     const n = JSON.parse(e.questions).length;

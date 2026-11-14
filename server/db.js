@@ -886,6 +886,56 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     add('difficulty', 'TEXT');
     add('timed', 'INTEGER NOT NULL DEFAULT 1');
   },
+  // نسخه ۲۲: چرخهٔ عمر آزمون رسمی و تولید سؤال با هوش مصنوعی.
+  // آزمون‌های قبلی «منتشرشده» با کارنامهٔ آزاد (همان رفتار قبلی) می‌مانند؛ آزمون‌های جدید از پیش‌نویس شروع می‌شوند.
+  (database) => {
+    const cols = database.prepare('PRAGMA table_info(exams)').all().map((c) => c.name);
+    const add = (t, name, def) => { if (!database.prepare(`PRAGMA table_info(${t})`).all().some((c) => c.name === name)) database.exec(`ALTER TABLE ${t} ADD COLUMN ${name} ${def}`); };
+    const fresh = !cols.includes('status');
+    add('exams', 'status', "TEXT NOT NULL DEFAULT 'draft'");
+    add('exams', 'starts_at', 'TEXT');
+    add('exams', 'ends_at', 'TEXT');
+    add('exams', 'randomize', 'INTEGER NOT NULL DEFAULT 0');
+    add('exams', 'published_at', 'TEXT');
+    add('exams', 'results_released_at', 'TEXT');
+    if (fresh) database.exec("UPDATE exams SET status='published', published_at=created_at, results_released_at=created_at");
+    add('exam_attempts', 'order_json', 'TEXT');
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS ix_exams_status ON exams(center_id, status);
+      CREATE TABLE IF NOT EXISTS ai_sources (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        pages INTEGER,
+        sha256 TEXT NOT NULL,
+        rights_confirmed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (center_id, sha256)
+      );
+      CREATE TABLE IF NOT EXISTS ai_generation_jobs (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        source_id INTEGER REFERENCES ai_sources(id) ON DELETE SET NULL,
+        requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        provider TEXT NOT NULL,
+        model TEXT,
+        params_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','succeeded','failed')),
+        error TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER, output_tokens INTEGER,
+        accepted INTEGER NOT NULL DEFAULT 0, flagged INTEGER NOT NULL DEFAULT 0, discarded INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        finished_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS ix_ai_jobs_center ON ai_generation_jobs(center_id, created_at);
+    `);
+    const qc = database.prepare('PRAGMA table_info(question_bank)').all().map((c) => c.name);
+    if (!qc.includes('ai_flags')) database.exec('ALTER TABLE question_bank ADD COLUMN ai_flags TEXT');
+  },
 ];
 
 // ثبت رویداد در لاگ ممیزی (در همان تراکنش فراخواننده اجرا می‌شود)

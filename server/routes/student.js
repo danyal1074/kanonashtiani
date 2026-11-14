@@ -5,6 +5,7 @@ import { all, get, run, tx } from '../db.js';
 import { fail, saveUpload, ymd, addDays, weekStart, faWeekday, nowIso, clampStr, parseBirthDate, normalizeIranianMobile } from '../util.js';
 import { totalPoints, levelOf, rankOf, studentRankings, addPoints, feeStatus, ensureLearningPath, saveExamResult, gradeExam } from '../logic.js';
 import { studentInfo, centerOf } from './common.js';
+import { examState, studentOrder } from '../exam_lifecycle.js';
 import { classroomEnabled, listClasses, joinTicket, ClassroomError } from '../classroom.js';
 
 const S = { roles: ['student'] };
@@ -32,7 +33,7 @@ export function studentResults(sid) {
   return all(`SELECT e.id, e.title, e.kind, e.subject, r.correct, r.wrong, r.blank, r.percent, r.points, r.created_at,
     (SELECT COUNT(*)+1 FROM exam_results r2 WHERE r2.exam_id=e.id AND r2.percent>r.percent) rank,
     (SELECT COUNT(*) FROM exam_results r3 WHERE r3.exam_id=e.id) of
-    FROM exam_results r JOIN exams e ON e.id=r.exam_id WHERE r.student_id=? ORDER BY r.created_at DESC`, sid);
+    FROM exam_results r JOIN exams e ON e.id=r.exam_id WHERE r.student_id=? AND e.results_released_at IS NOT NULL ORDER BY r.created_at DESC`, sid);
 }
 
 // پیام فارسی مناسب برای خطاهای سامانهٔ کلاس آنلاین (جزئیات فنی فقط در لاگ سرور می‌ماند)
@@ -151,48 +152,58 @@ export default function register(r) {
   // ---------- آزمون آنلاین ----------
   r.get('/api/student/exams', S, (ctx) => {
     const s = studentInfo(ctx.user.id);
-    return all(`SELECT e.id, e.title, e.subject, e.duration_min, e.created_at, json_array_length(e.questions) qcount, t.full_name teacher,
-      r.percent, r.points, at.started_at FROM exams e LEFT JOIN users t ON t.id=e.created_by
+    // فقط آزمون‌های منتشرشده؛ درصد پیش از انتشار کارنامه نمایش داده نمی‌شود
+    return all(`SELECT e.id, e.title, e.subject, e.duration_min, e.created_at, e.status, e.starts_at, e.ends_at, e.results_released_at, json_array_length(e.questions) qcount, t.full_name teacher,
+      r.percent, r.points, r.id result_id, at.started_at FROM exams e LEFT JOIN users t ON t.id=e.created_by
       LEFT JOIN exam_results r ON r.exam_id=e.id AND r.student_id=? LEFT JOIN exam_attempts at ON at.exam_id=e.id AND at.student_id=?
-      WHERE e.kind='online' AND e.center_id=? AND e.grade=? AND (e.class_id IS NULL OR e.class_id=?) ORDER BY e.id DESC`,
-    ctx.user.id, ctx.user.id, ctx.user.center_id, s.grade, s.class_id);
+      WHERE e.kind='online' AND e.center_id=? AND e.grade=? AND (e.class_id IS NULL OR e.class_id=?) AND e.status IN ('published','completed','results_released') ORDER BY e.id DESC`,
+    ctx.user.id, ctx.user.id, ctx.user.center_id, s.grade, s.class_id).map(({ result_id, ...e }) => ({ ...e, state: examState(e), submitted: !!result_id,
+      percent: e.results_released_at ? e.percent : null, points: e.results_released_at ? e.points : null }));
   });
   function examFor(ctx) {
     const s = studentInfo(ctx.user.id);
-    const e = get(`SELECT * FROM exams WHERE id=? AND kind='online' AND center_id=? AND grade=? AND (class_id IS NULL OR class_id=?)`, Number(ctx.params.id), ctx.user.center_id, s.grade, s.class_id);
+    const e = get(`SELECT * FROM exams WHERE id=? AND kind='online' AND center_id=? AND grade=? AND (class_id IS NULL OR class_id=?) AND status IN ('published','completed','results_released')`, Number(ctx.params.id), ctx.user.center_id, s.grade, s.class_id);
     if (!e) fail(404, 'آزمون یافت نشد');
     return e;
   }
   r.post('/api/student/exams/:id/start', S, (ctx) => {
     const e = examFor(ctx);
     if (get('SELECT 1 FROM exam_results WHERE exam_id=? AND student_id=?', e.id, ctx.user.id)) fail(400, 'این آزمون را قبلاً داده‌ای');
-    run('INSERT OR IGNORE INTO exam_attempts (exam_id, student_id, started_at) VALUES (?,?,?)', e.id, ctx.user.id, nowIso());
-    const at = get('SELECT started_at FROM exam_attempts WHERE exam_id=? AND student_id=?', e.id, ctx.user.id);
-    const qs = JSON.parse(e.questions).map((q) => ({ text: q.text, options: q.options, subject: q.subject }));
-    return { id: e.id, title: e.title, duration_min: e.duration_min, started_at: at.started_at, server_now: nowIso(), questions: qs };
+    const state = examState(e);
+    if (state === 'scheduled') fail(409, 'زمان شروع این آزمون هنوز نرسیده است');
+    if (state !== 'in_progress') fail(409, 'مهلت شرکت در این آزمون به پایان رسیده است');
+    run('INSERT OR IGNORE INTO exam_attempts (exam_id, student_id, started_at, order_json) VALUES (?,?,?,?)', e.id, ctx.user.id, nowIso(), JSON.stringify(studentOrder(e, ctx.user.id)));
+    const at = get('SELECT started_at, order_json FROM exam_attempts WHERE exam_id=? AND student_id=?', e.id, ctx.user.id);
+    const all_ = JSON.parse(e.questions), order = at.order_json ? JSON.parse(at.order_json) : all_.map((_, i) => i);
+    const qs = order.map((i) => ({ text: all_[i].text, image: all_[i].image, options: all_[i].options, subject: all_[i].subject }));
+    const byDuration = Date.parse(at.started_at) + e.duration_min * 60000, deadline = e.ends_at ? Math.min(byDuration, Date.parse(e.ends_at)) : byDuration;
+    return { id: e.id, title: e.title, duration_min: e.duration_min, started_at: at.started_at, deadline: new Date(deadline).toISOString(), server_now: nowIso(), questions: qs };
   });
   r.post('/api/student/exams/:id/submit', S, (ctx) => {
     const e = examFor(ctx);
-    const at = get('SELECT started_at FROM exam_attempts WHERE exam_id=? AND student_id=?', e.id, ctx.user.id);
+    const at = get('SELECT started_at, order_json FROM exam_attempts WHERE exam_id=? AND student_id=?', e.id, ctx.user.id);
     if (!at) fail(400, 'آزمون شروع نشده است');
     if (get('SELECT 1 FROM exam_results WHERE exam_id=? AND student_id=?', e.id, ctx.user.id)) fail(400, 'پاسخ این آزمون قبلاً ثبت شده');
     const startedMs = new Date(at.started_at.includes('T') ? at.started_at : at.started_at.replace(' ', 'T') + 'Z').getTime();
-    const expired = Date.now() - startedMs > (e.duration_min * 60 + 30) * 1000;
+    const expired = Date.now() - startedMs > (e.duration_min * 60 + 30) * 1000 || (e.ends_at && Date.now() > Date.parse(e.ends_at) + 30000) || e.status === 'results_released';
     if (expired) {
       fail(400, 'مهلت پاسخ‌دهی به آزمون به پایان رسیده است');
     }
     const qs = JSON.parse(e.questions);
-    const answers = qs.map((_, i) => {
-      const v = ctx.body.answers?.[i];
-      return Number.isInteger(v) && v >= 0 && v <= 3 ? v : null;
-    });
+    // پاسخ‌ها به ترتیب نمایش‌داده‌شده به دانش‌آموز می‌رسند و به ترتیب اصلی آزمون برگردانده می‌شوند
+    const order = at.order_json ? JSON.parse(at.order_json) : qs.map((_, i) => i);
+    const answers = qs.map(() => null);
+    order.forEach((orig, shown) => { const v = ctx.body.answers?.[shown]; answers[orig] = Number.isInteger(v) && v >= 0 && v <= 3 ? v : null; });
     const res = saveExamResult(e, ctx.user.id, answers, 'online');
-    return { ...res, expired: false, title: e.title, questions: qs, answers };
+    // کلید و نمره فقط پس از انتشار کارنامه
+    if (!e.results_released_at) return { ok: true, submitted: true, released: false, title: e.title };
+    return { ...res, released: true, expired: false, title: e.title, questions: qs, answers };
   });
   r.get('/api/student/results', S, (ctx) => studentResults(ctx.user.id));
   r.get('/api/student/results/:id', S, (ctx) => {
-    const row = get('SELECT r.*, e.title, e.kind, e.questions, e.subject FROM exam_results r JOIN exams e ON e.id=r.exam_id WHERE r.exam_id=? AND r.student_id=?', Number(ctx.params.id), ctx.user.id);
+    const row = get('SELECT r.*, e.title, e.kind, e.questions, e.subject, e.results_released_at FROM exam_results r JOIN exams e ON e.id=r.exam_id WHERE r.exam_id=? AND r.student_id=?', Number(ctx.params.id), ctx.user.id);
     if (!row) fail(404, 'کارنامه یافت نشد');
+    if (!row.results_released_at) fail(409, 'کارنامهٔ این آزمون هنوز منتشر نشده است');
     const qs = JSON.parse(row.questions).map((q) => ({ ...q, subject: q.subject || row.subject || 'عمومی' }));
     const answers = JSON.parse(row.answers);
     const rank = get('SELECT COUNT(*)+1 r FROM exam_results WHERE exam_id=? AND percent>?', row.exam_id, row.percent).r;

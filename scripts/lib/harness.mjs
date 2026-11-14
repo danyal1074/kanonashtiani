@@ -13,7 +13,7 @@ export async function createHarness(prefix = 'roshd-test-') {
   const util = await import('../../server/util.js');
   const { Router, COOKIE, parseCookies } = await import('../../server/http.js');
   const router = new Router();
-  for (const name of ['common', 'student', 'teacher', 'manager', 'admin', 'counselor', 'finance', 'bank', 'staff']) {
+  for (const name of ['common', 'student', 'teacher', 'manager', 'admin', 'counselor', 'finance', 'bank', 'ai', 'staff']) {
     const file = new URL(`../../server/routes/${name}.js`, import.meta.url);
     if (fs.existsSync(file)) (await import(file.href)).default(router);
   }

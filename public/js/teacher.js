@@ -1,5 +1,6 @@
 // پنل معلم
 import { teacherTimetable } from './timetable.js';
+import { stateBadge, lifecyclePanel, wireLifecycle, pickBankQuestions } from './exam-lifecycle-ui.js';
 import { bankView } from './bank-ui.js';
 import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, progress, ring, empty, cdHtml, jdate, jtime, jshort,
@@ -100,8 +101,8 @@ async function exams(el) {
   const classes = await myClasses();
   setHead('آزمون‌ها', 'آزمون آنلاین با تصحیح خودکار یا آزمون کاغذی با اسکن پاسخ‌برگ', `<div class="row" style="gap:6px"><a class="btn sm soft" href="#/hoosh-studio"><span class="ib sun" style="display:inline-flex">${icon('sparkles', { size: 14 })}</span> استودیوی هوش کمپلکس</a><button class="btn sm" id="newExam">+ آزمون جدید</button></div>`);
   const list = await api('/api/teacher/exams');
-  el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>عنوان</th><th>نوع</th><th>پایه/کلاس</th><th>سؤال</th><th>شرکت‌کننده</th><th>میانگین</th><th>تاریخ</th></tr></thead><tbody>
-    ${list.map((e) => `<tr class="click" data-href="#/exams/${e.id}"><td class="bold">${subjIcon(e.subject)} ${esc(e.title)}</td><td><span class="badge ${e.kind === 'online' ? 'blue' : 'orange'}">${e.kind === 'online' ? ' آنلاین' : ' کاغذی'}</span></td>
+  el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>عنوان</th><th>وضعیت</th><th>نوع</th><th>پایه/کلاس</th><th>سؤال</th><th>شرکت‌کننده</th><th>میانگین</th><th>تاریخ</th></tr></thead><tbody>
+    ${list.map((e) => `<tr class="click" data-href="#/exams/${e.id}"><td class="bold">${subjIcon(e.subject)} ${esc(e.title)}</td><td>${stateBadge(e.state)}</td><td><span class="badge ${e.kind === 'online' ? 'blue' : 'orange'}">${e.kind === 'online' ? ' آنلاین' : ' کاغذی'}</span></td>
     <td>${gradeName(e.grade)}${e.class_name ? ` - ${esc(e.class_name)}` : ' (همه کلاس‌ها)'}</td><td>${fa(e.qcount)}</td><td>${fa(e.results)}</td><td>${e.avg == null ? '—' : pct(e.avg)}</td><td class="tiny">${jdate(e.created_at)}</td></tr>`).join('') || `<tr><td colspan="7">${empty('file-check', 'هنوز آزمونی نساخته‌اید')}</td></tr>`}</tbody></table></div></div>`;
   on(el, 'click', 'tr[data-href]', (e, tr) => { location.hash = tr.dataset.href; });
   $('#newExam').onclick = () => examEditor(classes);
@@ -113,6 +114,7 @@ function examEditor(classes) {
   let kind = 'online';
   let questions = [{ text: '', options: ['', '', '', ''], answer: 0 }];
   let keyCount = 10, key = Array(10).fill(null);
+  let bankIds = [];
   modal({
     title: ' ساخت آزمون', wide: true,
     body: `<div class="seg" style="margin-bottom:14px"><button class="on" data-kind="online"> آزمون آنلاین (تستی)</button><button data-kind="paper">${icon('file-text', { size: 16 })} آزمون کاغذی + کلید پاسخ</button></div>
@@ -121,6 +123,7 @@ function examEditor(classes) {
       <div class="field"><label>پایه</label><select class="input" name="grade" id="exGrade">${grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div>
       <div class="field"><label>کلاس</label><select class="input" name="class_id" id="exClass"></select></div>
       <div class="field" id="durField"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="15" min="1" max="180"></div></form>
+      <div class="row" style="gap:8px;margin-top:12px"><button type="button" class="btn sm soft" id="fromBank">${icon('book', { size: 15 })} افزودن از بانک سؤال</button><span class="small muted" id="bankN"></span></div>
       <div id="qArea" style="margin-top:16px"></div>`,
     onOpen: (m) => {
       const drawCls = () => { const g = Number($('#exGrade', m).value); $('#exClass', m).innerHTML = `<option value="">همه کلاس‌های پایه</option>${classes.filter((c) => c.grade === g).map((c) => `<option value="${c.id}">کلاس ${esc(c.name)}</option>`).join('')}`; };
@@ -137,6 +140,7 @@ function examEditor(classes) {
         }
       };
       drawQ();
+      $('#fromBank', m).onclick = async () => { const ids = await pickBankQuestions(Number($('#exGrade', m).value), bankIds); if (ids) { bankIds = ids; $('#bankN', m).textContent = ids.length ? `${fa(ids.length)} سؤال از بانک (اول آزمون)؛ سؤال‌های دستی خالی نادیده گرفته می‌شوند` : ''; } };
       on(m, 'click', '[data-kind]', (e, b) => { kind = b.dataset.kind; $$('[data-kind]', m).forEach((x) => x.classList.toggle('on', x === b)); $('#durField', m).style.display = kind === 'online' ? '' : 'none'; drawQ(); });
       on(m, 'input', '[data-qt]', (e, t) => { questions[t.dataset.qt].text = t.value; });
       on(m, 'input', '[data-qo]', (e, t) => { const [i, j] = t.dataset.qo.split(',').map(Number); questions[i].options[j] = t.value; });
@@ -150,10 +154,13 @@ function examEditor(classes) {
       label: ' ذخیره آزمون', onClick: async (m) => {
         const f = formData($('#exForm', m));
         const subject = f.subject;
-        const qs_ = kind === 'online' ? questions.map((q) => ({ ...q, subject })) : key.map((a) => ({ answer: a, subject }));
-        if (kind === 'paper' && key.some((a) => a == null)) throw new Error('کلید پاسخ همه سؤال‌ها را مشخص کنید');
-        const r = await post('/api/teacher/exams', { ...f, kind, questions: qs_ });
-        toast('آزمون ساخته شد', 'ok');
+        let qs_ = kind === 'online' ? questions.map((q) => ({ ...q, subject })) : key.map((a) => ({ answer: a, subject }));
+        // با سؤال‌های بانک، سؤال دستیِ کاملاً خالی نادیده گرفته می‌شود
+        if (bankIds.length && kind === 'online') qs_ = qs_.filter((q) => q.text.trim() || q.options.some((o) => o.trim()));
+        if (kind === 'paper' && !bankIds.length && key.some((a) => a == null)) throw new Error('کلید پاسخ همه سؤال‌ها را مشخص کنید');
+        if (kind === 'paper' && bankIds.length) qs_ = qs_.filter((q) => q.answer != null);
+        const r = await post('/api/teacher/exams', { ...f, kind, questions: qs_, bank_question_ids: bankIds });
+        toast('آزمون به‌صورت پیش‌نویس ساخته شد؛ پس از بررسی منتشرش کنید', 'ok');
         location.hash = `#/exams/${r.id}`;
       },
     }],
@@ -167,16 +174,18 @@ async function examDetail(el, { id }) {
     `<a class="btn ghost sm" href="#/exams">→ آزمون‌ها</a> <button class="btn ghost sm" id="printSheet">${icon('printer', { size: 16 })} پاسخ‌برگ</button> <button class="btn sm green" id="scan">${icon('camera', { size: 16 })} اسکن پاسخ‌برگ</button> <button class="btn ghost sm" id="delExam" aria-label="حذف آزمون">${icon('trash', { size: 16 })}</button>`);
   const dist = [0, 0, 0, 0, 0];
   e.results.forEach((r) => { dist[Math.min(4, Math.floor(r.percent / 20))]++; });
-  el.innerHTML = `<div class="grid c3"><div class="card center tint-violet">${ring(e.avg || 0, { size: 140, label: e.avg == null ? '—' : pct(e.avg), sub: 'میانگین' })}<div class="small" style="margin-top:8px">${fa(e.results.length)} از ${fa(e.students.length)} نفر شرکت کرده‌اند</div></div>
+  el.innerHTML = `${lifecyclePanel(e)}<div class="grid c3"><div class="card center tint-violet">${ring(e.avg || 0, { size: 140, label: e.avg == null ? '—' : pct(e.avg), sub: 'میانگین' })}<div class="small" style="margin-top:8px">${fa(e.results.length)} از ${fa(e.students.length)} نفر شرکت کرده‌اند</div></div>
     <div class="card span2"><div class="card-title"><span class="ib">${icon('chart', { size: 18 })}</span>توزیع درصدها</div>${barChart(['۰-۲۰', '۲۰-۴۰', '۴۰-۶۰', '۶۰-۸۰', '۸۰-۱۰۰'].map((l, i) => ({ label: l, values: [dist[i]] })), [{ name: 'تعداد دانش‌آموز', color: '#0B5F66' }], { height: 180, fmt: (v) => fa(Math.round(v)) })}</div></div>
     <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('award', { size: 18 })}</span>رتبه‌بندی و نتایج</div><div class="table-wrap"><table class="table"><thead><tr><th>رتبه</th><th>دانش‌آموز</th><th>کلاس</th><th>درست/غلط/نزده</th><th>درصد</th><th>روش</th></tr></thead><tbody>
     ${e.results.map((r) => `<tr><td><b><span class="badge ${r.rank <= 3 ? 'yellow' : 'gray'}" style="min-width:28px;justify-content:center">${fa(r.rank)}</span></b></td><td>${esc(r.full_name)}</td><td>${esc(r.class_name || '')}</td><td><span class="pos">${fa(r.correct)}</span> / <span class="neg">${fa(r.wrong)}</span> / ${fa(r.blank)}</td><td><b>${pct(r.percent)}</b></td><td><span class="badge ${r.source === 'online' ? 'blue' : 'orange'}">${r.source === 'online' ? 'آنلاین' : 'اسکن'}</span></td></tr>`).join('') || `<tr><td colspan="6">${empty('clock', 'هنوز نتیجه‌ای ثبت نشده')}</td></tr>`}</tbody></table></div></div>
     <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('clock', { size: 18 })}</span>بدون نتیجه (${fa(e.students.length - done.size)})</div><div class="chips">${e.students.filter((s) => !done.has(s.id)).map((s) => `<button class="chip" data-scan="${s.id}">${esc(s.full_name)}</button>`).join('') || '—'}</div></div>`;
   const scanner = (pre) => openScanner({ exam: e, students: e.students.map((s) => ({ ...s, done: done.has(s.id) })), preselect: pre, onSave: (sid, answers, omr) => post(`/api/teacher/exams/${id}/result`, { student_id: sid, answers, omr }) }).then(() => examDetail(el, { id }));
+  wireLifecycle(el, e, `/api/teacher/exams/${id}`, () => examDetail(el, { id }));
+  if (['draft', 'review', 'ready'].includes(e.state)) { $('#scan').disabled = true; $('#scan').title = 'ثبت نتیجه پس از انتشار آزمون'; }
   $('#scan').onclick = () => scanner();
   on(el, 'click', '[data-scan]', (ev, b) => scanner(Number(b.dataset.scan)));
   $('#printSheet').onclick = () => printSheet({ title: e.title, subtitle: `پایه ${gradeName(e.grade)} • ${fa(e.questions.length)} سؤال`, count: e.questions.length });
-  $('#delExam').onclick = async () => { if (await confirmBox('آزمون و همه نتایج آن حذف شود؟', 'حذف')) { await del(`/api/teacher/exams/${id}`); toast('حذف شد', 'ok'); location.hash = '#/exams'; } };
+  $('#delExam').onclick = async () => { if (await confirmBox('این آزمون حذف شود؟ (آزمونِ دارای نتیجه برای حفظ سوابق حذف نمی‌شود)', 'حذف')) { await del(`/api/teacher/exams/${id}`); toast('حذف شد', 'ok'); location.hash = '#/exams'; } };
 }
 
 // ================= دانش‌آموزان =================

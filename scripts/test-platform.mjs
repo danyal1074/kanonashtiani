@@ -49,6 +49,8 @@ try {
     questions: [{ text: secret, options: ['a', 'b', 'c', 'd'], answer: 2 }, { text: secret + '2', options: ['a', 'b', 'c', 'd'], answer: 1 }] });
   await test('Teacher creates an official online exam', () => assert.equal(created.status, 200, JSON.stringify(created.data)));
   const examId = created.data.id;
+  await post(teacher, `/api/teacher/exams/${examId}/status`, { to: 'ready' });
+  await post(teacher, `/api/teacher/exams/${examId}/status`, { to: 'published' });
   let leaked = false;
   for (let i = 0; i < 20 && !leaked; i++) {
     const se = await post(student, '/api/student/self-exams', { subject: i % 2 ? 'ریاضی' : 'عمومی', count: 3 + i });

@@ -459,6 +459,8 @@ tx(() => {
   run('INSERT INTO transactions (center_id, type, amount, title, category, date) VALUES (1,?,?,?,?,?)', 'income', 12000000, 'کمک خیرین به صندوق کانون', 'کمک مردمی', addDays(TODAY, -12));
 });
 
+// دادهٔ نمونه: آزمون‌های نمونه منتشرشده با کارنامهٔ آزاد هستند (همان وضعیت آزمون‌های قبل از چرخهٔ عمر جدید)
+run("UPDATE exams SET status='published', published_at=created_at, results_released_at=created_at WHERE status='draft'");
 const counts = get(`SELECT (SELECT COUNT(*) FROM users WHERE role='student') s, (SELECT COUNT(*) FROM users WHERE role='parent') p, (SELECT COUNT(*) FROM exam_results) r, (SELECT COUNT(*) FROM pomodoros) pm, (SELECT COUNT(*) FROM points) pt`);
 dbm.db.exec('PRAGMA optimize; VACUUM;');
 closeDb();

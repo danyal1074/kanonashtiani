@@ -29,7 +29,7 @@ function prepareDesktopProfile(me) {
 import { openPhotoPicker } from './profile-photo.js';
 // پنل دانش‌آموز
 import { api, post, put, esc, fa, hasIcon, AVATAR_ICONS, sgn, num, money, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, isProfilePhoto, progress, ring, empty, cdHtml, countdown,
-  jdate, jtime, jshort, subjIcon, subjTint, SOFT, SUBJ_COLOR, gradeName, icon, fileToData, beep, confetti, WEEKDAYS, faWeekday, ymdOf, lineChart, barChart, state } from './core.js';
+  jdate, jtime, jshort, subjIcon, subjTint, SOFT, SUBJ_COLOR, gradeName, icon, fileToData, beep, confetti, WEEKDAYS, faWeekday, ymdOf, lineChart, barChart, state, jdatetime } from './core.js';
 import { messagesView, announcementsView, passwordCard, bindPassword } from './common.js';
 import { gamesHub, mathRush, storyView } from './games.js';
 import { panelShop } from './shop.js';
@@ -117,11 +117,13 @@ async function assignments(el) {
 async function exams(el) {
   setHead('آزمون‌های آنلاین', 'هر سؤال یک مرحله؛ تایمر را فراموش نکن!', '<a class="btn soft sm" href="#/results"> نتایج و کارنامه‌ها</a>');
   const list = await api('/api/student/exams');
-  const open = list.filter((e) => e.percent == null), done = list.filter((e) => e.percent != null);
+  // آزمون باز: منتشرشده، در بازهٔ برگزاری و هنوز ارسال‌نشده؛ کارنامه فقط پس از انتشار معلم دیده می‌شود
+  const open = list.filter((e) => !e.submitted && ['in_progress', 'scheduled'].includes(e.state)), done = list.filter((e) => e.submitted || !['in_progress', 'scheduled'].includes(e.state));
+  const status = (e) => e.state === 'scheduled' ? `<span class="badge blue">شروع: ${jdatetime(e.starts_at)}</span>` : !e.submitted && e.state !== 'in_progress' ? '<span class="badge gray">مهلت تمام شد</span>' : e.submitted && e.percent == null ? '<span class="badge orange">ارسال شد — منتظر انتشار کارنامه</span>' : e.ends_at && e.state === 'in_progress' ? `<span class="badge">مهلت تا ${jdatetime(e.ends_at)}</span>` : '';
   const card = (e) => `<div class="card ${e.percent == null ? 'tint-violet' : ''}"><div class="row" style="align-items:flex-start">${subjBubble(e.subject)}<div class="grow">
-    <h3 style="font-size:16px">${esc(e.title)}</h3><div class="tiny muted">${esc(e.teacher || '')} • ${fa(e.qcount)} سؤال •  ${fa(e.duration_min)} دقیقه</div></div>
+    <h3 style="font-size:16px">${esc(e.title)}</h3><div class="tiny muted">${esc(e.teacher || '')} • ${fa(e.qcount)} سؤال •  ${fa(e.duration_min)} دقیقه</div><div style="margin-top:6px">${status(e)}</div></div>
     ${e.percent != null ? `<div class="center"><div style="font-size:22px;font-weight:900;color:var(--primary)">${pct(e.percent)}</div><div class="tiny muted">${sgn(e.points)} امتیاز</div></div>` : ''}</div>
-    <div class="row" style="justify-content:flex-end;margin-top:12px">${e.percent == null ? `<a class="btn" href="#/exam/${e.id}">${e.started_at ? ' ادامه آزمون' : ' شروع آزمون'}</a>` : `<a class="btn ghost sm" href="#/results/${e.id}">${icon('file-text', { size: 16 })} مشاهده کارنامه</a>`}</div></div>`;
+    <div class="row" style="justify-content:flex-end;margin-top:12px">${!e.submitted && e.state === 'in_progress' ? `<a class="btn" href="#/exam/${e.id}">${e.started_at ? ' ادامه آزمون' : ' شروع آزمون'}</a>` : e.percent == null ? '' : `<a class="btn ghost sm" href="#/results/${e.id}">${icon('file-text', { size: 16 })} مشاهده کارنامه</a>`}</div></div>`;
   el.innerHTML = `<h3 style="margin-bottom:12px"> آزمون‌های در انتظار (${fa(open.length)})</h3><div class="grid c3">${open.map(card).join('') || `<div class="card">${empty('sparkles', 'آزمون جدیدی نداری')}</div>`}</div>
     <h3 style="margin:24px 0 12px">${icon('check-circle', { size: 16 })} آزمون‌های داده‌شده</h3><div class="grid c3">${done.map(card).join('') || `<div class="card">${empty('inbox', 'هنوز آزمونی نداده‌ای')}</div>`}</div>`;
 }
@@ -136,7 +138,7 @@ async function takeExam(el, { id }) {
   }
   const ex = await post(`/api/student/exams/${id}/start`);
   const skew = Date.now() - new Date(ex.server_now).getTime();
-  const endAt = new Date(ex.started_at).getTime() + ex.duration_min * 60e3 + skew;
+  const endAt = new Date(ex.deadline || (new Date(ex.started_at).getTime() + ex.duration_min * 60e3)).getTime() + skew;
   const answers = saved.answers || ex.questions.map(() => null);
   let cur = saved.cur || 0, submitted = false;
   const persist = () => { try { localStorage.setItem(key, JSON.stringify({ started: true, answers, cur })); } catch { /* */ } };
@@ -149,7 +151,7 @@ async function takeExam(el, { id }) {
   const draw = () => {
     const q = ex.questions[cur];
     $('#qcard', el).innerHTML = `<div class="row between"><span class="badge">سؤال ${fa(cur + 1)} از ${fa(ex.questions.length)}</span>${q.subject ? `<span class="badge gray">${subjIcon(q.subject)} ${esc(q.subject)}</span>` : ''}</div>
-      <div style="margin-top:14px;line-height:2">${esc(q.text)}</div><div class="options">${q.options.map((o, i) => `<button class="option ${answers[cur] === i ? 'sel' : ''}" data-opt="${i}"><span class="k">${fa(i + 1)}</span><span>${esc(o)}</span></button>`).join('')}</div>`;
+      <div style="margin-top:14px;line-height:2">${esc(q.text)}</div>${q.image ? `<img src="${esc(q.image)}" alt="تصویر سؤال" style="max-width:100%;max-height:320px;border-radius:12px;margin-top:8px">` : ''}<div class="options">${q.options.map((o, i) => `<button class="option ${answers[cur] === i ? 'sel' : ''}" data-opt="${i}"><span class="k">${fa(i + 1)}</span><span>${esc(o)}</span></button>`).join('')}</div>`;
     $('#dots', el).innerHTML = ex.questions.map((_, i) => `<button class="${i === cur ? 'cur' : answers[i] != null ? 'ans' : ''}" data-go="${i}">${fa(i + 1)}</button>`).join('');
     $('#prev', el).disabled = cur === 0;
     $('#next', el).textContent = cur === ex.questions.length - 1 ? 'آخرین سؤال' : 'بعدی ←';
@@ -175,6 +177,7 @@ async function takeExam(el, { id }) {
       const r = await post(`/api/student/exams/${id}/submit`, { answers });
       try { localStorage.removeItem(key); } catch { /* */ }
       if (auto) toast('زمان آزمون تمام شد و پاسخ‌ها ارسال شد', '');
+      if (!r.released) { toast('پاسخ‌هایت ثبت شد؛ کارنامه پس از انتشار معلم نمایش داده می‌شود', 'ok'); location.hash = '#/exams'; return; }
       if (r.percent >= 80) confetti(120);
       location.hash = `#/results/${id}`;
     } catch (e) { submitted = false; toast(e.message, 'err'); }
