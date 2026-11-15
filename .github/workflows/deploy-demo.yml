@@ -1,11 +1,13 @@
 # استقرار خودکار نسخهٔ دمو روی demo.kanonashtiani.ir (هرگز سامانهٔ اصلی)
-# پیش‌نیاز (Settings → Secrets and variables → Actions):
-#   DEMO_SSH_HOST         آی‌پی یا نام سرور
-#   DEMO_SSH_KEY          کلید خصوصی SSH (کاربر root یا کاربری با sudo بدون رمز)
-#   DEMO_SSH_KNOWN_HOSTS  خروجی دستور  ssh-keyscan -p <port> <host>  (برای تأیید هویت سرور)
-#   DEMO_SSH_USER         اختیاری؛ پیش‌فرض root
-#   DEMO_SSH_PORT         اختیاری؛ پیش‌فرض 22
-# بدون این Secretها، اجرا با پیام راهنما متوقف می‌شود و کاری روی سرور انجام نمی‌دهد.
+# پیش‌نیاز (Settings → Secrets and variables → Actions) — فقط یکی از این دو لازم است:
+#   DEMO_SSH_PASSWORD     رمز کاربر SSH سرور
+#   DEMO_SSH_KEY          یا کلید خصوصی SSH (امن‌تر)
+# اختیاری:
+#   DEMO_SSH_HOST         پیش‌فرض 89.46.217.44 (docs/DEPLOYMENT.md)
+#   DEMO_SSH_USER         پیش‌فرض root
+#   DEMO_SSH_PORT         پیش‌فرض 22
+#   DEMO_SSH_KNOWN_HOSTS  خروجی ssh-keyscan؛ اگر نباشد، کلید سرور در اولین اتصال خوانده و اثر انگشتش در لاگ چاپ می‌شود
+# بدون رمز/کلید، اجرا با خطا متوقف می‌شود و کاری روی سرور انجام نمی‌دهد.
 name: Deploy demo
 
 on:
@@ -35,12 +37,11 @@ jobs:
       - name: Check secrets
         id: cfg
         env:
-          HOST: ${{ secrets.DEMO_SSH_HOST }}
           KEY: ${{ secrets.DEMO_SSH_KEY }}
-          KNOWN: ${{ secrets.DEMO_SSH_KNOWN_HOSTS }}
+          PASS: ${{ secrets.DEMO_SSH_PASSWORD }}
         run: |
-          if [ -z "$HOST" ] || [ -z "$KEY" ] || [ -z "$KNOWN" ]; then
-            echo "::error::Secretهای DEMO_SSH_HOST، DEMO_SSH_KEY و DEMO_SSH_KNOWN_HOSTS تنظیم نشده‌اند؛ استقرار انجام نشد."
+          if [ -z "$KEY" ] && [ -z "$PASS" ]; then
+            echo "::error::Secret «DEMO_SSH_PASSWORD» (یا DEMO_SSH_KEY) تنظیم نشده است؛ استقرار انجام نشد."
             echo "ready=0" >> "$GITHUB_OUTPUT"
             exit 1  # اجرا قرمز می‌شود تا «موفق» به‌اشتباه برداشت نشود
           else
@@ -58,7 +59,8 @@ jobs:
       - name: Deploy to demo server
         if: steps.cfg.outputs.ready == '1'
         env:
-          HOST: ${{ secrets.DEMO_SSH_HOST }}
+          HOST: ${{ secrets.DEMO_SSH_HOST || '89.46.217.44' }}
+          PASS: ${{ secrets.DEMO_SSH_PASSWORD }}
           SSH_USER: ${{ secrets.DEMO_SSH_USER || 'root' }}
           SSH_PORT: ${{ secrets.DEMO_SSH_PORT || '22' }}
           KEY: ${{ secrets.DEMO_SSH_KEY }}
@@ -68,9 +70,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/demo_key && chmod 600 ~/.ssh/demo_key
-          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
-          SSH="ssh -i $HOME/.ssh/demo_key -p $SSH_PORT -o StrictHostKeyChecking=yes -o BatchMode=yes $SSH_USER@$HOST"
+          if [ -n "$KNOWN" ]; then printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$SSH_PORT" "$HOST" 2>/dev/null > ~/.ssh/known_hosts
+            [ -s ~/.ssh/known_hosts ] || { echo "::error::سرور $HOST:$SSH_PORT پاسخ SSH نداد"; exit 1; }
+            echo "::notice::اثر انگشت کلید سرور (با سرور مقایسه کنید):"; ssh-keygen -lf ~/.ssh/known_hosts
+          fi
+          if [ -n "$KEY" ]; then
+            printf '%s\n' "$KEY" > ~/.ssh/demo_key && chmod 600 ~/.ssh/demo_key
+            SSH="ssh -i $HOME/.ssh/demo_key -p $SSH_PORT -o StrictHostKeyChecking=yes -o BatchMode=yes $SSH_USER@$HOST"
+          else
+            sudo apt-get install -y -qq sshpass >/dev/null
+            export SSHPASS="$PASS"   # رمز از متغیر محیطی خوانده می‌شود، نه خط فرمان
+            SSH="sshpass -e ssh -p $SSH_PORT -o StrictHostKeyChecking=yes -o PubkeyAuthentication=no $SSH_USER@$HOST"
+          fi
           SUDO=""; [ "$SSH_USER" != "root" ] && SUDO="sudo"
           INCOMING="/tmp/roshd-demo-incoming-$REV"
           git archive --format=tar HEAD | $SSH "rm -rf $INCOMING && mkdir -p $INCOMING && tar -x -C $INCOMING"
