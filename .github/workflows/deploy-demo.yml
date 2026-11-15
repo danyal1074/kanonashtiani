@@ -40,8 +40,9 @@ jobs:
           KNOWN: ${{ secrets.DEMO_SSH_KNOWN_HOSTS }}
         run: |
           if [ -z "$HOST" ] || [ -z "$KEY" ] || [ -z "$KNOWN" ]; then
-            echo "::warning::Secretهای DEMO_SSH_HOST، DEMO_SSH_KEY و DEMO_SSH_KNOWN_HOSTS تنظیم نشده‌اند؛ استقرار انجام نشد."
+            echo "::error::Secretهای DEMO_SSH_HOST، DEMO_SSH_KEY و DEMO_SSH_KNOWN_HOSTS تنظیم نشده‌اند؛ استقرار انجام نشد."
             echo "ready=0" >> "$GITHUB_OUTPUT"
+            exit 1  # اجرا قرمز می‌شود تا «موفق» به‌اشتباه برداشت نشود
           else
             echo "ready=1" >> "$GITHUB_OUTPUT"
           fi
