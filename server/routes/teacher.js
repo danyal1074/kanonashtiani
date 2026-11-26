@@ -40,9 +40,23 @@ export function performanceList(centerId, classIds) {
     COALESCE((SELECT SUM(minutes) FROM pomodoros WHERE student_id=u.id AND date>=?),0) week_minutes
     FROM students s JOIN users u ON u.id=s.user_id JOIN classes c ON c.id=s.class_id WHERE s.class_id IN (${ph}) AND u.active=1`, from30, ws, ...classIds);
   const ranks = {};
-  for (const g of [...new Set(rows.map((r) => r.grade))]) gradeRanking(centerId, g).forEach((x, i) => { ranks[x.id] = i + 1; });
-  return rows.map((r) => ({ ...r, rank: ranks[r.id], level: levelOf(r.points), avg_percent: r.avg_percent == null ? null : Math.round(r.avg_percent) }))
-    .sort((a, b) => b.points - a.points);
+  for (const g of [...new Set(rows.map((r) => r.grade))]) {
+    const list = gradeRanking(centerId, g);
+    for (const x of list) {
+      const myTotal = Math.max(0, x.total);
+      ranks[x.id] = list.filter((r) => Math.max(0, r.total) > myTotal).length + 1;
+    }
+  }
+  return rows.map((r) => {
+    const pts = Math.max(0, r.points);
+    return {
+      ...r,
+      points: pts,
+      rank: ranks[r.id] || 1,
+      level: levelOf(pts),
+      avg_percent: r.avg_percent == null ? null : Math.round(r.avg_percent),
+    };
+  }).sort((a, b) => b.points - a.points || a.rank - b.rank || a.full_name.localeCompare(b.full_name, 'fa'));
 }
 
 export function studentDetail(s) {
