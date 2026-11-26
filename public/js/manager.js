@@ -6,6 +6,7 @@ import { messagesView, accountView } from './common.js';
 import { studentDetailHtml } from './teacher.js';
 import { managerTimetable, KINDS, kindOf } from './timetable.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
+import { questionBankView, qbBookDetailView } from './qb-teacher.js';
 
 export const nav = (me) => [
   { path: '/home', icon: 'chart', label: 'داشبورد' },
@@ -22,6 +23,7 @@ export const nav = (me) => [
   { path: '/hoosh-studio', icon: 'sparkles', label: 'استودیوی هوش کمپلکس' },
   { path: '/att-log', icon: 'user-check', label: 'لاگ تغییر حضور' },
   { path: '/comprehensive', icon: 'trophy', label: 'آزمون جامع کانون' },
+  { path: '/question-bank', icon: 'database', label: 'بانک سؤالات و کتاب‌ها' },
   { path: '/performance', icon: 'trend', label: 'عملکرد دانش‌آموزان' },
   { path: '/shop', icon: 'bag', label: 'مدیریت فروشگاه' },
   { path: '/messages', icon: 'message', label: 'پیام‌ها', badge: me.unread },
@@ -1529,6 +1531,9 @@ export const routes = [
   { path: '/att-log', view: L.attLog },
   { path: '/comprehensive', view: comprehensive },
   { path: '/comprehensive/:id', view: compDetail },
+  { path: '/question-bank', view: questionBankView },
+  { path: '/question-bank/:tab', view: questionBankView },
+  { path: '/qb-books/:id', view: qbBookDetailView },
   { path: '/performance', view: performance },
   { path: '/shop', view: shopAdmin },
   { path: '/settings', view: settings },

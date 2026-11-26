@@ -19,6 +19,7 @@ import registerAdmin from './routes/admin.js';
 import registerCounselor from './routes/counselor.js';
 import registerTextbooks from './routes/textbooks.js';
 import registerTextbookExercises from './routes/textbook-exercises.js';
+import registerQuestionBank from './routes/question-bank.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.ROSHD_HOST || '0.0.0.0';
@@ -35,7 +36,7 @@ const ALLOWED_ORIGINS = new Set((process.env.ROSHD_ALLOWED_ORIGINS || '').split(
 const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' https: data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
 
 const router = new Router();
-[registerCommon, registerStudent, registerTeacher, registerManager, registerAdmin, registerCounselor, registerTextbooks, registerTextbookExercises].forEach((r) => r(router));
+[registerCommon, registerStudent, registerTeacher, registerManager, registerAdmin, registerCounselor, registerTextbooks, registerTextbookExercises, registerQuestionBank].forEach((r) => r(router));
 router.get('/api/health', { auth: false }, () => {
   get('SELECT 1 x'); // اتصال به پایگاه داده زنده است
   return { ok: true, uptime_s: Math.round((Date.now() - metrics.started) / 1000) };
@@ -113,7 +114,7 @@ async function handle(req, res) {
       }
       const ctx = {
         req, res, user, impersonator, params, query: Object.fromEntries(url.searchParams),
-        body: route.rawBody ? {} : (method !== 'GET' ? await readBody(req, pathname === '/api/admin/restore' ? 300 * 1024 * 1024 : (pathname.includes('/barpa-exams/upload') ? 50 * 1024 * 1024 : undefined)) : {}),
+        body: route.rawBody ? {} : (method !== 'GET' ? await readBody(req, pathname === '/api/admin/restore' ? 300 * 1024 * 1024 : (pathname.includes('/barpa-exams/upload') ? 50 * 1024 * 1024 : (pathname === '/api/qb/import/validate' ? 30 * 1024 * 1024 : undefined))) : {}),
         ip, handled: false,
       };
       const out = await route.handler(ctx);

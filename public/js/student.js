@@ -36,6 +36,7 @@ import { mountOnlineClasses } from './online-classes.js';
 import { textbooksView, textbookView } from './textbooks.js';
 import { exerciseView, attemptView, papersView, paperView } from './textbook-exercises.js';
 import * as L from './legacy.js';
+import { qbBuilderView, qbExamRunnerView, qbReportView, qbPagesView } from './qb-student.js';
 
 export const nav = (me) => [
   { path: '/home', icon: 'home', label: 'خانه' },
@@ -46,6 +47,7 @@ export const nav = (me) => [
   { path: '/classes', icon: 'video', label: 'کلاس آنلاین' },
   { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
   { path: '/exams', icon: 'file-check', label: 'آزمون‌ها' },
+  { path: '/qb-builder', icon: 'sparkles', label: 'ساخت آزمون' },
   { path: '/results', icon: 'award', label: 'کارنامه و نتایج' },
   { path: '/study', icon: 'timer', label: 'مطالعه و پومودورو' },
   { path: '/path', icon: 'sparkles', label: 'مسیر یادگیری هوشمند' },
@@ -454,6 +456,10 @@ const baseRoutes = [
   { path: '/assignments', view: assignments },
   { path: '/exams', view: exams },
   { path: '/exam/:id', view: takeExam },
+  { path: '/qb-builder', view: qbBuilderView },
+  { path: '/qb-exam/:id', view: qbExamRunnerView },
+  { path: '/qb-report/:id', view: qbReportView },
+  { path: '/qb-pages', view: qbPagesView },
   { path: '/results', view: results },
   { path: '/results/:id', view: resultDetail },
   { path: '/study', view: study },

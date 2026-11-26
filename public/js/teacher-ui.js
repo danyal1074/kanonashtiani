@@ -36,6 +36,7 @@ export const nav = (me) => [
   { path: '/classes', icon: 'users', label: 'کلاس‌های من' },
   { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
   { path: '/exams', icon: 'file-check', label: 'آزمون‌ها' },
+  { path: '/question-bank', icon: 'database', label: 'بانک سؤالات' },
   { path: '/attendance', icon: 'user-check', label: 'حضور و غیاب' },
   { path: '/reports', icon: 'chart', label: 'گزارش‌ها' },
   { path: '/messages', icon: 'message', label: 'ارتباطات', badge: me.unread },

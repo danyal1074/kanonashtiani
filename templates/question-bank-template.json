@@ -1,0 +1,73 @@
+{
+  "manifest": {
+    "schema_version": "1.0",
+    "package_id": "sample-math4-1405",
+    "title": "نمونه قالب بسته سؤال رشد",
+    "language": "fa-IR",
+    "book": {
+      "book_code": "MATH-04",
+      "title": "ریاضی چهارم",
+      "grade": 4,
+      "edition": "1405"
+    },
+    "questions_file": "questions.json",
+    "question_count": 3
+  },
+  "questions": [
+    {
+      "external_id": "TMPL-Q001",
+      "type": "single_choice",
+      "chapter": 1,
+      "lesson": "الگوهای عددی",
+      "source": { "primary_page": 4, "pages": [4] },
+      "topic": "الگوها",
+      "difficulty": 2,
+      "stem": "عدد بعدی الگوی ۳، ۶، ۹، ۱۲ کدام است؟",
+      "options": [
+        { "id": "a", "text": "۱۳" },
+        { "id": "b", "text": "۱۴" },
+        { "id": "c", "text": "۱۵" },
+        { "id": "d", "text": "۱۸" }
+      ],
+      "answer": { "correct_option_ids": ["c"] },
+      "explanation": "هر بار ۳ واحد اضافه می‌شود.",
+      "score": 1,
+      "estimated_time_seconds": 45,
+      "tags": ["الگو", "نمونه"]
+    },
+    {
+      "external_id": "TMPL-Q002",
+      "type": "numeric",
+      "chapter": 2,
+      "source": { "primary_page": 25, "pages": [25] },
+      "topic": "کسر",
+      "difficulty": 3,
+      "stem": "حاصل عبارت $\\frac{1}{2} + \\frac{1}{2}$ را به صورت عدد بنویسید.",
+      "content_flags": { "has_formula": true },
+      "answer": { "value": 1, "tolerance": 0 },
+      "explanation": "دو نیمه برابر یک واحد کامل است.",
+      "score": 1,
+      "estimated_time_seconds": 45,
+      "tags": ["کسر"]
+    },
+    {
+      "external_id": "TMPL-Q003",
+      "type": "descriptive",
+      "chapter": 1,
+      "source": { "primary_page": 5, "pages": [5] },
+      "topic": "الگو",
+      "difficulty": 3,
+      "stem": "چگونه می‌توانیم قانون یک الگوی عددی افزایشی را پیدا کنیم؟",
+      "answer": {
+        "model_answer": "تفاوت هر دو عدد متوالی را محاسبه می‌کنیم و ثبات آن را بررسی می‌کنیم.",
+        "rubric": [
+          { "criterion": "توضیح محاسبه اختلاف", "points": 1 },
+          { "criterion": "ذکر مثال صحیح", "points": 1 }
+        ]
+      },
+      "score": 2,
+      "estimated_time_seconds": 90,
+      "tags": ["تشریحی"]
+    }
+  ]
+}

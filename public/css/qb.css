@@ -1,0 +1,50 @@
+/* استایل‌های بانک سؤالات، فرمول‌های ریاضی و موتور آزمون (RTL) */
+.qb-shell { display: flex; flex-direction: column; gap: 14px; }
+.qb-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px; background: var(--surface, #fff); border: 1px solid var(--line, #e7ebf0); border-radius: 14px; }
+.qb-tab { padding: 7px 12px; border-radius: 10px; font-size: 12.5px; font-weight: 700; color: var(--muted, #66748a); text-decoration: none; transition: background .15s, color .15s; }
+.qb-tab:hover { background: var(--sand-100, #f0f3f6); color: var(--ink, #0f1b2d); }
+.qb-tab.on { background: var(--brand, #0b6b70); color: #fff; }
+
+.qb-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.qb-kpi { display: flex; flex-direction: column; gap: 4px; padding: 14px; }
+.qb-kpi small { font-size: 12px; color: var(--muted, #66748a); font-weight: 700; }
+.qb-kpi b { font-size: 22px; font-weight: 900; }
+
+.qb-bar-row { display: grid; grid-template-columns: 120px 1fr 44px; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12.5px; }
+.qb-bar-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.qb-bar-track { height: 9px; border-radius: 99px; background: var(--sand-100, #f0f3f6); overflow: hidden; }
+.qb-bar-track i { display: block; height: 100%; border-radius: 99px; }
+
+.qb-steps { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11.5px; }
+.qb-steps span { padding: 4px 10px; border-radius: 999px; background: var(--sand-100, #f0f3f6); color: var(--ink-2, #364357); font-weight: 700; }
+
+.qb-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 28px 16px; border: 2px dashed var(--line-strong, #d5dce6); border-radius: 14px; background: var(--surface-2, #f9fafb); cursor: pointer; text-align: center; transition: border-color .15s, background .15s; }
+.qb-drop:hover, .qb-drop.over { border-color: var(--brand, #0b6b70); background: var(--brand-50, #eef7f7); }
+
+.qb-page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); gap: 6px; }
+.qb-pg-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px; border-radius: 10px; border: 1px solid var(--line, #e7ebf0); background: #fff; cursor: pointer; font-family: inherit; }
+.qb-pg-cell b { font-size: 13px; }
+.qb-pg-cell small { font-size: 10.5px; color: var(--muted, #66748a); }
+.qb-pg-cell.cov { background: #e3f4ec; border-color: #a7f3d0; color: #047857; }
+.qb-pg-cell.excl { background: #f3f4f6; color: #9ca3af; }
+.qb-pg-cell.empty { background: #fff; }
+
+.qb-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.qb-opt { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1.5px solid var(--line-strong, #d5dce6); border-radius: 12px; cursor: pointer; background: #fff; transition: border-color .15s, background .15s; }
+.qb-opt.on { border-color: var(--brand, #0b6b70); background: var(--brand-50, #eef7f7); }
+.qb-q-img { max-height: 220px; border-radius: 10px; border: 1px solid var(--line, #e7ebf0); cursor: zoom-in; }
+.qb-hs-dot { position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #ef4444; border: 3px solid #fff; transform: translate(-50%, -50%); box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+
+.qb-sheet { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.qb-sheet-btn { min-height: 36px; border-radius: 9px; border: 1px solid var(--line-strong, #d5dce6); background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.qb-sheet-btn.ans { background: #e3f4ec; border-color: #12805c; color: #047857; }
+.qb-sheet-btn.flg { border-color: #e3a33b; box-shadow: inset 0 0 0 2px #fdf3de; }
+.qb-sheet-btn.cur { outline: 2px solid var(--brand, #0b6b70); outline-offset: 1px; }
+
+/* ریاضی LaTeX */
+.qb-math { display: inline-block; padding: 0 4px; font-family: 'Times New Roman', serif; font-size: 1.05em; }
+.qb-math-block { display: block; text-align: center; padding: 8px 12px; margin: 6px 0; background: var(--surface-2, #f9fafb); border-radius: 10px; font-family: 'Times New Roman', serif; font-size: 1.15em; }
+.qb-frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; line-height: 1.05; margin: 0 2px; }
+.qb-frac .qb-num { border-bottom: 1.5px solid currentColor; padding: 0 4px; font-size: .85em; }
+.qb-frac .qb-den { padding: 0 4px; font-size: .85em; }
+.qb-sqrt .qb-rad { border-top: 1.5px solid currentColor; padding: 0 3px; }

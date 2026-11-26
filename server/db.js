@@ -697,6 +697,272 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     const cols = database.prepare('PRAGMA table_info(exams)').all().map((c) => c.name);
     if (!cols.includes('deadline')) database.exec('ALTER TABLE exams ADD COLUMN deadline TEXT');
   },
+  // بانک سؤالات، ساختار کامل کتب درسی و موتور آزمون داخلی (بدون AI)
+  (database) => {
+    const cCols = database.prepare('PRAGMA table_info(centers)').all().map((c) => c.name);
+    if (!cCols.includes('qb_mix_easy')) database.exec('ALTER TABLE centers ADD COLUMN qb_mix_easy INTEGER NOT NULL DEFAULT 30');
+    if (!cCols.includes('qb_mix_medium')) database.exec('ALTER TABLE centers ADD COLUMN qb_mix_medium INTEGER NOT NULL DEFAULT 50');
+    if (!cCols.includes('qb_mix_hard')) database.exec('ALTER TABLE centers ADD COLUMN qb_mix_hard INTEGER NOT NULL DEFAULT 20');
+
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS textbooks (
+        id TEXT PRIMARY KEY,
+        center_id INTEGER REFERENCES centers(id) ON DELETE CASCADE,
+        book_code TEXT UNIQUE,
+        title TEXT NOT NULL,
+        subject_key TEXT NOT NULL,
+        grade INTEGER NOT NULL CHECK (grade BETWEEN 4 AND 9),
+        cover_url TEXT,
+        published INTEGER NOT NULL DEFAULT 1,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS textbook_editions (
+        id INTEGER PRIMARY KEY,
+        book_id TEXT NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+        edition_label TEXT NOT NULL DEFAULT '1405',
+        pub_year INTEGER DEFAULT 1405,
+        pdf_path TEXT,
+        printed_pages INTEGER NOT NULL DEFAULT 1,
+        pdf_offset INTEGER NOT NULL DEFAULT 0,
+        sha256 TEXT,
+        is_default INTEGER NOT NULL DEFAULT 1,
+        published INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (book_id, edition_label)
+      );
+      CREATE TABLE IF NOT EXISTS textbook_chapters (
+        id INTEGER PRIMARY KEY,
+        edition_id INTEGER NOT NULL REFERENCES textbook_editions(id) ON DELETE CASCADE,
+        number INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        printed_start INTEGER NOT NULL,
+        printed_end INTEGER NOT NULL,
+        pdf_start INTEGER,
+        UNIQUE (edition_id, number)
+      );
+      CREATE TABLE IF NOT EXISTS textbook_lessons (
+        id INTEGER PRIMARY KEY,
+        chapter_id INTEGER NOT NULL REFERENCES textbook_chapters(id) ON DELETE CASCADE,
+        number INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        printed_start INTEGER NOT NULL,
+        printed_end INTEGER NOT NULL,
+        UNIQUE (chapter_id, number)
+      );
+      CREATE TABLE IF NOT EXISTS textbook_pages (
+        id INTEGER PRIMARY KEY,
+        edition_id INTEGER NOT NULL REFERENCES textbook_editions(id) ON DELETE CASCADE,
+        printed_page INTEGER NOT NULL,
+        pdf_page INTEGER NOT NULL,
+        chapter_id INTEGER REFERENCES textbook_chapters(id) ON DELETE SET NULL,
+        lesson_id INTEGER REFERENCES textbook_lessons(id) ON DELETE SET NULL,
+        excluded INTEGER NOT NULL DEFAULT 0,
+        exclude_reason TEXT,
+        UNIQUE (edition_id, printed_page)
+      );
+      CREATE TABLE IF NOT EXISTS questions (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER REFERENCES centers(id) ON DELETE CASCADE,
+        external_id TEXT,
+        book_id TEXT NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+        edition_id INTEGER NOT NULL REFERENCES textbook_editions(id) ON DELETE CASCADE,
+        chapter_id INTEGER REFERENCES textbook_chapters(id) ON DELETE SET NULL,
+        lesson_id INTEGER REFERENCES textbook_lessons(id) ON DELETE SET NULL,
+        primary_page INTEGER NOT NULL,
+        topic TEXT DEFAULT '',
+        type TEXT NOT NULL CHECK (type IN ('single_choice','multiple_choice','true_false','fill_blank','short_answer','descriptive','numeric','matching','ordering','multipart','hotspot')),
+        difficulty INTEGER NOT NULL DEFAULT 2 CHECK (difficulty BETWEEN 1 AND 5),
+        stem TEXT NOT NULL,
+        table_json TEXT,
+        content_flags_json TEXT NOT NULL DEFAULT '{}',
+        options_json TEXT NOT NULL DEFAULT '[]',
+        answer_json TEXT NOT NULL,
+        explanation TEXT DEFAULT '',
+        score REAL NOT NULL DEFAULT 1,
+        estimated_time_seconds INTEGER NOT NULL DEFAULT 60,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        assets_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','pending_review','approved','published','rejected','archived')),
+        content_hash TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        batch_id INTEGER,
+        reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        reviewed_at TEXT,
+        review_note TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS question_sources (
+        id INTEGER PRIMARY KEY,
+        question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+        edition_id INTEGER NOT NULL REFERENCES textbook_editions(id) ON DELETE CASCADE,
+        chapter_id INTEGER REFERENCES textbook_chapters(id) ON DELETE SET NULL,
+        lesson_id INTEGER REFERENCES textbook_lessons(id) ON DELETE SET NULL,
+        page_number INTEGER NOT NULL,
+        is_primary INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS question_versions (
+        id INTEGER PRIMARY KEY,
+        question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        change_note TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS question_review_logs (
+        id INTEGER PRIMARY KEY,
+        question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+        from_status TEXT,
+        to_status TEXT NOT NULL,
+        actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        note TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS question_import_batches (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER REFERENCES centers(id) ON DELETE CASCADE,
+        owner_id INTEGER NOT NULL REFERENCES users(id),
+        book_id TEXT NOT NULL,
+        edition_id INTEGER NOT NULL,
+        format TEXT NOT NULL CHECK (format IN ('zip','json','xlsx')),
+        filename TEXT NOT NULL,
+        total_count INTEGER DEFAULT 0,
+        valid_count INTEGER DEFAULT 0,
+        invalid_count INTEGER DEFAULT 0,
+        duplicate_count INTEGER DEFAULT 0,
+        imported_count INTEGER DEFAULT 0,
+        missing_assets_count INTEGER DEFAULT 0,
+        invalid_pages_count INTEGER DEFAULT 0,
+        invalid_answers_count INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'validated' CHECK (status IN ('validated','imported','published','failed')),
+        report_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS question_import_errors (
+        id INTEGER PRIMARY KEY,
+        batch_id INTEGER NOT NULL REFERENCES question_import_batches(id) ON DELETE CASCADE,
+        row_index INTEGER,
+        external_id TEXT,
+        field TEXT,
+        message TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS qb_exams (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        creator_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        mode TEXT NOT NULL CHECK (mode IN ('practice','official')),
+        title TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        edition_id INTEGER NOT NULL,
+        class_id INTEGER REFERENCES classes(id) ON DELETE CASCADE,
+        scope_type TEXT NOT NULL DEFAULT 'book',
+        scope_json TEXT NOT NULL DEFAULT '{}',
+        difficulty_mode TEXT NOT NULL DEFAULT 'mixed',
+        question_count INTEGER NOT NULL,
+        duration_minutes INTEGER NOT NULL DEFAULT 0,
+        shuffle_questions INTEGER NOT NULL DEFAULT 1,
+        shuffle_options INTEGER NOT NULL DEFAULT 1,
+        include_descriptive INTEGER NOT NULL DEFAULT 0,
+        starts_at TEXT,
+        ends_at TEXT,
+        status TEXT NOT NULL DEFAULT 'published',
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS qb_exam_questions (
+        id INTEGER PRIMARY KEY,
+        exam_id INTEGER NOT NULL REFERENCES qb_exams(id) ON DELETE CASCADE,
+        question_id INTEGER NOT NULL REFERENCES questions(id),
+        question_version INTEGER NOT NULL DEFAULT 1,
+        order_index INTEGER NOT NULL,
+        option_order_json TEXT,
+        score REAL NOT NULL DEFAULT 1,
+        snapshot_json TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS qb_exam_attempts (
+        id INTEGER PRIMARY KEY,
+        exam_id INTEGER NOT NULL REFERENCES qb_exams(id) ON DELETE CASCADE,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        answers_json TEXT NOT NULL DEFAULT '{}',
+        flagged_json TEXT NOT NULL DEFAULT '[]',
+        grading_json TEXT,
+        self_eval_json TEXT,
+        auto_score REAL DEFAULT 0,
+        manual_score REAL DEFAULT 0,
+        total_score REAL DEFAULT 0,
+        max_score REAL DEFAULT 0,
+        percent REAL DEFAULT 0,
+        correct_count INTEGER DEFAULT 0,
+        wrong_count INTEGER DEFAULT 0,
+        blank_count INTEGER DEFAULT 0,
+        pending_count INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'started' CHECK (status IN ('started','submitted','graded')),
+        started_at TEXT DEFAULT (datetime('now')),
+        submitted_at TEXT,
+        graded_at TEXT,
+        graded_by INTEGER REFERENCES users(id)
+      );
+      CREATE TABLE IF NOT EXISTS question_usage_history (
+        id INTEGER PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+        exam_id INTEGER NOT NULL,
+        is_correct INTEGER,
+        used_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS student_page_performance (
+        id INTEGER PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        book_id TEXT NOT NULL,
+        edition_id INTEGER NOT NULL,
+        page_number INTEGER NOT NULL,
+        attempts_count INTEGER NOT NULL DEFAULT 0,
+        correct_count INTEGER NOT NULL DEFAULT 0,
+        unique_questions INTEGER NOT NULL DEFAULT 0,
+        mastery_status TEXT NOT NULL DEFAULT 'not_evaluated',
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE (student_id, edition_id, page_number)
+      );
+
+      CREATE INDEX IF NOT EXISTS ix_qb_questions_filter ON questions(book_id, edition_id, status, primary_page, type, difficulty);
+      CREATE INDEX IF NOT EXISTS ix_qb_questions_ext ON questions(external_id, book_id);
+      CREATE INDEX IF NOT EXISTS ix_qb_questions_hash ON questions(content_hash, book_id);
+      CREATE INDEX IF NOT EXISTS ix_qb_sources_page ON question_sources(edition_id, page_number);
+      CREATE INDEX IF NOT EXISTS ix_qb_usage_stu ON question_usage_history(student_id, question_id);
+      CREATE INDEX IF NOT EXISTS ix_qb_attempts_stu ON qb_exam_attempts(student_id, exam_id);
+    `);
+
+    const catalogPath = path.join(ROOT, 'server', 'textbooks.json');
+    if (fs.existsSync(catalogPath)) {
+      const cat = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+      const insBook = database.prepare('INSERT OR IGNORE INTO textbooks (id, book_code, title, subject_key, grade, published) VALUES (?,?,?,?,?,1)');
+      const insEd = database.prepare('INSERT OR IGNORE INTO textbook_editions (book_id, edition_label, pub_year, printed_pages, pdf_offset, sha256, is_default, published) VALUES (?,?,?,?,?,?,1,1)');
+      const getEd = database.prepare('SELECT id FROM textbook_editions WHERE book_id=? AND edition_label=?');
+      const insCh = database.prepare('INSERT OR IGNORE INTO textbook_chapters (edition_id, number, title, printed_start, printed_end, pdf_start) VALUES (?,?,?,?,?,?)');
+      const getCh = database.prepare('SELECT id FROM textbook_chapters WHERE edition_id=? AND number=?');
+      const insPg = database.prepare('INSERT OR IGNORE INTO textbook_pages (edition_id, printed_page, pdf_page, chapter_id) VALUES (?,?,?,?)');
+      for (const b of cat) {
+        const code = `${(b.subject_key === 'ریاضی' ? 'MATH' : b.subject_key === 'علوم' ? 'SCI' : 'BOOK')}-${String(b.grade).padStart(2, '0')}`;
+        insBook.run(b.id, code, b.title, b.subject_key, b.grade);
+        insEd.run(b.id, '1405', 1405, b.printed_pages || 1, b.pdf_offset || 0, b.sha256 || null);
+        const ed = getEd.get(b.id, '1405');
+        if (!ed) continue;
+        const chMap = [];
+        for (const c of (b.chapters || [])) {
+          insCh.run(ed.id, c.number, c.title, c.printed_start, c.printed_end, c.pdf_start ?? null);
+          const cr = getCh.get(ed.id, c.number);
+          if (cr) chMap.push({ id: cr.id, start: c.printed_start, end: c.printed_end });
+        }
+        const offset = Number(b.pdf_offset || 0);
+        for (let p = 1; p <= (b.printed_pages || 0); p++) {
+          const ch = chMap.find((x) => p >= x.start && p <= x.end);
+          insPg.run(ed.id, p, p + offset, ch ? ch.id : null);
+        }
+      }
+    }
+  },
 ];
 
 export function migrate(database = db) {

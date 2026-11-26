@@ -9,6 +9,7 @@ import { messagesView, announcementsView, accountView } from './common.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
 import * as UI from './teacher-ui.js';
 import { lookModules } from './look.js';
+import { questionBankView, qbBookDetailView } from './qb-teacher.js';
 
 export const { nav, bottomNav } = UI;
 
@@ -525,6 +526,9 @@ export const routes = [
   { path: '/assignments/report', view: asgReport },
   { path: '/exams', view: exams },
   { path: '/exams/:id', view: examDetail },
+  { path: '/question-bank', view: questionBankView },
+  { path: '/question-bank/:tab', view: questionBankView },
+  { path: '/qb-books/:id', view: qbBookDetailView },
   { path: '/hoosh-studio', view: L.hooshStudio },
   { path: '/students', view: students },
   { path: '/students/:id', view: studentDetail },
