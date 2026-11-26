@@ -431,16 +431,73 @@ async function plans(el) {
 
 // ================= ویدیو و جزوه =================
 async function materials(el) {
-  setHead('ویدیو و جزوه', 'فایل‌های آموزشی که دانش‌آموزان می‌توانند دانلود کنند', '<button class="btn sm" id="addMat"> افزودن فایل</button>');
+  setHead('ویدیو و جزوه', 'فایل‌های آموزشی بدون محدودیت حجم با بهینه‌سازی خودکار', '<button class="btn sm" id="addMat">+ افزودن فایل</button>');
   const list = await api('/api/teacher/materials');
-  el.innerHTML = `<div class="card"><div class="list">${list.map((m) => `<div class="list-item"><div class="avatar sm" style="background:${m.kind === 'video' ? 'var(--red-soft)' : 'var(--blue-soft)'};color:${m.kind === 'video' ? 'var(--red-700)' : 'var(--slate-700)'}">${icon(m.kind === 'video' ? 'video' : 'file-text', { size: 18 })}</div><div class="grow"><b class="small">${esc(m.title)}</b><div class="tiny muted">${m.grade ? `پایه ${gradeName(m.grade)}` : 'همه پایه‌ها'} • ${esc(m.subject || '')} • ${jdate(m.created_at)}</div></div><a class="btn sm ghost" href="${esc(m.url)}" target="_blank">مشاهده</a></div>`).join('') || empty('inbox', 'فایلی نیست')}</div></div>`;
+  const fmtSize = (kb) => !kb ? '' : (kb >= 1024 ? `${fa((kb / 1024).toFixed(1))} مگابایت` : `${fa(kb)} کیلوبایت`);
+  el.innerHTML = `<div class="card"><div class="list">${list.map((m) => `<div class="list-item"><div class="avatar sm" style="background:${m.kind === 'video' ? 'var(--red-soft)' : 'var(--blue-soft)'};color:${m.kind === 'video' ? 'var(--red-700)' : 'var(--slate-700)'}">${icon(m.kind === 'video' ? 'video' : 'file-text', { size: 18 })}</div><div class="grow"><b class="small">${esc(m.title)}</b><div class="tiny muted">${m.grade ? `پایه ${gradeName(m.grade)}` : 'همه پایه‌ها'}${m.subject ? ` • ${esc(m.subject)}` : ''}${m.size_kb ? ` • ${fmtSize(m.size_kb)}` : ''} • ${jdate(m.created_at)}</div></div><a class="btn sm ghost" href="${esc(m.url)}" target="_blank">مشاهده</a><button type="button" class="icon-btn" data-del-mat="${m.id}" title="حذف" style="color:var(--red)">${icon('trash', { size: 16 })}</button></div>`).join('') || empty('inbox', 'فایلی نیست')}</div></div>`;
+  on(el, 'click', '[data-del-mat]', async (e, b) => {
+    if (!await confirmBox('این فایل برای همیشه حذف شود؟', 'حذف فایل')) return;
+    await del(`/api/teacher/materials/${b.dataset.delMat}`);
+    toast('فایل حذف شد', 'ok');
+    materials(el);
+  });
   const classes = await myClasses();
+  const subjects = [...new Set(classes.flatMap((c) => String(c.subjects || '').split('،').map((t) => t.trim())).filter(Boolean))];
   $('#addMat').onclick = () => modal({
-    title: ' افزودن ویدیو یا جزوه',
+    title: 'افزودن ویدیو یا جزوه',
     body: `<form class="stack" id="matForm"><div class="field"><label>عنوان</label><input class="input" name="title" required></div><div class="form-grid"><div class="field"><label>نوع</label><select class="input" name="kind"><option value="pdf">${icon('file-text', { size: 16 })} جزوه (PDF)</option><option value="video">${icon('video', { size: 16 })} ویدیو</option><option value="file">${icon('file-text', { size: 16 })} سایر</option></select></div>
-      <div class="field"><label>پایه</label><select class="input" name="grade"><option value="">همه</option>${[...new Set(classes.map((c) => c.grade))].map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div><div class="field"><label>درس</label><input class="input" name="subject"></div></div>
-      <div class="field"><label>فایل (حداکثر ۱۰ مگابایت)</label><input class="input" type="file" name="file" accept=".pdf,video/mp4,image/*,.zip,.doc,.docx"></div><div class="field"><label>یا لینک (برای ویدیوهای بزرگ)</label><input class="input ltr" name="url" placeholder="https://"></div></form>`,
-    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'افزودن', onClick: async (m) => { const f = $('#matForm', m); await post('/api/teacher/materials', { ...formData(f), file: await fileToData(f.file.files[0], 10) }); toast('افزوده شد', 'ok'); materials(el); } }],
+      <div class="field"><label>پایه</label><select class="input" name="grade"><option value="">همه</option>${[...new Set(classes.map((c) => c.grade))].map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div><div class="field"><label>درس</label><input class="input" name="subject" list="matSubjList" value="${esc(subjects[0] || '')}"><datalist id="matSubjList">${subjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div></div>
+      <div class="field"><label>انتخاب فایل (بدون محدودیت حجم · بهینه‌سازی خودکار روی سرور)</label><input class="input" type="file" name="file" accept=".pdf,video/*,image/*,.zip,.doc,.docx,.ppt,.pptx,.mp3"></div>
+      <div class="field"><label>یا لینک (برای فایل‌های آنلاین)</label><input class="input ltr" name="url" placeholder="https://"></div>
+      <div id="matProgWrap" style="display:none;margin-top:6px"><div class="row between small" style="margin-bottom:4px"><span id="matProgTxt">در حال بارگذاری...</span><b id="matProgPct">۰٪</b></div><div class="progress"><i id="matProgBar" style="width:0%"></i></div></div></form>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, {
+      label: 'افزودن و بارگذاری',
+      onClick: async (m) => {
+        const f = $('#matForm', m);
+        const d = formData(f);
+        if (!d.title?.trim()) { toast('عنوان را وارد کنید', 'err'); return false; }
+        const file = f.file.files[0];
+        if (!file) {
+          await post('/api/teacher/materials', d);
+          toast('افزوده شد', 'ok');
+          materials(el);
+          return true;
+        }
+        const wrap = $('#matProgWrap', m), txt = $('#matProgTxt', m), pctEl = $('#matProgPct', m), bar = $('#matProgBar', m);
+        wrap.style.display = '';
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const qsParams = new URLSearchParams({
+            title: d.title.trim(),
+            kind: d.kind || 'file',
+            grade: d.grade || '',
+            subject: d.subject || '',
+            filename: file.name,
+          });
+          xhr.open('POST', `/api/teacher/materials/upload?${qsParams.toString()}`);
+          xhr.upload.onprogress = (ev) => {
+            if (!ev.lengthComputable) return;
+            const p = Math.round((ev.loaded / ev.total) * 100);
+            pctEl.textContent = `${fa(p)}٪`;
+            bar.style.width = `${p}%`;
+            txt.textContent = p >= 100 ? 'در حال ثبت و بهینه‌سازی...' : 'در حال آپلود فایل...';
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText || '{}'));
+            else {
+              let msg = 'خطا در آپلود فایل';
+              try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
+              reject(new Error(msg));
+            }
+          };
+          xhr.onerror = () => reject(new Error('ارتباط با سرور قطع شد'));
+          xhr.send(file);
+        });
+        toast('فایل با موفقیت آپلود شد (بهینه‌سازی خودکار در پس‌زمینه انجام می‌شود)', 'ok');
+        materials(el);
+        return true;
+      }
+    }],
   });
 }
 

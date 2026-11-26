@@ -51,9 +51,13 @@ function studentPayload(ctx, b, existingId = null) {
     address: clampStr(b.address, 300), gender: b.gender === 'f' ? 'f' : 'm' };
 }
 
-function paymentStateSql() {
+function currentPeriodSql(alias = 'p') {
   const { curName, curStart } = jalaliMonthContext();
-  const matchCur = `((p.period IS NOT NULL AND (p.period LIKE '%${curName}%' OR p.period LIKE '%کل سال%')) OR (p.period IS NULL AND date(p.created_at) >= '${curStart}'))`;
+  return `((${alias}.period IS NOT NULL AND (${alias}.period LIKE '%${curName}%' OR ${alias}.period LIKE '%کل سال%')) OR (${alias}.period IS NULL AND date(${alias}.created_at) >= '${curStart}'))`;
+}
+
+function paymentStateSql() {
+  const matchCur = currentPeriodSql('p');
   return `CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL AND ${matchCur}) THEN 'paid'
     WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='pending' AND p.invoice_id IS NULL AND ${matchCur}) THEN 'pending' ELSE 'unpaid' END`;
 }
@@ -89,7 +93,7 @@ export default function register(r) {
     const sysFee = sys?.system_fee_enabled ? sys.system_fee || 0 : 0;
     const feeBy = Object.fromEntries(all('SELECT grade, amount FROM fee_settings WHERE center_id=?', cid).map((f) => [f.grade, f.amount]));
     const studs = all(`SELECT u.id, s.grade, s.class_id, u.created_at, ${paymentStateSql()} st,
-        COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL), 0) paid
+        COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL AND ${currentPeriodSql('p')}), 0) paid
       FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1`, cid);
     const studsAll = studs, studsG = grade ? studs.filter((x) => x.grade === grade) : studs;
     const summarize = (list) => {

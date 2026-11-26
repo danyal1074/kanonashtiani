@@ -1,5 +1,8 @@
 // پنل معلم
-import { all, get, run, tx } from '../db.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { all, get, run, tx, UPLOAD_DIR } from '../db.js';
 import { fail, ymd, addDays, weekStart, faWeekday, clampStr, saveUpload, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate } from '../util.js';
 import { addPoints, totalPoints, levelOf, gradeRanking, saveExamResult, ensureLearningPath, generateLearningPath, subjectScores } from '../logic.js';
 import { studentResults, studyWeek } from './student.js';
@@ -472,6 +475,8 @@ export default function register(r) {
   });
 
   // ---------- ویدیو و جزوه ----------
+  const ALLOWED_MAT_EXT = new Set(['.pdf', '.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.jpg', '.jpeg', '.png', '.webp', '.zip', '.doc', '.docx', '.ppt', '.pptx', '.mp3']);
+
   r.get('/api/teacher/materials', T, (ctx) => all('SELECT * FROM materials WHERE center_id=? ORDER BY id DESC', ctx.user.center_id));
   r.post('/api/teacher/materials', T, (ctx) => {
     const b = ctx.body;
@@ -480,9 +485,44 @@ export default function register(r) {
     const kind = ['video', 'pdf', 'file'].includes(b.kind) ? b.kind : 'file';
     let url = clampStr(b.url, 500);
     let size = null;
-    if (b.file) { const name = saveUpload(b.file, 10); url = `/uploads/${name}`; size = Math.round(Buffer.byteLength(b.file.data) * 0.75 / 1024); }
+    if (b.file) { const name = saveUpload(b.file, 50); url = `/uploads/${name}`; size = Math.round(Buffer.byteLength(b.file.data) * 0.75 / 1024); }
     if (!url || !/^(https?:\/\/|\/uploads\/)/.test(url)) fail(400, 'فایل یا لینک معتبر لازم است');
-    run('INSERT INTO materials (center_id, grade, subject, title, kind, url, size_kb) VALUES (?,?,?,?,?,?,?)', ctx.user.center_id, Number(b.grade) || null, clampStr(b.subject, 40), title, kind, url, size);
+    const res = run('INSERT INTO materials (center_id, grade, subject, title, kind, url, size_kb) VALUES (?,?,?,?,?,?,?)', ctx.user.center_id, Number(b.grade) || null, clampStr(b.subject, 40), title, kind, url, size);
+    return { ok: true, id: Number(res.lastInsertRowid) };
+  });
+  r.post('/api/teacher/materials/upload', { roles: ['teacher'], rawBody: true }, async (ctx) => {
+    const title = clampStr(ctx.query.title || '', 150);
+    if (!title) fail(400, 'عنوان را وارد کنید');
+    const kind = ['video', 'pdf', 'file'].includes(ctx.query.kind) ? ctx.query.kind : 'file';
+    const rawName = String(ctx.query.filename || ctx.req.headers['x-file-name'] || 'file.bin');
+    let ext = path.extname(decodeURIComponent(rawName)).toLowerCase();
+    if (!ALLOWED_MAT_EXT.has(ext)) fail(400, 'پسوند فایل مجاز نیست');
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    const outName = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${ext}`;
+    const outPath = path.join(UPLOAD_DIR, outName);
+    let bytes = 0;
+    await new Promise((resolve, reject) => {
+      const ws = fs.createWriteStream(outPath);
+      ctx.req.on('data', (chunk) => { bytes += chunk.length; });
+      ctx.req.on('error', (err) => { ws.destroy(); try { fs.unlinkSync(outPath); } catch {} reject(err); });
+      ws.on('error', (err) => { try { fs.unlinkSync(outPath); } catch {} reject(err); });
+      ws.on('finish', resolve);
+      ctx.req.pipe(ws);
+    });
+    if (!bytes) { try { fs.unlinkSync(outPath); } catch {} fail(400, 'فایل خالی است'); }
+    const sizeKb = Math.max(1, Math.round(bytes / 1024));
+    const url = `/uploads/${outName}`;
+    const res = run('INSERT INTO materials (center_id, grade, subject, title, kind, url, size_kb) VALUES (?,?,?,?,?,?,?)',
+      ctx.user.center_id, Number(ctx.query.grade) || null, clampStr(ctx.query.subject || '', 40), title, kind, url, sizeKb);
+    return { ok: true, id: Number(res.lastInsertRowid), url, size_kb: sizeKb };
+  });
+  r.del('/api/teacher/materials/:id', T, (ctx) => {
+    const m = get('SELECT * FROM materials WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id);
+    if (!m) fail(404, 'فایل یافت نشد');
+    run('DELETE FROM materials WHERE id=?', m.id);
+    if (m.url?.startsWith('/uploads/')) {
+      try { fs.unlinkSync(path.join(UPLOAD_DIR, m.url.slice('/uploads/'.length))); } catch {}
+    }
     return { ok: true };
   });
 
