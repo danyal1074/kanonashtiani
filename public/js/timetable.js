@@ -22,7 +22,7 @@ export async function teacherTimetable(el){
  const d=await api('/api/teacher/schedule'); renderTimetable(el,d.sessions,d.colors||{},false);
 }
 export async function managerTimetable(el){
- setHead('برنامه هفتگی کلاس‌ها','همهٔ کلاس‌ها، معلمان و مکان‌های کانون','<a class="btn sm" href="#/staff">ویرایش جلسات</a>');
+ setHead('برنامه هفتگی کلاس‌ها','همهٔ کلاس‌ها، معلمان و مکان‌های کانون','<a class="btn sm" href="#/staff">ویرایش و ثبت با عکس</a>');
  const [rows,colors]=await Promise.all([api('/api/manager/schedule/overview'),api('/api/manager/schedule/colors')]);renderTimetable(el,rows,colors,true);
 }
 function renderTimetable(el,rows,initialColors,manager){

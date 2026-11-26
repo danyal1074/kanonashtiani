@@ -13,7 +13,7 @@ INV.paid = INV.settled; INV.partial = INV.partially_paid; INV.issued = INV.unpai
 const invBadge = (st) => { const [l, c] = INV[st] || [st || '—', '']; return `<span class="badge ${c}">${esc(l)}</span>`; };
 // تصویر صفحه کتاب هوش؛ سرور فقط به معلم و مدیر همان کانون می‌دهد
 const bookPageUrl = (bookId, page) => `/api/exam-books/${encodeURIComponent(bookId)}/pages/${Number(page)}`;
-const FEE_TYPES = { tuition: 'شهریه', membership: 'حق عضویت', camp: 'اردو', book: 'کتاب' };
+const FEE_TYPES = { tuition: 'شهریه', membership: 'حق عضویت', camp: 'اردو', book: 'کتاب', buffet: 'بوفه (خرید نسیه)' };
 
 // ---------- جدول‌های مشترک (دانش‌آموز، ولی، مدیر) ----------
 export const scoresTable = (rows, { teacher = true, student = false } = {}) => rows.length ? `<div class="table-wrap"><table class="table"><thead><tr>${student ? '<th>دانش‌آموز</th>' : ''}<th>درس</th><th>عنوان</th><th>نمره از ۲۰</th>${teacher ? '<th>معلم</th>' : ''}<th>تاریخ</th></tr></thead><tbody>${rows.map((m) => `<tr>${student ? `<td>${esc(m.student_name)}</td>` : ''}<td>${esc(m.subject)}</td><td>${esc(m.title)}</td><td><b class="${m.score < 10 ? 'red-t' : ''}">${score20(m.score)}</b></td>${teacher ? `<td>${esc(m.teacher_name || '')}</td>` : ''}<td class="tiny muted">${dt(m.created_at)}</td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'نمره‌ای ثبت نشده');
@@ -305,12 +305,11 @@ export async function counselor(el, _p, me) {
   draw();
 }
 
-// ================= دانش‌آموز: نمرات، فاکتورها، کارنامه برپا =================
+// ================= دانش‌آموز: فاکتورها، کارنامه برپا =================
 export async function records(el) {
-  setHead('نمرات و فاکتورها', 'نمره‌های مستمر کلاس، فاکتورهای دوره‌ای و کارنامه‌های آزمون جامع');
-  const [s, i, b, fee] = await Promise.all([api('/api/student/manual-scores'), api('/api/student/invoices'), api('/api/barpa-exams/reports'), api('/api/student/payment').catch(() => null)]);
-  el.innerHTML = `<section class="card" style="margin-bottom:16px"><div class="card-title">نمرات مستمر کلاسی</div>${scoresTable(s)}</section>
-  <section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i, { pay: true })}</section>
+  setHead('فاکتورها و کارنامه‌ها', 'فاکتورهای دوره‌ای، خرید بوفه و کارنامه‌های آزمون جامع');
+  const [i, b, fee] = await Promise.all([api('/api/student/invoices'), api('/api/barpa-exams/reports'), api('/api/student/payment').catch(() => null)]);
+  el.innerHTML = `<section class="card" style="margin-bottom:16px"><div class="card-title">فاکتورهای دوره‌ای</div>${invoicesTable(i, { pay: true })}</section>
   <section class="card"><div class="card-title">کارنامه آزمون جامع برپا</div>${barpaList(b)}</section>`;
   on(el, 'click', '[data-payinv]', (e, btn) => modal({
     title: 'پرداخت فاکتور',
@@ -367,21 +366,51 @@ export async function parentRecords(el, _p, me, child) {
 
 // ================= مدیر: فاکتورها، پیامک، کارنامه برپا، نمرات =================
 export async function mgrInvoices(el) {
-  setHead('فاکتورهای دوره‌ای', 'صدور بدهی برای یک دانش‌آموز یا کل یک کلاس');
+  setHead('فاکتورهای دوره‌ای و بوفه', 'صدور بدهی برای یک دانش‌آموز (بوفه، کتاب و…) یا کل یک کلاس');
   const [meta, list] = await Promise.all([api('/api/manager/meta'), api('/api/manager/invoices')]);
   const owed = list.reduce((a, i) => a + i.remaining, 0);
+  let targetStu = null;
   el.innerHTML = `<div class="grid c3"><form id="ivForm" class="card" aria-label="صدور فاکتور"><div class="card-title">صدور فاکتور</div><div class="stack">
-    <div class="field"><label for="ivCls">کلاس</label><select class="input" id="ivCls" name="class_id" required><option value="">انتخاب کنید</option>${meta.classes.map((c) => `<option value="${c.id}">${esc(c.name)} · پایه ${gradeName(c.grade)} (${fa(c.students)} نفر)</option>`).join('')}</select></div>
-    <div class="field"><label for="ivType">نوع</label><select class="input" id="ivType" name="fee_type">${Object.entries(FEE_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
-    <div class="field"><label for="ivPer">دوره (مثلاً مهر ۱۴۰۵)</label><input class="input" id="ivPer" name="period" required maxlength="40"></div>
-    <div class="field"><label for="ivAmt">مبلغ به تومان</label><input class="input" id="ivAmt" name="amount" type="number" min="1000" step="1000" inputmode="numeric" required></div>
-    <button class="btn" type="submit">صدور برای همه‌ی دانش‌آموزان کلاس</button></div></form>
+    <div class="field"><label for="ivType">نوع فاکتور</label><select class="input" id="ivType" name="fee_type">${Object.entries(FEE_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    <div class="field"><label for="ivScope">مخاطب فاکتور</label><select class="input" id="ivScope" name="scope"><option value="class">کل یک کلاس</option><option value="student">یک دانش‌آموز خاص (مثلاً بوفه)</option></select></div>
+    <div class="field" id="ivClsBox"><label for="ivCls">کلاس</label><select class="input" id="ivCls" name="class_id"><option value="">انتخاب کنید</option>${meta.classes.map((c) => `<option value="${c.id}">${esc(c.name)} · پایه ${gradeName(c.grade)} (${fa(c.students)} نفر)</option>`).join('')}</select></div>
+    <div class="field" id="ivStuBox" style="display:none"><label>دانش‌آموز</label><div class="row wrap" style="gap:8px"><button type="button" class="btn sm soft" id="ivPickStu">جستجو و انتخاب دانش‌آموز</button><span id="ivStuName" class="small bold muted">انتخاب نشده</span></div></div>
+    <div class="field"><label for="ivPer" id="ivPerLbl">دوره / شرح خرید</label><input class="input" id="ivPer" name="period" required maxlength="40" placeholder="مثلاً مهر ۱۴۰۵ یا ساندویچ بوفه"></div>
+    <div class="field"><label for="ivAmt">مبلغ به تومان</label><input class="input" id="ivAmt" name="amount" type="number" min="1000" step="500" inputmode="numeric" required></div>
+    <button class="btn" type="submit" id="ivSubmit">صدور فاکتور</button></div></form>
     <section class="card span2"><div class="card-title">مانده بدهی کل: <b>${money(owed)}</b></div>${invoicesTable(list, { student: true })}</section></div>`;
-  $('#ivForm', el).onsubmit = (e) => { e.preventDefault(); const f = e.target; busy(e.submitter, async () => {
-    if (!(await confirmBox(`برای همه‌ی دانش‌آموزان این کلاس فاکتور ${money(Number(f.amount.value))} صادر شود؟`))) return;
-    const r = await post('/api/manager/invoices', { class_id: Number(f.class_id.value), fee_type: f.fee_type.value, period: f.period.value, amount: Number(f.amount.value) });
-    toast(`${fa(r.count)} فاکتور صادر شد`, 'ok'); mgrInvoices(el);
-  }); };
+  const syncScope = () => {
+    const isStu = $('#ivScope', el).value === 'student';
+    $('#ivClsBox', el).style.display = isStu ? 'none' : '';
+    $('#ivStuBox', el).style.display = isStu ? '' : 'none';
+    $('#ivCls', el).required = !isStu;
+    $('#ivSubmit', el).textContent = isStu ? 'صدور فاکتور برای دانش‌آموز' : 'صدور برای همه‌ی دانش‌آموزان کلاس';
+  };
+  $('#ivScope', el).onchange = syncScope;
+  $('#ivType', el).onchange = (e) => {
+    if (e.target.value === 'buffet') {
+      $('#ivScope', el).value = 'student';
+      syncScope();
+      $('#ivPerLbl', el).textContent = 'شرح خرید بوفه (مثلاً ساندویچ و آبمیوه)';
+      if (!$('#ivPer', el).value) $('#ivPer', el).placeholder = 'مثلاً ساندویچ و آبمیوه';
+    } else {
+      $('#ivPerLbl', el).textContent = 'دوره / شرح خرید';
+    }
+  };
+  $('#ivPickStu', el).onclick = async () => {
+    const s = await pickStudent('انتخاب دانش‌آموز برای صدور فاکتور');
+    if (s) { targetStu = s; $('#ivStuName', el).textContent = s.name; $('#ivStuName', el).classList.remove('muted'); }
+  };
+  $('#ivForm', el).onsubmit = (e) => { e.preventDefault(); const f = e.target; const isStu = f.scope.value === 'student';
+    if (isStu && !targetStu) return toast('لطفاً ابتدا دانش‌آموز را انتخاب کنید', 'err');
+    busy(e.submitter, async () => {
+      const msg = isStu ? `برای «${targetStu.name}» فاکتور ${money(Number(f.amount.value))} صادر شود؟` : `برای همه‌ی دانش‌آموزان این کلاس فاکتور ${money(Number(f.amount.value))} صادر شود؟`;
+      if (!(await confirmBox(msg))) return;
+      const payload = isStu ? { student_id: targetStu.id, fee_type: f.fee_type.value, period: f.period.value, amount: Number(f.amount.value) } : { class_id: Number(f.class_id.value), fee_type: f.fee_type.value, period: f.period.value, amount: Number(f.amount.value) };
+      const r = await post('/api/manager/invoices', payload);
+      toast(`${fa(r.count)} فاکتور صادر شد`, 'ok'); mgrInvoices(el);
+    });
+  };
 }
 const SMS = { sent: ['ارسال شد', 'green'], failed: ['ناموفق', 'red'], pending: ['در صف', 'orange'] };
 

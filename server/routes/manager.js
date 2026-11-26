@@ -9,6 +9,7 @@ export { recalcInvoice };
 import { importStudents } from '../importer.js';
 import { syncStudentsLater, removeStudentsLater, classroomEnabled, pendingRemovals, fullSync, ClassroomError } from '../classroom.js';
 import { sendSms, smsProvider } from '../sms.js';
+import { extractScheduleFromImage } from '../schedule-ocr.js';
 import { setSession } from './common.js';
 import { parseQuestions, examWithResults, performanceList, studentDetail } from './teacher.js';
 
@@ -250,6 +251,15 @@ export default function register(r) {
     if (!GRADES.includes(grade) || !name) fail(400, 'پایه و نام کلاس را وارد کنید');
     if (get('SELECT 1 FROM classes WHERE center_id=? AND grade=? AND name=?', ctx.user.center_id, grade, name)) fail(400, 'این کلاس وجود دارد');
     run('INSERT INTO classes (center_id, grade, name) VALUES (?,?,?)', ctx.user.center_id, grade, name);
+    return { ok: true };
+  });
+  r.put('/api/manager/classes/:id', M, (ctx) => {
+    const c = ownClass(ctx, ctx.params.id);
+    const name = clampStr(ctx.body.name, 30);
+    const grade = ctx.body.grade != null ? Number(ctx.body.grade) : c.grade;
+    if (!GRADES.includes(grade) || !name) fail(400, 'پایه و نام کلاس را وارد کنید');
+    if (get('SELECT 1 FROM classes WHERE center_id=? AND grade=? AND name=? AND id<>?', ctx.user.center_id, grade, name, c.id)) fail(400, 'کلاسی با این نام در این پایه وجود دارد');
+    run('UPDATE classes SET name=?, grade=? WHERE id=?', name, grade, c.id);
     return { ok: true };
   });
   r.del('/api/manager/classes/:id', M, (ctx) => {
@@ -531,6 +541,41 @@ export default function register(r) {
   r.del('/api/manager/schedule/:id', M, (ctx) => {
     run('DELETE FROM schedule WHERE id=? AND class_id IN (SELECT id FROM classes WHERE center_id=?)', Number(ctx.params.id), ctx.user.center_id);
     return { ok: true };
+  });
+  r.post('/api/manager/schedule/parse-image', M, async (ctx) => {
+    const dataUrl = String(ctx.body.image || '');
+    if (!dataUrl) fail(400, 'تصویر برنامه هفتگی ارسال نشده است');
+    const teachers = all(`SELECT id, full_name FROM users WHERE center_id=? AND role='teacher' AND active=1`, ctx.user.center_id);
+    const subjects = all(`SELECT DISTINCT subject FROM schedule WHERE class_id IN (SELECT id FROM classes WHERE center_id=?) UNION SELECT DISTINCT subject FROM teacher_classes WHERE teacher_id IN (SELECT id FROM users WHERE center_id=?)`, ctx.user.center_id, ctx.user.center_id).map((x) => x.subject).filter(Boolean);
+    try {
+      const res = await extractScheduleFromImage(dataUrl, { teachers, subjects });
+      return { ok: true, ...res };
+    } catch (e) {
+      fail(400, e.message);
+    }
+  });
+  r.post('/api/manager/schedule/bulk', M, (ctx) => {
+    const b = ctx.body, c = ownClass(ctx, b.class_id);
+    const slots = Array.isArray(b.slots) ? b.slots : [];
+    if (!slots.length) fail(400, 'هیچ جلسه‌ای برای ثبت ارسال نشده است');
+    const validTeachers = new Set(all(`SELECT id FROM users WHERE center_id=? AND role='teacher'`, ctx.user.center_id).map((t) => t.id));
+    let inserted = 0, skipped = 0;
+    tx(() => {
+      if (b.replace) run('DELETE FROM schedule WHERE class_id=?', c.id);
+      for (const s of slots) {
+        const wd = Number(s.weekday);
+        const start = String(s.start || '').trim(), end = String(s.end || '').trim();
+        const subject = clampStr(s.subject, 40);
+        if (!(wd >= 0 && wd <= 6) || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || end <= start || !subject) { skipped++; continue; }
+        const clash = get('SELECT 1 FROM schedule WHERE class_id=? AND weekday=? AND start<? AND end>?', c.id, wd, end, start);
+        if (clash) { skipped++; continue; }
+        const tid = s.teacher_id && validTeachers.has(Number(s.teacher_id)) ? Number(s.teacher_id) : null;
+        const kind = SESSION_KINDS.includes(s.kind) ? s.kind : 'academic';
+        run('INSERT INTO schedule (class_id, weekday, start, end, subject, teacher_id, room, kind) VALUES (?,?,?,?,?,?,?,?)', c.id, wd, start, end, subject, tid, clampStr(s.room, 30), kind);
+        inserted++;
+      }
+    });
+    return { ok: true, inserted, skipped };
   });
 
   // ---------- حق عضویت ----------
@@ -855,12 +900,19 @@ export default function register(r) {
     const createdIds = [];
     tx(() => {
       for (const sid of studentIds) {
+        let p = period;
+        if (fee_type === 'buffet') {
+          let n = 2;
+          while (get('SELECT 1 FROM fee_invoices WHERE student_id=? AND fee_type=? AND period=?', sid, fee_type, p)) {
+            p = clampStr(`${period} (${n++})`, 40);
+          }
+        }
         run(`
           INSERT INTO fee_invoices (center_id, student_id, fee_type, period, amount)
           VALUES (?,?,?,?,?)
           ON CONFLICT(student_id, fee_type, period) DO UPDATE SET amount=excluded.amount
-        `, ctx.user.center_id, sid, fee_type, period, amount);
-        const inv = get('SELECT id FROM fee_invoices WHERE student_id=? AND fee_type=? AND period=?', sid, fee_type, period);
+        `, ctx.user.center_id, sid, fee_type, p, amount);
+        const inv = get('SELECT id FROM fee_invoices WHERE student_id=? AND fee_type=? AND period=?', sid, fee_type, p);
         createdIds.push(inv.id);
       }
     });

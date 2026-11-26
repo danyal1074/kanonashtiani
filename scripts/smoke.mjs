@@ -63,7 +63,7 @@ const rankCohort = rankProbe.prepare(`SELECT u.id, u.full_name, s.class_id, s.gr
   FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.active=1`).all(rankUser.center_id);
 rankProbe.close();
 const rankSelf = rankCohort.find(r => r.id === rankUser.id);
-const aheadOfSelf = r => r.total > rankSelf.total || (r.total === rankSelf.total && (r.full_name < rankSelf.full_name || (r.full_name === rankSelf.full_name && r.id < rankSelf.id)));
+const aheadOfSelf = r => r.total > rankSelf.total;
 const classCohort = rankCohort.filter(r => r.class_id === rankUser.class_id);
 const rankedDashboard = await call(elementarySession.ck, 'GET', '/api/student/dashboard');
 check('رتبه کلاس بر اساس امتیاز هم‌کلاسی‌های فعال است', rankedDashboard.status === 200 && rankedDashboard.data.rankings.class.of === classCohort.length && rankedDashboard.data.rankings.class.rank === classCohort.filter(aheadOfSelf).length + 1);

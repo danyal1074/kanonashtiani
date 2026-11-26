@@ -40,18 +40,20 @@ export function gradeRanking(centerId, grade) {
 
 export function rankOf(centerId, grade, sid) {
   const list = gradeRanking(centerId, grade);
-  const idx = list.findIndex((r) => r.id === sid);
-  return { rank: idx + 1, of: list.length };
+  const self = list.find((r) => r.id === sid);
+  const rank = self ? list.filter((r) => r.total > self.total).length + 1 : 1;
+  return { rank, of: list.length };
 }
 
-// Class and center standings follow the same points/name ordering as grade rankings.
+// Class and center standings follow the same points ordering (ties share rank; all 0 points => rank 1).
 export function studentRankings(centerId, classId, studentId) {
   const students = all(`SELECT u.id, s.class_id, COALESCE(SUM(p.amount), 0) total
     FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN points p ON p.student_id=u.id
     WHERE u.center_id=? AND u.active=1 GROUP BY u.id ORDER BY total DESC, u.full_name, u.id`, centerId);
   const standing = rows => {
-    const index = rows.findIndex(row => row.id === studentId);
-    return { rank: index < 0 ? null : index + 1, of: rows.length };
+    const self = rows.find(row => row.id === studentId);
+    if (!self) return { rank: null, of: rows.length };
+    return { rank: rows.filter(row => row.total > self.total).length + 1, of: rows.length };
   };
   return {
     class: standing(classId == null ? [] : students.filter(row => row.class_id === classId)),

@@ -298,7 +298,6 @@ export const routes = [
   { path: '/students/:id', view: studentDetail },
   { path: '/plans', view: plans },
   { path: '/materials', view: materials },
-  { path: '/manual-scores', view: L.teacherScores },
   { path: '/att-log', view: L.attLog },
   { path: '/messages', view: messagesView },
   { path: '/messages/:id', view: messagesView },
