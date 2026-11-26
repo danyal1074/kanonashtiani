@@ -352,7 +352,36 @@ const ST = { present: 'حاضر', absent: 'غایب', excused: 'موجه' };
 export async function attLog(el, _p, me) {
   setHead('لاگ تغییرات حضور و غیاب', 'هر بار که وضعیت یک دانش‌آموز عوض شود اینجا ثبت می‌شود');
   const rows = await api(`/api/${me.user.role}/attendance/changes`);
-  el.innerHTML = `<section class="card">${rows.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>دانش‌آموز</th><th>کلاس</th><th>تاریخ حضور</th><th>تغییر</th><th>ویرایشگر</th><th>زمان ثبت</th></tr></thead><tbody>${rows.map((c) => `<tr><td>${esc(c.student_name)}</td><td>${esc(c.class_name || '')}</td><td>${c.date ? jdate(c.date) : '—'}</td><td>${ST[c.old_status] || esc(c.old_status)} ← <b>${ST[c.new_status] || esc(c.new_status)}</b></td><td>${esc(c.actor_name)}</td><td class="tiny muted">${dt(c.changed_at || c.created_at)}</td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'تغییری ثبت نشده')}</section>`;
+  const renderRows = (list) => list.length
+    ? `<div class="table-wrap"><table class="table"><thead><tr><th>دانش‌آموز</th><th>کلاس</th><th>تاریخ حضور</th><th>تغییر</th><th>ویرایشگر</th><th>زمان ثبت</th></tr></thead><tbody>${list.map((c) => `<tr><td>${esc(c.student_name)}</td><td>${esc(c.class_name || '')}</td><td>${c.date ? jdate(c.date) : '—'}</td><td>${ST[c.old_status] || esc(c.old_status)} ← <b>${ST[c.new_status] || esc(c.new_status)}</b></td><td>${esc(c.actor_name)}</td><td class="tiny muted">${dt(c.changed_at || c.created_at)}</td></tr>`).join('')}</tbody></table></div>`
+    : empty('inbox', 'تغییری ثبت نشده');
+  el.innerHTML = `<section class="card">
+    <div class="row between wrap" style="gap:10px;margin-bottom:14px;align-items:center">
+      <div class="row wrap" style="gap:8px;align-items:center;flex:1 1 260px">
+        <input class="input" id="attLogQ" placeholder="جستجوی دانش‌آموز، کلاس یا ویرایشگر…" style="max-width:320px">
+        <span class="tiny muted" id="attLogCnt">${fa(rows.length)} مورد</span>
+      </div>
+      ${rows.length ? `<button class="btn sm soft" id="attLogCsv" type="button">${icon('download', { size: 15 })} خروجی CSV</button>` : ''}
+    </div>
+    <div id="attLogBox">${renderRows(rows)}</div>
+  </section>`;
+  let filtered = rows;
+  const qEl = $('#attLogQ', el);
+  qEl?.addEventListener('input', () => {
+    const q = qEl.value.trim().toLowerCase();
+    filtered = q ? rows.filter((c) => `${c.student_name || ''} ${c.class_name || ''} ${c.actor_name || ''}`.toLowerCase().includes(q)) : rows;
+    $('#attLogCnt', el).textContent = `${fa(filtered.length)} مورد`;
+    $('#attLogBox', el).innerHTML = renderRows(filtered);
+  });
+  $('#attLogCsv', el)?.addEventListener('click', () => {
+    const header = ['دانش‌آموز', 'کلاس', 'تاریخ حضور', 'وضعیت قبلی', 'وضعیت جدید', 'ویرایشگر', 'زمان ثبت'];
+    const lines = [header, ...filtered.map((c) => [c.student_name || '', c.class_name || '', c.date ? jdate(c.date) : '', c.old_status || '', c.new_status || '', c.actor_name || '', dt(c.changed_at || c.created_at)])];
+    const csv = '\uFEFF' + lines.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'attendance-changes.csv';
+    a.click();
+  });
 }
 
 // ================= ولی: نمرات، فاکتورها، کارنامه فرزند =================
@@ -378,7 +407,33 @@ export async function mgrInvoices(el) {
     <div class="field"><label for="ivPer" id="ivPerLbl">دوره / شرح خرید</label><input class="input" id="ivPer" name="period" required maxlength="40" placeholder="مثلاً مهر ۱۴۰۵ یا ساندویچ بوفه"></div>
     <div class="field"><label for="ivAmt">مبلغ به تومان</label><input class="input" id="ivAmt" name="amount" type="number" min="1000" step="500" inputmode="numeric" required></div>
     <button class="btn" type="submit" id="ivSubmit">صدور فاکتور</button></div></form>
-    <section class="card span2"><div class="card-title">مانده بدهی کل: <b>${money(owed)}</b></div>${invoicesTable(list, { student: true })}</section></div>`;
+    <section class="card span2">
+      <div class="row between wrap" style="gap:10px;margin-bottom:12px;align-items:center">
+        <div class="card-title" style="margin:0">مانده بدهی کل: <b>${money(owed)}</b></div>
+        <div class="row wrap" style="gap:8px">
+          <input class="input" id="ivFilterQ" placeholder="جستجوی دانش‌آموز یا شرح…" style="width:190px">
+          <select class="input" id="ivFilterSt" style="width:145px">
+            <option value="">همه وضعیت‌ها</option>
+            <option value="unpaid">بدهکار / پرداخت‌نشده</option>
+            <option value="paid">تسویه‌شده</option>
+          </select>
+        </div>
+      </div>
+      <div id="ivListBox">${invoicesTable(list, { student: true })}</div>
+    </section></div>`;
+  const paintIvList = () => {
+    const q = ($('#ivFilterQ', el)?.value || '').trim().toLowerCase();
+    const st = $('#ivFilterSt', el)?.value || '';
+    const sub = list.filter((i) => {
+      if (st === 'unpaid' && !(i.remaining > 0)) return false;
+      if (st === 'paid' && i.remaining > 0) return false;
+      if (q && !`${i.student_name || ''} ${i.period || ''} ${FEE_TYPES[i.fee_type] || ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    $('#ivListBox', el).innerHTML = invoicesTable(sub, { student: true });
+  };
+  $('#ivFilterQ', el)?.addEventListener('input', paintIvList);
+  $('#ivFilterSt', el)?.addEventListener('change', paintIvList);
   const syncScope = () => {
     const isStu = $('#ivScope', el).value === 'student';
     $('#ivClsBox', el).style.display = isStu ? 'none' : '';
@@ -577,19 +632,42 @@ export async function openSmsModal(prefill = {}) {
 export async function smsOutbox(el) {
   setHead('صندوق خروجی پیامک', 'وضعیت همه‌ی پیامک‌های کانون و ارسال پیامک جدید به دانش‌آموزان و اولیا', `<button class="btn sm" id="btnNewSms">${icon('send', { size: 16 })} ارسال پیامک جدید</button>`);
   const rows = await api('/api/manager/sms-outbox');
+  const renderSmsTable = (list) => list.length ? `
+    <div class="table-wrap"><table class="table"><thead><tr><th>گیرنده</th><th>دانش‌آموز</th><th>متن</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead><tbody>
+    ${list.map((m) => `<tr><td dir="ltr">${esc(m.recipient_phone)}</td><td>${esc(m.student_name || '—')}</td><td class="small">${esc(m.content)}${m.error_message ? `<div class="tiny red-t">${esc(m.error_message)}</div>` : ''}</td><td><span class="badge ${(SMS[m.status] || ['', ''])[1]}">${(SMS[m.status] || [m.status])[0]}</span></td><td class="tiny muted">${dt(m.sent_at || m.created_at)}</td><td>${m.status === 'failed' ? `<button class="btn sm soft" data-retry="${m.id}">ارسال مجدد</button>` : ''}</td></tr>`).join('')}
+    </tbody></table></div>
+  ` : empty('inbox', 'پیامکی ثبت نشده');
   el.innerHTML = `
     <section class="card">
       <div class="row between" style="margin-bottom:14px;flex-wrap:wrap;gap:8px;align-items:center">
-        <div><b>تاریخچه پیامک‌های ارسالی</b> <span class="tiny muted">(${fa(rows.length)} پیام)</span></div>
-        <button class="btn sm" id="btnNewSmsInCard">${icon('send', { size: 16 })} ارسال پیامک جدید</button>
+        <div><b>تاریخچه پیامک‌های ارسالی</b> <span class="tiny muted" id="smsCnt">(${fa(rows.length)} پیام)</span></div>
+        <div class="row wrap" style="gap:8px;align-items:center">
+          <input class="input" id="smsFilterQ" placeholder="جستجوی شماره، نام یا متن…" style="width:200px">
+          <select class="input" id="smsFilterSt" style="width:135px">
+            <option value="">همه وضعیت‌ها</option>
+            <option value="sent">ارسال شد</option>
+            <option value="failed">ناموفق</option>
+            <option value="pending">در صف</option>
+          </select>
+          <button class="btn sm" id="btnNewSmsInCard">${icon('send', { size: 16 })} ارسال پیامک جدید</button>
+        </div>
       </div>
-      ${rows.length ? `
-        <div class="table-wrap"><table class="table"><thead><tr><th>گیرنده</th><th>دانش‌آموز</th><th>متن</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead><tbody>
-        ${rows.map((m) => `<tr><td dir="ltr">${esc(m.recipient_phone)}</td><td>${esc(m.student_name || '—')}</td><td class="small">${esc(m.content)}${m.error_message ? `<div class="tiny red-t">${esc(m.error_message)}</div>` : ''}</td><td><span class="badge ${(SMS[m.status] || ['', ''])[1]}">${(SMS[m.status] || [m.status])[0]}</span></td><td class="tiny muted">${dt(m.sent_at || m.created_at)}</td><td>${m.status === 'failed' ? `<button class="btn sm soft" data-retry="${m.id}">ارسال مجدد</button>` : ''}</td></tr>`).join('')}
-        </tbody></table></div>
-      ` : empty('inbox', 'پیامکی ثبت نشده')}
+      <div id="smsTableBox">${renderSmsTable(rows)}</div>
     </section>
   `;
+  const paintSms = () => {
+    const q = ($('#smsFilterQ', el)?.value || '').trim().toLowerCase();
+    const st = $('#smsFilterSt', el)?.value || '';
+    const sub = rows.filter((m) => {
+      if (st && m.status !== st) return false;
+      if (q && !`${m.recipient_phone || ''} ${m.student_name || ''} ${m.content || ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    $('#smsCnt', el).textContent = `(${fa(sub.length)} پیام)`;
+    $('#smsTableBox', el).innerHTML = renderSmsTable(sub);
+  };
+  $('#smsFilterQ', el)?.addEventListener('input', paintSms);
+  $('#smsFilterSt', el)?.addEventListener('change', paintSms);
   on(el, 'click', '[data-retry]', (e, b) => busy(b, async () => { const r = await post(`/api/manager/sms-outbox/${b.dataset.retry}/retry`); toast(r.ok ? 'پیامک ارسال شد' : `ناموفق: ${r.error}`, r.ok ? 'ok' : ''); smsOutbox(el); }));
 
   const triggerNewSms = () => openSmsModal().then((res) => { if (res) smsOutbox(el); });
