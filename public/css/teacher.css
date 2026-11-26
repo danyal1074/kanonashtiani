@@ -10,6 +10,14 @@ body.teacher-ui {
   color: var(--tp-navy);
 }
 body.teacher-ui .tp-li { flex: none; }
+/* انتخاب شخصی ظاهر در منو و حساب کاربری؛ فانتزی ظاهر پیش‌فرض معلمان فعلی است. */
+body.teacher-ui .look-toggle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px; border-radius: 12px; }
+body.teacher-ui .look-toggle > span { font-size: 12px; }
+body.teacher-ui .look-toggle button { min-height: 44px; border: 1px solid currentColor; border-radius: 9px; background: transparent; color: inherit; padding: 4px 10px; font: inherit; cursor: pointer; }
+body.teacher-ui .look-toggle button[aria-pressed="true"] { background: #fff; color: #083F44; }
+body.teacher-ui .tm-appearance { margin-bottom: 16px; }
+body.teacher-ui .tm-appearance p { font-size: 13px; }
+body.teacher-ui .tm-appearance .look-toggle { color: #083F44; background: #eef7f7; }
 body.teacher-ui .mobile-head { display: none !important; }
 body.teacher-ui .scrim { display: none; }
 

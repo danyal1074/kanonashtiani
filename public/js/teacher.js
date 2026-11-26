@@ -6,6 +6,7 @@ import { api, post, put, del, esc, fa, num, pct, $, $$, on, toast, busy, modal, 
 import { messagesView, announcementsView, accountView } from './common.js';
 import { openScanner, printSheet, MAX_Q } from './omr.js';
 import * as UI from './teacher-ui.js';
+import { lookModules } from './look.js';
 
 export const { nav, bottomNav } = UI;
 
@@ -282,7 +283,7 @@ async function materials(el) {
 }
 
 export const routes = [
-  { path: '/home', view: UI.home },
+  { path: '/home', view: (...args) => lookModules.look === 'new' ? lookModules.ui.home(...args) : UI.home(...args) },
   { path: '/timetable', view: teacherTimetable },
   { path: '/classes', view: UI.classes },
   { path: '/reports', view: UI.reports },

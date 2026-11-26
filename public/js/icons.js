@@ -7,7 +7,8 @@ const ICON_3D = {"book": ["set-01", 0], "clipboard": ["set-01", 1], "file-check"
 const escapeAttr = value => String(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
 export function icon(name, { size = 20, cls = '', label = '' } = {}) {
-  if (globalThis.document?.body?.classList?.contains('manager-ui')) { const html = managerIcon(name, {size,cls,label}); if (html) return html; }
+  if (globalThis.document?.body?.classList?.contains('manager-ui') || globalThis.document?.body?.classList?.contains('teacher-minimal')) { const html = managerIcon(name, {size,cls,label}); if (html) return html; }
+  if (globalThis.document?.body?.classList?.contains('teacher-minimal')) return managerIcon('info', { size, cls, label });
   if (globalThis.document?.body?.classList?.contains('student-elementary')) { const el = elementaryIcon(name, { size, cls, label }); if (el) return el; }
   if (globalThis.document?.body?.classList?.contains('student-ui')) return studentIcon(name, { size, cls, label });
   const [atlas, index] = Object.hasOwn(ICON_3D, name) ? ICON_3D[name] : ICON_3D.info;

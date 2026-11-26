@@ -30,7 +30,7 @@ const LINE = {
 };
 export const li = (name, size = 24) => `<svg class="tp-li" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${LINE[name] || ''}</svg>`;
 
-const NAV_LINE = { '/home': 'home', '/classes': 'users', '/assignments': 'clipboard', '/exams': 'exam', '/attendance': 'check', '/reports': 'chart', '/messages': 'message', '/materials': 'play', '/plans': 'calendar', '/more': 'grid', '/account': 'user' };
+const NAV_LINE = { '/home': 'home', '/classes': 'users', '/assignments': 'clipboard', '/exams': 'exam', '/attendance': 'check', '/reports': 'chart', '/messages': 'message', '/materials': 'play', '/timetable': 'calendar', '/plans': 'calendar', '/more': 'grid', '/account': 'user' };
 export const nav = (me) => [
   { path: '/home', icon: 'home', label: 'خانه' },
   { path: '/classes', icon: 'users', label: 'کلاس‌های من' },

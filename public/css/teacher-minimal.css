@@ -1,0 +1,77 @@
+/* افزونهٔ معلم بر سیستم طراحی مشترک مدیر؛ فقط در حالت مینیمال. */
+body.teacher-minimal.look-new {
+  --tp-blue: var(--brand); --tp-blue-d: var(--brand-700); --tp-navy: var(--ink);
+  --tp-ink: var(--muted); --tp-line: var(--line); --tp-card: var(--surface);
+  --tp-radius: var(--r-card); --tp-shadow: var(--card-shadow);
+}
+body.teacher-minimal.look-new .tp-top { display: none; }
+body.teacher-minimal.look-new .tp-card, body.teacher-minimal.look-new .tp-class,
+body.teacher-minimal.look-new .tp-tile { background: var(--surface); border: 1px solid var(--card-border); box-shadow: var(--card-shadow); border-radius: var(--r-card); }
+body.teacher-minimal.look-new .tp-card h3 { font-size: 15px; font-weight: 800; }
+body.teacher-minimal.look-new .tp-tabs { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 4px; box-shadow: none; }
+body.teacher-minimal.look-new .tp-tabs button { background: none; border: 0; box-shadow: none; color: var(--muted); font-weight: 700; font-size: 13px; border-radius: 8px; min-height: 44px; }
+body.teacher-minimal.look-new .tp-tabs button.on { background: var(--brand); color: #fff; box-shadow: none; }
+body.teacher-minimal.look-new .tp-class-ic { background: var(--brand-50); color: var(--brand); width: 48px; height: 48px; border-radius: 12px; }
+body.teacher-minimal.look-new .tp-class-ic .ic { width: 24px; height: 24px; }
+body.teacher-minimal.look-new .tp-class-top b { font-size: 17px; }
+body.teacher-minimal.look-new .tp-chips a { background: var(--brand-50); border: 1px solid var(--brand-100); box-shadow: none; border-radius: 9px; font-size: 13px; min-height: 44px; }
+body.teacher-minimal.look-new .tp-tile { min-height: 80px; flex-direction: row; gap: 12px; justify-content: flex-start; padding: 16px; color: var(--ink); font-weight: 700; }
+body.teacher-minimal.look-new .tp-tile b { font-size: 14px; }
+body.teacher-minimal.look-new .tp-ti { width: 28px; height: 28px; color: var(--brand); }
+body.teacher-minimal.look-new .tp-ti .ic { width: 24px; height: 24px; }
+body.teacher-minimal.look-new .tp-round, body.teacher-minimal.look-new .tp-mini,
+body.teacher-minimal.look-new .tp-btn { border: 1px solid var(--line-strong); border-radius: var(--r-ctl); background: var(--surface); color: var(--ink); box-shadow: none; }
+body.teacher-minimal.look-new .tp-round { width: 44px; height: 44px; }
+body.teacher-minimal.look-new .tp-primary, body.teacher-minimal.look-new .tp-btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); box-shadow: none; }
+body.teacher-minimal.look-new .tp-att-stat { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; box-shadow: none; }
+body.teacher-minimal.look-new .tp-att-row { background: var(--surface); border: 1px solid var(--line); box-shadow: none; border-radius: 12px; }
+body.teacher-minimal.look-new .tp-att-row .avatar { display: none; }
+body.teacher-minimal.look-new .tp-att-row b { font-size: 14px; }
+body.teacher-minimal.look-new .tp-select, body.teacher-minimal.look-new .tp-search,
+body.teacher-minimal.look-new .tp-day, body.teacher-minimal.look-new .tp-att-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: none; }
+body.teacher-minimal.look-new .tp-link { border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: var(--brand); box-shadow: none; }
+body.teacher-minimal.look-new .tp-bar i { background: var(--brand); box-shadow: none; border: 0; border-radius: 5px 5px 0 0; }
+body.teacher-minimal.look-new .tp-ring { --c: var(--brand) !important; }
+body.teacher-minimal.look-new .topbar .me-chip { display: flex; }
+body.teacher-minimal.look-new .bottom-nav a.on::before { display: none; }
+body.teacher-minimal.look-new .bottom-nav { max-width: none; height: auto; border-radius: 0; box-shadow: none; }
+body.teacher-minimal.look-new .bottom-nav a { height: auto; margin: 0; }
+body.teacher-minimal.look-new .tp-rep-row b { font-size: 14px; }
+body.teacher-minimal.look-new .tp-rep-row small { font-size: 12px; }
+body.teacher-minimal.look-new .tm-workspace { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(260px, 1fr); gap: 14px; align-items: start; }
+.tm-session { display: flex; align-items: center; gap: 16px; border: 1px solid var(--line); border-inline-start: 3px solid var(--brand); padding: 16px; border-radius: 12px; }
+.tm-session + .tm-session { margin-top: 4px; }
+.tm-session time { flex: none; font-weight: 800; color: var(--brand); font-size: 17px; }
+.tm-session time small { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
+.tm-session h4, .tm-class h4 { margin: 0; font-size: 15px; }
+.tm-session p, .tm-class p { margin: 2px 0; color: var(--muted); font-size: 13px; }
+.tm-room { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; }
+.tm-task { display: flex; gap: 10px; align-items: center; padding: 14px 0; color: var(--ink) !important; border-bottom: 1px solid var(--line); }
+.tm-task:last-child { border-bottom: 0; }
+.tm-task .grow { min-width: 0; }
+.tm-task b, .tm-task small { display: block; }
+.tm-task b { font-size: 13px; }
+.tm-task small, .tm-task time { font-size: 12px; color: var(--muted); }
+.tm-task > .ic { color: var(--brand); }
+.tm-count { border-radius: 8px; padding: 2px 10px; background: var(--amber-soft); color: var(--amber-ink); font-size: 13px; font-weight: 800; }
+.tm-class-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.tm-class { border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.tm-subject { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--brand-50); color: var(--brand); margin-bottom: 10px; }
+.tm-class small { color: var(--muted); }
+.tm-class > div { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; font-weight: 700; }
+.tm-class a, .tm-text-link { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; }
+.tm-text-link { font-size: 12px; font-weight: 700; }
+.tm-empty { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; padding: 24px; color: var(--muted); font-size: 13px; }
+body.teacher-minimal.look-new .sidebar .look-toggle button { border: 0; }
+@media (max-width: 1100px) { body.teacher-minimal.look-new .tm-workspace { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .tm-class-grid { grid-template-columns: 1fr; }
+  .tm-session { gap: 10px; padding: 12px; flex-wrap: wrap; }
+  .tm-session .grow { flex: 1 1 130px; }
+  .tm-session .btn { min-height: 44px; }
+  body.teacher-minimal.look-new .ad-hero { padding: 16px; }
+  body.teacher-minimal.look-new .ad-hero h2 { font-size: 19px; }
+  body.teacher-minimal.look-new .topbar .me-chip { display: none; }
+  body.teacher-minimal.look-new .topbar .actions-slot { flex-wrap: wrap; }
+  body.teacher-minimal.look-new .tp-more { grid-template-columns: 1fr; }
+}

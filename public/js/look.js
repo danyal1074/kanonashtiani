@@ -1,8 +1,8 @@
-// انتخاب ظاهر پنل مدیر: «مینیمال» (کلید داخلی new، پیش‌فرض) یا «فانتزی» (classic، ظاهر قبلی). هر مدیر ظاهر خودش را انتخاب می‌کند (ذخیره در سرور).
-// فقط دارایی‌های ظاهر انتخاب‌شده بارگذاری می‌شوند (CSS، آیکون‌ها، پوسته)؛ نقش‌های دیگر هیچ‌چیز از این‌ها دانلود نمی‌کنند.
+// ظاهر شخصی مدیر و معلم: مینیمال (new) یا فانتزی (classic)، ذخیره در حساب کاربر.
+// پیش‌فرض مدیر مینیمال و معلم فانتزی است؛ پوسته و CSS اضافهٔ مینیمال فقط هنگام انتخاب آن بارگذاری می‌شوند.
 import { put } from './core.js';
 
-export const lookModules = { look: null, ui: null };
+export const lookModules = { look: null, role: null, ui: null };
 const CSS = { new: '/css/admin.css', classic: '/css/manager-classic.css' };
 
 function loadCss(href) {
@@ -16,11 +16,22 @@ function loadCss(href) {
 }
 
 export async function applyLook(me) {
-  const look = me.ui_look === 'classic' ? 'classic' : 'new';
+  const role = me.user.role;
+  const look = me.ui_look === 'new' ? 'new' : me.ui_look === 'classic' ? 'classic' : role === 'teacher' ? 'classic' : 'new';
   document.body.classList.remove('look-new', 'look-classic');
   document.body.classList.add(`look-${look}`);
-  if (lookModules.look === look && lookModules.ui) return look;
-  if (look === 'new') {
+  document.body.classList.toggle('teacher-minimal', role === 'teacher' && look === 'new');
+  if (lookModules.look === look && lookModules.role === role && lookModules.ui) return look;
+  if (role === 'teacher') {
+    if (look === 'new') {
+      const [ui, icons] = await Promise.all([import('./teacher-minimal.js'), import('./outline-icons.js'), loadCss(CSS.new)]);
+      (await import('./manager-icons.js')).setOutline(icons.OUTLINE);
+      await loadCss('/css/teacher-minimal.css');
+      lookModules.ui = ui;
+    } else {
+      lookModules.ui = await import('./teacher-ui.js');
+    }
+  } else if (look === 'new') {
     const [ui, icons] = await Promise.all([import('./manager-ui.js'), import('./outline-icons.js'), loadCss(CSS.new)]);
     (await import('./manager-icons.js')).setOutline(icons.OUTLINE);
     lookModules.ui = ui;
@@ -29,6 +40,7 @@ export async function applyLook(me) {
     lookModules.ui = ui;
   }
   lookModules.look = look;
+  lookModules.role = role;
   return look;
 }
 

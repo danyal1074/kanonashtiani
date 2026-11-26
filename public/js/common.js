@@ -1,5 +1,6 @@
 // نماهای مشترک بین نقش‌ها: پیام‌رسان امن، اطلاعیه‌ها، حساب کاربری
 import { api, post, esc, fa, $, on, toast, busy, setHead, avatar, nameAvatar, empty, jdate, jtime, timeAgo, ROLE_NAMES, formData, state, icon } from './core.js';
+import { lookToggleHtml } from './look.js';
 
 const roleIcon = { teacher: 'board', student: 'backpack', parent: 'users', manager: 'building' };
 
@@ -97,5 +98,6 @@ export async function accountView(el, _p, me) {
   el.innerHTML = `<div class="grid c2"><div class="card"><div class="row">${nameAvatar(me.user.full_name, 'lg')}<div><h3>${esc(me.user.full_name)}</h3>
     <div class="muted small">${ROLE_NAMES[me.user.role]}${me.center ? ' • ' + esc(me.center.name) : ''}</div>
     <div class="small" style="margin-top:6px">${me.user.username ? `نام کاربری: <b>${esc(me.user.username)}</b>` : ''} ${me.user.mobile ? `موبایل: <b>${fa(me.user.mobile)}</b>` : ''}</div></div></div></div>${passwordCard()}</div>`;
+  if (me.user.role === 'teacher') el.insertAdjacentHTML('afterbegin', `<section class="card tm-appearance"><h3>ظاهر پنل من</h3><p>ظاهر دلخواهتان را انتخاب کنید؛ این انتخاب برای حساب شما ذخیره می‌شود.</p>${lookToggleHtml(me.ui_look === 'new' ? 'new' : 'classic')}</section>`);
   bindPassword(el);
 }
