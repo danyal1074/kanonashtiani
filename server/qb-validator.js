@@ -117,7 +117,29 @@ export function validateQuestion(raw, ctx = {}) {
 
   // بررسی گزینه‌ها و ساختار پاسخ متناسب با نوع سؤال
   const opts = Array.isArray(q.options) ? q.options : [];
-  const ans = q.answer && typeof q.answer === 'object' ? q.answer : {};
+  const ans = q.answer && typeof q.answer === 'object' ? { ...q.answer } : {};
+  q.answer = ans;
+
+  // نرمال‌سازی کلیدهای هم‌ارز (برای سازگاری با خروجی‌های استاندارد ابزارهای خارجی)
+  if ((q.type === 'fill_blank' || q.type === 'short_answer') && !Array.isArray(ans.accepted)) {
+    if (Array.isArray(ans.acceptable_answers)) {
+      ans.accepted = ans.acceptable_answers.map((x) => String(x ?? '').trim()).filter(Boolean);
+    } else if (Array.isArray(ans.answers)) {
+      ans.accepted = ans.answers.map((x) => String(x ?? '').trim()).filter(Boolean);
+    } else if (Array.isArray(ans.blanks) && ans.blanks.length) {
+      ans.accepted = [ans.blanks.map((b) => String(b?.value ?? b?.answer ?? '').trim()).filter(Boolean).join('، ')].filter(Boolean);
+    } else if (typeof ans.model_answer === 'string' && ans.model_answer.trim()) {
+      ans.accepted = [ans.model_answer.trim()];
+    }
+  }
+  if (q.type === 'ordering') {
+    if (!Array.isArray(ans.correct_order) && Array.isArray(ans.ordered_ids)) ans.correct_order = ans.ordered_ids;
+    if (!Array.isArray(ans.items) && Array.isArray(q.items)) ans.items = q.items;
+  }
+  if (q.type === 'matching') {
+    if (!Array.isArray(ans.left) && Array.isArray(q.left)) ans.left = q.left;
+    if (!Array.isArray(ans.right) && Array.isArray(q.right)) ans.right = q.right;
+  }
 
   if (q.type === 'single_choice' || q.type === 'multiple_choice') {
     if (opts.length < 2) errors.push({ field: 'options', message: 'حداقل ۲ گزینه لازم است' });
