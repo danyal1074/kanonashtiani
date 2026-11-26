@@ -50,9 +50,9 @@ export default function register(r){
     return {attempt_id:id,cached:result.cached};
   });
   r.get('/api/textbook-attempts/:id',roles,ctx=>{
-    demo();const a=get('SELECT a.*,q.book_id,q.questions_json,q.from_page,q.to_page,q.source FROM textbook_attempts a JOIN textbook_quizzes q ON q.id=a.quiz_id WHERE a.id=? AND a.user_id=?',Number(ctx.params.id),ctx.user.id);
+    demo();const a=get('SELECT a.*,q.book_id,q.questions_json,q.from_page,q.to_page,q.source,q.requested_count FROM textbook_attempts a JOIN textbook_quizzes q ON q.id=a.quiz_id WHERE a.id=? AND a.user_id=?',Number(ctx.params.id),ctx.user.id);
     if(!a)fail(404,'تمرین یافت نشد');if(a.source==='rejected')fail(409,'این نمونه در بررسی علمی کنار گذاشته شده است؛ تمرین تازه‌ای انتخاب کن');const book=bookAccess(ctx,a.book_id);
-    return {id:a.id,book_id:a.book_id,title:book.title,from:a.from_page,to:a.to_page,source:a.source,questions:a.submitted_at?questions(a):publicQuestions(a),result:a.result_json?JSON.parse(a.result_json):null};
+    return {id:a.id,book_id:a.book_id,title:book.title,from:a.from_page,to:a.to_page,source:a.source,requested_count:a.requested_count||questions(a).length,questions:a.submitted_at?questions(a):publicQuestions(a),result:a.result_json?JSON.parse(a.result_json):null};
   });
   r.post('/api/textbook-attempts/:id/submit',roles,ctx=>{
     demo();const a=get('SELECT a.*,q.book_id,q.questions_json,q.source FROM textbook_attempts a JOIN textbook_quizzes q ON q.id=a.quiz_id WHERE a.id=? AND a.user_id=?',Number(ctx.params.id),ctx.user.id);
@@ -76,7 +76,7 @@ export default function register(r){
       const id=Number(run("INSERT INTO textbook_quizzes(owner_id,book_id,from_page,to_page,kind,source,questions_json) VALUES(?,?,?,?,'essay','manual',?)",ctx.user.id,book.id,s.from,s.to,JSON.stringify(qs)).lastInsertRowid);return {quiz_id:id};
     }catch(e){files.forEach(f=>fs.rmSync(path.join(photoRoot(),f),{force:true}));throw e;}
   });
-  r.get('/api/textbook-quizzes/:id',teacher,ctx=>{const q=quizAccess(ctx,ctx.params.id);return {id:q.id,book_id:q.book_id,from:q.from_page,to:q.to_page,kind:q.kind,source:q.source,questions:questions(q)};});
+  r.get('/api/textbook-quizzes/:id',teacher,ctx=>{const q=quizAccess(ctx,ctx.params.id);return {id:q.id,book_id:q.book_id,from:q.from_page,to:q.to_page,kind:q.kind,source:q.source,requested_count:q.requested_count||questions(q).length,questions:questions(q)};});
   r.get('/api/textbook-quizzes/:id/figures/:index',roles,async ctx=>{
     demo();const q=get('SELECT * FROM textbook_quizzes WHERE id=?',Number(ctx.params.id));if(!q)fail(404,'سؤال یافت نشد');bookAccess(ctx,q.book_id);
     if(q.owner_id!==ctx.user.id){const cls=get('SELECT class_id FROM students WHERE user_id=?',ctx.user.id)?.class_id;if(ctx.user.role!=='student'||!get('SELECT id FROM textbook_papers WHERE quiz_id=? AND class_id=?',q.id,cls||-1))fail(403,'دسترسی به شکل مجاز نیست');}

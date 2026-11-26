@@ -30,5 +30,6 @@ export function ensureTextbookStore() {
     CREATE INDEX IF NOT EXISTS ix_textbook_papers_class ON textbook_papers(class_id);
   `);
   if(!db.prepare('PRAGMA table_info(textbook_ai_spend)').all().some(c=>c.name==='purpose'))db.exec("ALTER TABLE textbook_ai_spend ADD COLUMN purpose TEXT NOT NULL DEFAULT 'generate'");
+  if(!db.prepare('PRAGMA table_info(textbook_quizzes)').all().some(c=>c.name==='requested_count'))db.exec('ALTER TABLE textbook_quizzes ADD COLUMN requested_count INTEGER');
   initialized=db;
 }
