@@ -1,5 +1,15 @@
 import { clampStr, toEnDigits } from './util.js';
 
+const WEEKDAY_MAP = [
+  [0, ['شنبه']],
+  [1, ['یکشنبه', 'یک شنبه', '۱شنبه']],
+  [2, ['دوشنبه', '۲شنبه']],
+  [3, ['سه‌شنبه', 'سه شنبه', '۳شنبه']],
+  [4, ['چهارشنبه', '۴شنبه']],
+  [5, ['پنج‌شنبه', 'پنجشنبه', 'پنج شنبه', '۵شنبه']],
+  [6, ['جمعه']],
+];
+
 function normFa(s) {
   return toEnDigits(String(s || ''))
     .replace(/[‌‏‎]/g, ' ')
@@ -74,6 +84,69 @@ async function parseWithGemini({ mime, base64 }, teachers, subjects) {
   return Array.isArray(parsed) ? parsed : [];
 }
 
+function parsePlainTextSchedule(text, subjects = [], teachers = []) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => normFa(l)).filter(Boolean);
+  const slots = [];
+  let currentWeekday = 0;
+
+  for (const line of lines) {
+    for (const [wd, words] of WEEKDAY_MAP) {
+      if (words.some((w) => line.includes(w))) {
+        currentWeekday = wd;
+        break;
+      }
+    }
+    const times = [...line.matchAll(/(\d{1,2}\s*[:.]\s*\d{2})/g)].map((m) => normalizeTime(m[1]));
+    const matchedSubj = subjects.find((s) => line.includes(normFa(s)));
+    const matchedTeacher = teachers.find((t) => line.includes(normFa(t.full_name)));
+    if (!times.length && !matchedSubj) continue;
+
+    const start = times[0] || '16:00';
+    let end = times[1];
+    if (!end || end <= start) {
+      const [h, m] = start.split(':').map(Number);
+      const tot = Math.min(23 * 60 + 59, h * 60 + m + 90);
+      end = `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+    }
+    let rest = line
+      .replace(/(\d{1,2}\s*[:.]\s*\d{2})/g, ' ')
+      .replace(/تا|-|–|ساعت|زنگ/g, ' ');
+    for (const [, words] of WEEKDAY_MAP) for (const w of words) rest = rest.replaceAll(w, ' ');
+    rest = rest.replace(/\s+/g, ' ').trim();
+    const subject = clampStr(matchedSubj || rest, 40);
+    if (!subject) continue;
+    slots.push({
+      weekday: currentWeekday,
+      start,
+      end,
+      subject,
+      teacher_name: matchedTeacher ? matchedTeacher.full_name : '',
+      room: '',
+      kind: 'academic',
+    });
+  }
+  return slots;
+}
+
+async function parseWithLocalOcr({ mime, base64 }, teachers, subjects) {
+  const url = process.env.ROSHD_OCR_URL || 'http://127.0.0.1:3099/ocr';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mime, base64 }),
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = String(data?.text || '');
+    if (!text.trim()) return { slots: [], rawText: '' };
+    return { slots: parsePlainTextSchedule(text, subjects, teachers), rawText: text };
+  } catch {
+    return null;
+  }
+}
+
 export async function extractScheduleFromImage(dataUrl, { teachers = [], subjects = [] } = {}) {
   const file = parseDataUrl(dataUrl);
   let rawSlots = null;
@@ -91,9 +164,18 @@ export async function extractScheduleFromImage(dataUrl, { teachers = [], subject
   }
 
   if (!rawSlots) {
-    rawSlots = [];
-    if (!note) {
-      note = 'برای تشخیص خودکار متن تصویر، کلید هوش مصنوعی (GEMINI_API_KEY) در تنظیمات سرور ثبت نشده است؛ می‌توانید ردیف‌های برنامه را در جدول زیر به صورت یکجا وارد و تایید کنید.';
+    const local = await parseWithLocalOcr(file, teachers, subjects);
+    if (local) {
+      rawSlots = local.slots;
+      engine = 'tesseract';
+      if (!rawSlots.length && !note) {
+        note = 'تصویر خوانده شد اما ساختار جدول کاملاً مشخص نبود؛ می‌توانید ردیف‌ها را در جدول زیر تکمیل یا اصلاح و یکجا ثبت کنید.';
+      }
+    } else {
+      rawSlots = [];
+      if (!note) {
+        note = 'سرویس تشخیص تصویر در دسترس نیست؛ می‌توانید ردیف‌های برنامه را در جدول زیر به صورت یکجا وارد و تایید کنید.';
+      }
     }
   } else if (!rawSlots.length && !note) {
     note = 'جلسه‌ای از تصویر تشخیص داده نشد؛ لطفاً تصویر واضح‌تری انتخاب کنید یا ردیف‌ها را دستی اضافه کنید.';
