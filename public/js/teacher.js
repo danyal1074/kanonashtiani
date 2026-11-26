@@ -109,18 +109,29 @@ async function exams(el) {
 
 function examEditor(classes) {
   const grades = [...new Set(classes.map((c) => c.grade))];
-  const subjects = [...new Set(classes.flatMap((c) => c.subjects.split('، ')))];
+  const subjects = [...new Set(classes.flatMap((c) => String(c.subjects || '').split('،').map((t) => t.trim())).filter(Boolean))];
+  if (!subjects.length) subjects.push('ریاضی', 'علوم', 'هوش و استعداد');
   let kind = 'online';
   let questions = [{ text: '', options: ['', '', '', ''], answer: 0 }];
   let keyCount = 10, key = Array(10).fill(null);
   modal({
     title: ' ساخت آزمون', wide: true,
     body: `<div class="seg" style="margin-bottom:14px"><button class="on" data-kind="online"> آزمون آنلاین (تستی)</button><button data-kind="paper">${icon('file-text', { size: 16 })} آزمون کاغذی + کلید پاسخ</button></div>
-      <form id="exForm" class="form-grid"><div class="field"><label>عنوان آزمون</label><input class="input" name="title" required></div>
-      <div class="field"><label>درس</label><select class="input" name="subject">${subjects.map((s) => `<option>${esc(s)}</option>`).join('')}</select></div>
+      <form id="exForm" class="form-grid"><div class="field"><label>عنوان آزمون</label><input class="input" name="title" required placeholder="مثلاً آزمون فصل دوم"></div>
+      <div class="field"><label>درس</label><select class="input" name="subject" id="exSubj">${subjects.map((s) => `<option>${esc(s)}</option>`).join('')}</select></div>
       <div class="field"><label>پایه</label><select class="input" name="grade" id="exGrade">${grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div>
       <div class="field"><label>کلاس</label><select class="input" name="class_id" id="exClass"></select></div>
-      <div class="field" id="durField"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="15" min="1" max="180"></div></form>
+      <div class="field" id="durField"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="15" min="1" max="180"></div>
+      <div class="field" id="dlField"><label>تاریخ مهلت (شمسی، اختیاری)</label>${dateField('exDl', null, { minYear: 1404, maxYear: 1406 })}</div>
+      <div class="field" id="dlTimeField"><label>ساعت مهلت</label><input class="input ltr" type="time" name="dl_time" value="23:59"></div></form>
+      <div id="aiGenBox" class="card flat" style="margin-top:12px;padding:12px;border:1px solid #bfdbfe;background:#eff6ff">
+        <div class="row wrap" style="gap:8px;align-items:flex-end">
+          <div class="field grow" style="min-width:160px"><label class="tiny bold">${icon('sparkles', { size: 14 })} طرح سؤال با هوش مصنوعی (بر اساس درس شما)</label><input class="input" id="aiTopic" placeholder="مبحث دلخواه (مثلاً: کسرها، هوش کلامی، انرژی...)"></div>
+          <div class="field" style="width:90px"><label class="tiny bold">تعداد</label><input class="input" type="number" id="aiCount" value="5" min="1" max="20"></div>
+          <div class="field" style="width:110px"><label class="tiny bold">سطح</label><select class="input" id="aiDiff"><option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">چالشی</option></select></div>
+          <button type="button" class="btn sm" id="aiGenBtn" style="background:#2563eb;color:#fff">${icon('sparkles', { size: 15 })} تولید سؤال</button>
+        </div>
+      </div>
       <div id="qArea" style="margin-top:16px"></div>`,
     onOpen: (m) => {
       const drawCls = () => { const g = Number($('#exGrade', m).value); $('#exClass', m).innerHTML = `<option value="">همه کلاس‌های پایه</option>${classes.filter((c) => c.grade === g).map((c) => `<option value="${c.id}">کلاس ${esc(c.name)}</option>`).join('')}`; };
@@ -137,7 +148,22 @@ function examEditor(classes) {
         }
       };
       drawQ();
-      on(m, 'click', '[data-kind]', (e, b) => { kind = b.dataset.kind; $$('[data-kind]', m).forEach((x) => x.classList.toggle('on', x === b)); $('#durField', m).style.display = kind === 'online' ? '' : 'none'; drawQ(); });
+      $('#aiGenBtn', m).onclick = (e) => busy(e.currentTarget, async () => {
+        const subject = $('#exSubj', m).value;
+        const grade = Number($('#exGrade', m).value);
+        const topic = $('#aiTopic', m).value.trim();
+        const count = Number($('#aiCount', m).value) || 5;
+        const difficulty = $('#aiDiff', m).value;
+        const r = await post('/api/teacher/exams/ai-generate', { subject, grade, topic, count, difficulty });
+        if (questions.length === 1 && !questions[0].text.trim()) questions = r.questions;
+        else questions = questions.concat(r.questions);
+        if (!$('#exForm [name=title]', m).value.trim()) {
+          $('#exForm [name=title]', m).value = topic ? `آزمون ${subject} — ${topic}` : `آزمون ${subject}`;
+        }
+        toast(`${fa(r.questions.length)} سؤال برای درس «${subject}» تولید شد`, 'ok');
+        drawQ();
+      });
+      on(m, 'click', '[data-kind]', (e, b) => { kind = b.dataset.kind; $$('[data-kind]', m).forEach((x) => x.classList.toggle('on', x === b)); $('#durField', m).style.display = kind === 'online' ? '' : 'none'; $('#dlField', m).style.display = kind === 'online' ? '' : 'none'; $('#dlTimeField', m).style.display = kind === 'online' ? '' : 'none'; $('#aiGenBox', m).style.display = kind === 'online' ? '' : 'none'; drawQ(); });
       on(m, 'input', '[data-qt]', (e, t) => { questions[t.dataset.qt].text = t.value; });
       on(m, 'input', '[data-qo]', (e, t) => { const [i, j] = t.dataset.qo.split(',').map(Number); questions[i].options[j] = t.value; });
       on(m, 'change', '[data-qa]', (e, t) => { questions[t.dataset.qa].answer = Number(t.value); });
@@ -152,7 +178,9 @@ function examEditor(classes) {
         const subject = f.subject;
         const qs_ = kind === 'online' ? questions.map((q) => ({ ...q, subject })) : key.map((a) => ({ answer: a, subject }));
         if (kind === 'paper' && key.some((a) => a == null)) throw new Error('کلید پاسخ همه سؤال‌ها را مشخص کنید');
-        const r = await post('/api/teacher/exams', { ...f, kind, questions: qs_ });
+        const dlDate = readDate(m, 'exDl');
+        const deadline = dlDate ? tehranIso(dlDate, f.dl_time || '23:59') : null;
+        const r = await post('/api/teacher/exams', { ...f, deadline, kind, questions: qs_ });
         toast('آزمون ساخته شد', 'ok');
         location.hash = `#/exams/${r.id}`;
       },
@@ -181,20 +209,125 @@ async function examDetail(el, { id }) {
 
 // ================= دانش‌آموزان =================
 async function students(el) {
-  const classes = await myClasses();
+  const [classes, overview] = await Promise.all([myClasses(), api('/api/teacher/overview').catch(() => ({}))]);
+  const allCenterClasses = overview?.all_classes || classes;
   const q = {};
   const m = /class=(\d+)/.exec(location.hash); if (m) q.class_id = m[1];
-  setHead('عملکرد دانش‌آموزان', 'امتیاز، رتبه، میانگین آزمون، غیبت و مطالعه هفته');
+  setHead('عملکرد دانش‌آموزان', 'امتیاز، رتبه، ثبت و انتقال کلاس دانش‌آموزان', `<button class="btn sm" id="tAddStudent">${icon('user-plus', { size: 16 })} ثبت دانش‌آموز جدید</button>`);
   const draw = async () => {
     const list = await api(`/api/teacher/students?${qs(q)}`);
-    el.innerHTML = filterBar(classes, q) + `<div class="card"><input class="input" id="sSearch" placeholder=" جستجوی نام…" style="margin-bottom:12px"><div class="table-wrap"><table class="table"><thead><tr><th>رتبه پایه</th><th>دانش‌آموز</th><th>کلاس</th><th>امتیاز</th><th>سطح</th><th>میانگین آزمون</th><th>غیبت ماه</th><th>مطالعه هفته</th></tr></thead><tbody id="sBody">
+    el.innerHTML = filterBar(classes, q) + `<div class="card"><input class="input" id="sSearch" placeholder=" جستجوی نام…" style="margin-bottom:12px"><div class="table-wrap"><table class="table"><thead><tr><th>رتبه پایه</th><th>دانش‌آموز</th><th>کلاس</th><th>امتیاز</th><th>سطح</th><th>میانگین آزمون</th><th>غیبت ماه</th><th>مطالعه هفته</th><th>عملیات</th></tr></thead><tbody id="sBody">
       ${list.map((s) => `<tr class="click" data-href="#/students/${s.id}" data-name="${esc(s.full_name)}"><td><b>${fa(s.rank)}</b></td><td>${esc(s.full_name)}</td><td>${gradeName(s.grade)} ${esc(s.class_name)}</td><td><b>${fa(s.points)}</b></td><td>${s.level.name}</td>
-      <td>${s.avg_percent == null ? '—' : `<span class="badge ${s.avg_percent >= 75 ? 'green' : s.avg_percent >= 50 ? 'yellow' : 'red'}">${pct(s.avg_percent)}</span>`}</td><td>${s.absences ? `<span class="neg">${fa(s.absences)}</span>` : '۰'}</td><td>${fa(s.week_minutes)} دقیقه</td></tr>`).join('')}</tbody></table></div></div>`;
+      <td>${s.avg_percent == null ? '—' : `<span class="badge ${s.avg_percent >= 75 ? 'green' : s.avg_percent >= 50 ? 'yellow' : 'red'}">${pct(s.avg_percent)}</span>`}</td><td>${s.absences ? `<span class="neg">${fa(s.absences)}</span>` : '۰'}</td><td>${fa(s.week_minutes)} دقیقه</td>
+      <td><button type="button" class="btn sm soft" data-transfer="${s.id}" data-name="${esc(s.full_name)}" data-cls="${s.class_id}" title="انتقال به کلاس دیگر" style="padding:3px 8px;font-size:11px;display:inline-flex;align-items:center;gap:4px">${icon('arrow-right-left', { size: 13 })} انتقال کلاس</button></td></tr>`).join('')}</tbody></table></div></div>`;
     bindFilter(el, q, draw);
     $('#sSearch', el).oninput = (e) => $$('#sBody tr', el).forEach((tr) => { tr.style.display = tr.dataset.name.includes(e.target.value.trim()) ? '' : 'none'; });
   };
   await draw();
-  on(el, 'click', 'tr[data-href]', (e, tr) => { location.hash = tr.dataset.href; });
+
+  const openTransferModal = (sid, sname, curCls) => {
+    const targets = allCenterClasses.filter((c) => c.id !== curCls);
+    if (!targets.length) return toast('کلاس مقصد دیگری برای انتقال وجود ندارد', 'err');
+    modal({
+      title: `انتقال «${esc(sname)}» به کلاس دیگر`,
+      body: `<form id="tMoveForm" class="stack">
+        <p class="small muted">کلاس مقصد را انتخاب کنید. با انتقال دانش‌آموز، کلاس و پایهٔ او به‌روزرسانی می‌شود.</p>
+        <div class="field"><label for="tMvCls">کلاس مقصد</label><select class="input" id="tMvCls" name="class_id">${targets.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
+      </form>`,
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'انتقال دانش‌آموز',
+          onClick: async (m) => {
+            const cid = Number($('#tMvCls', m).value);
+            try {
+              await post(`/api/teacher/students/${sid}/move`, { class_id: cid });
+              toast(`«${sname}» با موفقیت منتقل شد`, 'ok');
+              classesCache = null;
+              draw();
+              return true;
+            } catch (err) {
+              toast(err.message || 'خطا در انتقال دانش‌آموز', 'err');
+              return false;
+            }
+          }
+        }
+      ]
+    });
+  };
+
+  on(el, 'click', '[data-transfer]', (e, btn) => {
+    e.stopPropagation();
+    openTransferModal(Number(btn.dataset.transfer), btn.dataset.name, Number(btn.dataset.cls));
+  });
+
+  const addStBtn = document.getElementById('tAddStudent');
+  if (addStBtn) addStBtn.onclick = () => {
+    if (!classes.length) return toast('شما هنوز کلاسی برای ثبت دانش‌آموز ندارید', 'err');
+    const knownSchools = [...new Set([...(overview?.schools || [])])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fa'));
+    modal({
+      title: 'ثبت دستی دانش‌آموز جدید',
+      body: `<form id="tAddStForm" class="stack">
+        <div class="field"><label for="tStName">نام و نام خانوادگی *</label><input class="input" id="tStName" name="full_name" required maxlength="80" placeholder="مثلاً محمد رضایی"></div>
+        <div class="field"><label for="tStNc">کد ملی (۱۰ رقم - نام کاربری و رمز ورود اولیه) *</label><input class="input ltr num" id="tStNc" name="national_code" required maxlength="10" placeholder="0123456789"></div>
+        <div class="field"><label for="tStCls">کلاس *</label><select class="input" id="tStCls" name="class_id">${classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="tStGen">جنسیت</label><select class="input" id="tStGen" name="gender"><option value="m">پسر</option><option value="f">دختر</option></select></div>
+        <div class="field"><label for="tStSchoolSel">مدرسه</label>
+          <select class="input" id="tStSchoolSel" name="school_sel">
+            <option value="">-- بدون انتخاب / نامشخص --</option>
+            ${knownSchools.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}
+            <option value="__new__">➕ سایر / افزودن مدرسه جدید...</option>
+          </select>
+          <input class="input" id="tStSchoolNew" name="school_new" placeholder="نام مدرسه جدید را وارد کنید" style="display:none;margin-top:6px" maxlength="100">
+        </div>
+        <div class="field"><label for="tStPhone">شماره موبایل والدین (اختیاری)</label><input class="input ltr num" id="tStPhone" name="parent_phone" maxlength="11" placeholder="09123456789"></div>
+      </form>`,
+      onOpen: (m) => {
+        const sel = $('#tStSchoolSel', m), inp = $('#tStSchoolNew', m);
+        if (sel && inp) {
+          sel.onchange = () => {
+            const isNew = sel.value === '__new__';
+            inp.style.display = isNew ? '' : 'none';
+            if (isNew) inp.focus();
+          };
+        }
+      },
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'ثبت‌نام دانش‌آموز',
+          onClick: async (m) => {
+            const f = $('#tAddStForm', m);
+            const d = formData(f);
+            const school = f.school_sel ? (f.school_sel.value === '__new__' ? (f.school_new?.value || '').trim() : f.school_sel.value) : (d.school || '');
+            d.school = school;
+            if (!d.full_name?.trim()) { toast('نام و نام خانوادگی را وارد کنید', 'err'); return false; }
+            if (!d.national_code?.trim()) { toast('کد ملی را وارد کنید', 'err'); return false; }
+            try {
+              const r = await post('/api/teacher/students', d);
+              toast('دانش‌آموز با موفقیت ثبت شد', 'ok');
+              await modal({
+                title: 'ثبت‌نام با موفقیت انجام شد',
+                body: `<div class="stack small"><div><b>${esc(d.full_name)}</b> در کلاس ثبت شد.</div><div class="badge green" style="padding:8px">${esc(r.credentials?.student || '')}</div></div>`,
+                actions: [{ label: 'متوجه شدم', value: true }]
+              });
+              classesCache = null;
+              draw();
+              return true;
+            } catch (err) {
+              toast(err.message || 'خطا در ثبت دانش‌آموز', 'err');
+              return false;
+            }
+          }
+        }
+      ]
+    });
+  };
+
+  on(el, 'click', 'tr[data-href]', (e, tr) => {
+    if (e.target.closest('[data-transfer]')) return;
+    location.hash = tr.dataset.href;
+  });
 }
 
 export function studentDetailHtml(d) {
@@ -210,7 +343,7 @@ export function studentDetailHtml(d) {
 
 async function studentDetail(el, { id }) {
   const d = await api(`/api/teacher/students/${id}`);
-  setHead(esc(d.info.full_name), 'پرونده عملکرد، مسیر یادگیری و یادداشت مشاوره', `<a class="btn ghost sm" href="#/students">→ دانش‌آموزان</a> <a class="btn soft sm" href="#/messages/${id}">${icon('message', { size: 16 })} پیام</a> <button class="btn sm" id="givePts">${icon('star', { size: 16 })} امتیاز کلاسی</button>`);
+  setHead(esc(d.info.full_name), 'پرونده عملکرد، مسیر یادگیری و یادداشت مشاوره', `<a class="btn ghost sm" href="#/students">→ دانش‌آموزان</a> <button class="btn soft sm" id="tDetailMove">${icon('arrow-right-left', { size: 14 })} انتقال کلاس</button> <a class="btn soft sm" href="#/messages/${id}">${icon('message', { size: 16 })} پیام</a> <button class="btn sm" id="givePts">${icon('star', { size: 16 })} امتیاز کلاسی</button>`);
   let steps = d.path.steps.map((s) => ({ ...s }));
   let summary = d.path.summary || '';
   el.innerHTML = studentDetailHtml(d) + `
@@ -233,6 +366,38 @@ async function studentDetail(el, { id }) {
   $('#regen', el).onclick = (e) => busy(e.target, async () => { const g = await post(`/api/teacher/students/${id}/path/regenerate`); steps = g.steps; $('#lpSummary', el).value = g.summary; drawSteps(); toast('پیشنهاد جدید ساخته شد؛ پس از بازبینی ذخیره کنید'); });
   $('#savePath', el).onclick = (e) => busy(e.target, async () => { await put(`/api/teacher/students/${id}/path`, { steps, summary: $('#lpSummary', el).value }); toast('مسیر یادگیری ذخیره شد', 'ok'); });
   $('#noteForm', el).onsubmit = (e) => { e.preventDefault(); busy(e.submitter, async () => { await post(`/api/teacher/students/${id}/notes`, formData(e.target)); toast('یادداشت ثبت شد', 'ok'); studentDetail(el, { id }); }); };
+  const moveBtn = document.getElementById('tDetailMove');
+  if (moveBtn) moveBtn.onclick = async () => {
+    const overview = await api('/api/teacher/overview').catch(() => ({}));
+    const targets = (overview.all_classes || []).filter((c) => c.id !== d.info.class_id);
+    if (!targets.length) return toast('کلاس مقصد دیگری برای انتقال وجود ندارد', 'err');
+    modal({
+      title: `انتقال «${esc(d.info.full_name)}» به کلاس دیگر`,
+      body: `<form id="tMvDForm" class="stack">
+        <p class="small muted">کلاس مقصد را انتخاب کنید. با انتقال دانش‌آموز، کلاس و پایهٔ او به‌روزرسانی می‌شود.</p>
+        <div class="field"><label for="tMvDCls">کلاس مقصد</label><select class="input" id="tMvDCls" name="class_id">${targets.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
+      </form>`,
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'انتقال دانش‌آموز',
+          onClick: async (m) => {
+            const cid = Number($('#tMvDCls', m).value);
+            try {
+              await post(`/api/teacher/students/${id}/move`, { class_id: cid });
+              toast('دانش‌آموز با موفقیت منتقل شد', 'ok');
+              classesCache = null;
+              studentDetail(el, { id });
+              return true;
+            } catch (err) {
+              toast(err.message || 'خطا در انتقال دانش‌آموز', 'err');
+              return false;
+            }
+          }
+        }
+      ]
+    });
+  };
   $('#givePts').onclick = () => modal({ title: ' امتیاز کلاسی', body: `<form class="stack" id="ptsForm"><div class="field"><label>امتیاز (بین ۲۰- تا ۲۰)</label><input class="input" type="number" name="amount" value="3" min="-20" max="20"></div><div class="field"><label>بابت</label><input class="input" name="reason" placeholder="مثلاً: مشارکت فعال در کلاس"></div></form>`,
     actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ثبت امتیاز', onClick: async (m) => { await post(`/api/teacher/students/${id}/points`, formData($('#ptsForm', m))); toast('امتیاز ثبت شد', 'ok'); studentDetail(el, { id }); } }] });
 }
@@ -269,16 +434,73 @@ async function plans(el) {
 
 // ================= ویدیو و جزوه =================
 async function materials(el) {
-  setHead('ویدیو و جزوه', 'فایل‌های آموزشی که دانش‌آموزان می‌توانند دانلود کنند', '<button class="btn sm" id="addMat"> افزودن فایل</button>');
+  setHead('ویدیو و جزوه', 'فایل‌های آموزشی بدون محدودیت حجم با بهینه‌سازی خودکار', '<button class="btn sm" id="addMat">+ افزودن فایل</button>');
   const list = await api('/api/teacher/materials');
-  el.innerHTML = `<div class="card"><div class="list">${list.map((m) => `<div class="list-item"><div class="avatar sm" style="background:${m.kind === 'video' ? 'var(--red-soft)' : 'var(--blue-soft)'};color:${m.kind === 'video' ? 'var(--red-700)' : 'var(--slate-700)'}">${icon(m.kind === 'video' ? 'video' : 'file-text', { size: 18 })}</div><div class="grow"><b class="small">${esc(m.title)}</b><div class="tiny muted">${m.grade ? `پایه ${gradeName(m.grade)}` : 'همه پایه‌ها'} • ${esc(m.subject || '')} • ${jdate(m.created_at)}</div></div><a class="btn sm ghost" href="${esc(m.url)}" target="_blank">مشاهده</a></div>`).join('') || empty('inbox', 'فایلی نیست')}</div></div>`;
+  const fmtSize = (kb) => !kb ? '' : (kb >= 1024 ? `${fa((kb / 1024).toFixed(1))} مگابایت` : `${fa(kb)} کیلوبایت`);
+  el.innerHTML = `<div class="card"><div class="list">${list.map((m) => `<div class="list-item"><div class="avatar sm" style="background:${m.kind === 'video' ? 'var(--red-soft)' : 'var(--blue-soft)'};color:${m.kind === 'video' ? 'var(--red-700)' : 'var(--slate-700)'}">${icon(m.kind === 'video' ? 'video' : 'file-text', { size: 18 })}</div><div class="grow"><b class="small">${esc(m.title)}</b><div class="tiny muted">${m.grade ? `پایه ${gradeName(m.grade)}` : 'همه پایه‌ها'}${m.subject ? ` • ${esc(m.subject)}` : ''}${m.size_kb ? ` • ${fmtSize(m.size_kb)}` : ''} • ${jdate(m.created_at)}</div></div><a class="btn sm ghost" href="${esc(m.url)}" target="_blank">مشاهده</a><button type="button" class="icon-btn" data-del-mat="${m.id}" title="حذف" style="color:var(--red)">${icon('trash', { size: 16 })}</button></div>`).join('') || empty('inbox', 'فایلی نیست')}</div></div>`;
+  on(el, 'click', '[data-del-mat]', async (e, b) => {
+    if (!await confirmBox('این فایل برای همیشه حذف شود؟', 'حذف فایل')) return;
+    await del(`/api/teacher/materials/${b.dataset.delMat}`);
+    toast('فایل حذف شد', 'ok');
+    materials(el);
+  });
   const classes = await myClasses();
+  const subjects = [...new Set(classes.flatMap((c) => String(c.subjects || '').split('،').map((t) => t.trim())).filter(Boolean))];
   $('#addMat').onclick = () => modal({
-    title: ' افزودن ویدیو یا جزوه',
+    title: 'افزودن ویدیو یا جزوه',
     body: `<form class="stack" id="matForm"><div class="field"><label>عنوان</label><input class="input" name="title" required></div><div class="form-grid"><div class="field"><label>نوع</label><select class="input" name="kind"><option value="pdf">${icon('file-text', { size: 16 })} جزوه (PDF)</option><option value="video">${icon('video', { size: 16 })} ویدیو</option><option value="file">${icon('file-text', { size: 16 })} سایر</option></select></div>
-      <div class="field"><label>پایه</label><select class="input" name="grade"><option value="">همه</option>${[...new Set(classes.map((c) => c.grade))].map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div><div class="field"><label>درس</label><input class="input" name="subject"></div></div>
-      <div class="field"><label>فایل (حداکثر ۱۰ مگابایت)</label><input class="input" type="file" name="file" accept=".pdf,video/mp4,image/*,.zip,.doc,.docx"></div><div class="field"><label>یا لینک (برای ویدیوهای بزرگ)</label><input class="input ltr" name="url" placeholder="https://"></div></form>`,
-    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'افزودن', onClick: async (m) => { const f = $('#matForm', m); await post('/api/teacher/materials', { ...formData(f), file: await fileToData(f.file.files[0], 10) }); toast('افزوده شد', 'ok'); materials(el); } }],
+      <div class="field"><label>پایه</label><select class="input" name="grade"><option value="">همه</option>${[...new Set(classes.map((c) => c.grade))].map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div><div class="field"><label>درس</label><input class="input" name="subject" list="matSubjList" value="${esc(subjects[0] || '')}"><datalist id="matSubjList">${subjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div></div>
+      <div class="field"><label>انتخاب فایل (بدون محدودیت حجم · بهینه‌سازی خودکار روی سرور)</label><input class="input" type="file" name="file" accept=".pdf,video/*,image/*,.zip,.doc,.docx,.ppt,.pptx,.mp3"></div>
+      <div class="field"><label>یا لینک (برای فایل‌های آنلاین)</label><input class="input ltr" name="url" placeholder="https://"></div>
+      <div id="matProgWrap" style="display:none;margin-top:6px"><div class="row between small" style="margin-bottom:4px"><span id="matProgTxt">در حال بارگذاری...</span><b id="matProgPct">۰٪</b></div><div class="progress"><i id="matProgBar" style="width:0%"></i></div></div></form>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, {
+      label: 'افزودن و بارگذاری',
+      onClick: async (m) => {
+        const f = $('#matForm', m);
+        const d = formData(f);
+        if (!d.title?.trim()) { toast('عنوان را وارد کنید', 'err'); return false; }
+        const file = f.file.files[0];
+        if (!file) {
+          await post('/api/teacher/materials', d);
+          toast('افزوده شد', 'ok');
+          materials(el);
+          return true;
+        }
+        const wrap = $('#matProgWrap', m), txt = $('#matProgTxt', m), pctEl = $('#matProgPct', m), bar = $('#matProgBar', m);
+        wrap.style.display = '';
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const qsParams = new URLSearchParams({
+            title: d.title.trim(),
+            kind: d.kind || 'file',
+            grade: d.grade || '',
+            subject: d.subject || '',
+            filename: file.name,
+          });
+          xhr.open('POST', `/api/teacher/materials/upload?${qsParams.toString()}`);
+          xhr.upload.onprogress = (ev) => {
+            if (!ev.lengthComputable) return;
+            const p = Math.round((ev.loaded / ev.total) * 100);
+            pctEl.textContent = `${fa(p)}٪`;
+            bar.style.width = `${p}%`;
+            txt.textContent = p >= 100 ? 'در حال ثبت و بهینه‌سازی...' : 'در حال آپلود فایل...';
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText || '{}'));
+            else {
+              let msg = 'خطا در آپلود فایل';
+              try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
+              reject(new Error(msg));
+            }
+          };
+          xhr.onerror = () => reject(new Error('ارتباط با سرور قطع شد'));
+          xhr.send(file);
+        });
+        toast('فایل با موفقیت آپلود شد (بهینه‌سازی خودکار در پس‌زمینه انجام می‌شود)', 'ok');
+        materials(el);
+        return true;
+      }
+    }],
   });
 }
 

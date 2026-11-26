@@ -149,7 +149,7 @@ export default function register(r) {
   // ---------- آزمون آنلاین ----------
   r.get('/api/student/exams', S, (ctx) => {
     const s = studentInfo(ctx.user.id);
-    return all(`SELECT e.id, e.title, e.subject, e.duration_min, e.created_at, json_array_length(e.questions) qcount, t.full_name teacher,
+    return all(`SELECT e.id, e.title, e.subject, e.duration_min, e.deadline, e.created_at, json_array_length(e.questions) qcount, t.full_name teacher,
       r.percent, r.points, at.started_at FROM exams e LEFT JOIN users t ON t.id=e.created_by
       LEFT JOIN exam_results r ON r.exam_id=e.id AND r.student_id=? LEFT JOIN exam_attempts at ON at.exam_id=e.id AND at.student_id=?
       WHERE e.kind='online' AND e.center_id=? AND e.grade=? AND (e.class_id IS NULL OR e.class_id=?) ORDER BY e.id DESC`,
@@ -164,9 +164,10 @@ export default function register(r) {
   r.post('/api/student/exams/:id/start', S, (ctx) => {
     const e = examFor(ctx);
     if (get('SELECT 1 FROM exam_results WHERE exam_id=? AND student_id=?', e.id, ctx.user.id)) fail(400, 'این آزمون را قبلاً داده‌ای');
+    if (e.deadline && Date.now() > new Date(e.deadline).getTime()) fail(400, 'مهلت شرکت در این آزمون به پایان رسیده است');
     run('INSERT OR IGNORE INTO exam_attempts (exam_id, student_id, started_at) VALUES (?,?,?)', e.id, ctx.user.id, nowIso());
     const at = get('SELECT started_at FROM exam_attempts WHERE exam_id=? AND student_id=?', e.id, ctx.user.id);
-    const qs = JSON.parse(e.questions).map((q) => ({ text: q.text, options: q.options, subject: q.subject }));
+    const qs = JSON.parse(e.questions).map((q) => ({ text: q.text, options: q.options, subject: q.subject, ...(q.image ? { image: q.image } : {}) }));
     return { id: e.id, title: e.title, duration_min: e.duration_min, started_at: at.started_at, server_now: nowIso(), questions: qs };
   });
   r.post('/api/student/exams/:id/submit', S, (ctx) => {

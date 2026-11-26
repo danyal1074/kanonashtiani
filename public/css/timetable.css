@@ -83,3 +83,61 @@
 .tt-reference .tt-grid .tt-location .ic{display:none}
 .tt-reference .tt-grid .tt-teacher-name{grid-column:1;grid-row:3;font-size:9px;opacity:.85}
 .tt-reference .tt-grid .tt-event-time,.tt-reference .tt-grid .tt-overlap{display:none}
+
+/* Drag & Drop and interactive editing in manager mode */
+.tt-manager .tt-event {
+  cursor: grab;
+  user-select: none;
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+.tt-manager .tt-event:active {
+  cursor: grabbing;
+}
+.tt-manager .tt-event.tt-dragging {
+  opacity: 0.35;
+  outline: 2px dashed #0064ff;
+  outline-offset: 2px;
+  transform: scale(0.96);
+}
+.tt-manager .tt-grid .tt-event:hover,
+.tt-manager .tt-agenda .tt-event:hover {
+  box-shadow: 0 4px 10px rgba(0, 100, 255, 0.22);
+  filter: brightness(1.02);
+}
+.tt-slot-cell {
+  transition: background-color 0.15s ease, outline 0.15s ease;
+}
+.tt-slot-cell.tt-drag-over,
+th[data-weekday].tt-drag-over {
+  background: #c3e3ff !important;
+  outline: 2px dashed #0064ff !important;
+  outline-offset: -2px;
+}
+.tt-event-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-inline-start: auto;
+}
+.tt-act-btn {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  padding: 1px 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  transition: background 0.15s, transform 0.15s;
+}
+.tt-act-btn:hover {
+  background: #ffffff;
+  transform: scale(1.12);
+}
+.tt-reference .tt-grid .tt-event .tt-event-actions {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}

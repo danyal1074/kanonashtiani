@@ -92,7 +92,7 @@ export function prepareTeacher(me, path) {
     sb?.querySelector('.brand')?.insertAdjacentHTML('afterbegin', `<div class="tp-panel-title">${icon('graduation', { size: 54 })}<b>پنل معلم</b></div>`);
     $$('#sidebar .nav-item').forEach((a) => { const n = NAV_LINE[a.dataset.path]; if (n) a.querySelector('.ni').innerHTML = li(n, 22); });
     $$('.bottom-nav a[data-path]').forEach((a) => { const n = NAV_LINE[a.dataset.path]; if (n) a.querySelector('.bi').innerHTML = li(n, 25); });
-    myClasses().then((cl) => { const s = [...new Set(cl.flatMap((x) => String(x.subjects || '').split('،').map((t) => t.trim())))].filter(Boolean); if ($('#tpSubject') && s[0]) $('#tpSubject').textContent = `معلم ${s[0]}`; }).catch(() => {});
+    myClasses().then((cl) => { const s = [...new Set(cl.flatMap((x) => String(x.subjects || '').split('،').map((t) => t.trim())))].filter(Boolean); if ($('#tpSubject') && s.length) $('#tpSubject').textContent = `معلم ${s.join('، ')}`; }).catch(() => {});
   }
 }
 

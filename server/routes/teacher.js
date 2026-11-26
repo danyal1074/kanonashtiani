@@ -1,24 +1,52 @@
 // پنل معلم
-import { all, get, run, tx } from '../db.js';
-import { fail, ymd, addDays, weekStart, faWeekday, clampStr, saveUpload } from '../util.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { all, get, run, tx, UPLOAD_DIR } from '../db.js';
+import { fail, ymd, addDays, weekStart, faWeekday, clampStr, saveUpload, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate } from '../util.js';
 import { addPoints, totalPoints, levelOf, gradeRanking, saveExamResult, ensureLearningPath, generateLearningPath, subjectScores } from '../logic.js';
 import { studentResults, studyWeek } from './student.js';
+import { syncStudentsLater } from '../classroom.js';
+import { generateExamQuestions, extractTextExamFromBookPages } from '../exam-ai.js';
 
 const T = { roles: ['teacher'] };
 
-export const teacherClasses = (tid) => all(`SELECT c.id, c.grade, c.name, GROUP_CONCAT(tc.subject, '، ') subjects,
-  (SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1) students
-  FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=? GROUP BY c.id ORDER BY c.grade, c.name`, tid);
+export const teacherClasses = (tid) => {
+  const tcRows = all(`SELECT c.id, c.grade, c.name, tc.subject
+    FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=?`, tid);
+  const scRows = all(`SELECT c.id, c.grade, c.name, sc.subject
+    FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.teacher_id=?`, tid);
+  const byId = new Map();
+  for (const r of [...scRows, ...tcRows]) {
+    if (!byId.has(r.id)) {
+      byId.set(r.id, { id: r.id, grade: r.grade, name: r.name, subjectsSet: new Set() });
+    }
+    if (r.subject && r.subject.trim()) byId.get(r.id).subjectsSet.add(r.subject.trim());
+  }
+  return [...byId.values()].map((c) => ({
+    id: c.id,
+    grade: c.grade,
+    name: c.name,
+    subjects: [...c.subjectsSet].join('، '),
+    students: get('SELECT COUNT(*) n FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.active=1', c.id)?.n || 0,
+  })).sort((a, b) => a.grade - b.grade || a.name.localeCompare(b.name, 'fa'));
+};
 
 function ownClass(tid, classId) {
-  const c = get('SELECT c.* FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=? AND c.id=?', tid, Number(classId));
+  const c = get(`SELECT c.* FROM classes c WHERE c.id=? AND (
+    EXISTS (SELECT 1 FROM teacher_classes tc WHERE tc.teacher_id=? AND tc.class_id=c.id)
+    OR EXISTS (SELECT 1 FROM schedule sc WHERE sc.teacher_id=? AND sc.class_id=c.id)
+  )`, Number(classId), tid, tid);
   if (!c) fail(403, 'این کلاس متعلق به شما نیست');
   return c;
 }
 function ownStudent(tid, sid) {
   const s = get(`SELECT u.id, u.full_name, u.national_code, s.grade, s.class_id, s.school, s.avatar, s.birth_date, c.name class_name, u.center_id
     FROM students s JOIN users u ON u.id=s.user_id JOIN classes c ON c.id=s.class_id
-    WHERE u.id=? AND s.class_id IN (SELECT class_id FROM teacher_classes WHERE teacher_id=?)`, Number(sid), tid);
+    WHERE u.id=? AND (
+      s.class_id IN (SELECT class_id FROM teacher_classes WHERE teacher_id=?)
+      OR s.class_id IN (SELECT class_id FROM schedule WHERE teacher_id=?)
+    )`, Number(sid), tid, tid);
   if (!s) fail(403, 'این دانش‌آموز در کلاس‌های شما نیست');
   return s;
 }
@@ -84,8 +112,10 @@ export function parseQuestions(raw, needText) {
     const answer = Number(q.answer);
     if (!(answer >= 0 && answer <= 3)) fail(400, `کلید پاسخ سؤال ${i + 1} مشخص نیست`);
     const out = { answer, subject: clampStr(q.subject, 40) || undefined };
+    const img = typeof q.image === 'string' && /^\/(api\/exam-books|uploads)\//.test(q.image) ? q.image.slice(0, 300) : undefined;
+    if (img) out.image = img;
     if (needText) {
-      out.text = clampStr(q.text, 1000);
+      out.text = clampStr(q.text, 1000) || (img ? `سؤال تصویری شماره ${i + 1}` : '');
       out.options = (q.options || []).slice(0, 4).map((o) => clampStr(o, 300));
       if (!out.text || out.options.length !== 4 || out.options.some((o) => !o)) fail(400, `متن سؤال ${i + 1} و هر چهار گزینه را کامل کنید`);
     }
@@ -110,8 +140,12 @@ export default function register(r) {
     const classes = teacherClasses(t.id);
     const ids = classes.map((c) => c.id);
     const ph = ids.map(() => '?').join(',') || 'NULL';
+    const subjects = [...new Set(classes.flatMap((c) => String(c.subjects || '').split('،').map((s) => s.trim())).filter(Boolean))];
     return {
       classes,
+      subjects,
+      all_classes: all('SELECT c.id, c.grade, c.name FROM classes c WHERE c.center_id=? ORDER BY c.grade, c.name', t.center_id),
+      schools: all(`SELECT DISTINCT s.school FROM students s JOIN users u ON u.id=s.user_id WHERE u.center_id=? AND s.school<>'' ORDER BY s.school`, t.center_id).map((x) => x.school),
       today: all(`SELECT sc.start, sc.end, sc.subject, sc.room, c.name class_name, c.grade, c.id class_id FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.teacher_id=? AND sc.weekday=? ORDER BY sc.start`, t.id, faWeekday(today)),
       stats: {
         students: classes.reduce((a, c) => a + c.students, 0),
@@ -234,7 +268,7 @@ export default function register(r) {
   });
 
   // ---------- آزمون ----------
-  r.get('/api/teacher/exams', T, (ctx) => all(`SELECT e.id, e.title, e.kind, e.subject, e.grade, e.duration_min, e.created_at, c.name class_name,
+  r.get('/api/teacher/exams', T, (ctx) => all(`SELECT e.id, e.title, e.kind, e.subject, e.grade, e.duration_min, e.deadline, e.created_at, c.name class_name,
     json_array_length(e.questions) qcount, (SELECT COUNT(*) FROM exam_results r WHERE r.exam_id=e.id) results, (SELECT AVG(percent) FROM exam_results r WHERE r.exam_id=e.id) avg
     FROM exams e LEFT JOIN classes c ON c.id=e.class_id WHERE e.created_by=? ORDER BY e.id DESC`, ctx.user.id));
   r.post('/api/teacher/exams', T, (ctx) => {
@@ -243,13 +277,63 @@ export default function register(r) {
     const title = clampStr(b.title, 150);
     if (!title) fail(400, 'عنوان آزمون را وارد کنید');
     const cls = teacherClasses(ctx.user.id);
-    const grade = Number(b.grade);
-    if (!cls.some((c) => c.grade === grade)) fail(403, 'این پایه را تدریس نمی‌کنید');
-    const classId = b.class_id ? ownClass(ctx.user.id, b.class_id).id : null;
     const qs = parseQuestions(b.questions, kind === 'online');
-    const res = run('INSERT INTO exams (center_id, title, kind, subject, grade, class_id, duration_min, questions, created_by) VALUES (?,?,?,?,?,?,?,?,?)',
-      ctx.user.center_id, title, kind, clampStr(b.subject, 40), grade, classId, Math.max(1, Math.min(180, Number(b.duration_min) || 15)), JSON.stringify(qs), ctx.user.id);
+    const durationMin = Math.max(1, Math.min(180, Number(b.duration_min) || 15));
+    const deadline = b.deadline ? String(b.deadline).trim().slice(0, 32) : null;
+    const subject = clampStr(b.subject, 40);
+
+    // پشتیبانی از انتخاب چند کلاس یا یک کلاس مشخص یا همهٔ کلاس‌های پایه
+    const rawClassIds = Array.isArray(b.class_ids) ? b.class_ids.map(Number).filter(Boolean) : [];
+    if (rawClassIds.length) {
+      const ids = [];
+      tx(() => {
+        for (const cid of rawClassIds) {
+          const targetClass = ownClass(ctx.user.id, cid);
+          const res = run('INSERT INTO exams (center_id, title, kind, subject, grade, class_id, duration_min, deadline, questions, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)',
+            ctx.user.center_id, title, kind, subject, targetClass.grade, targetClass.id, durationMin, deadline, JSON.stringify(qs), ctx.user.id);
+          ids.push(Number(res.lastInsertRowid));
+        }
+      });
+      return { ok: true, id: ids[0], ids };
+    }
+
+    let grade = Number(b.grade);
+    const classId = b.class_id ? ownClass(ctx.user.id, b.class_id).id : null;
+    if (classId) {
+      grade = ownClass(ctx.user.id, classId).grade;
+    } else if (!cls.some((c) => c.grade === grade)) {
+      fail(403, 'این پایه را تدریس نمی‌کنید');
+    }
+    const res = run('INSERT INTO exams (center_id, title, kind, subject, grade, class_id, duration_min, deadline, questions, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      ctx.user.center_id, title, kind, subject, grade, classId, durationMin, deadline, JSON.stringify(qs), ctx.user.id);
     return { ok: true, id: Number(res.lastInsertRowid) };
+  });
+  r.post('/api/teacher/exams/ai-generate', T, async (ctx) => {
+    const b = ctx.body;
+    const subject = clampStr(b.subject, 40) || 'ریاضی';
+    const grade = Number(b.grade) || 6;
+    const topic = clampStr(b.topic, 120);
+    const count = Math.max(1, Math.min(20, Number(b.count) || 5));
+    const difficulty = ['easy', 'medium', 'hard'].includes(b.difficulty) ? b.difficulty : 'medium';
+    try {
+      const questions = await generateExamQuestions({ subject, grade, topic, count, difficulty });
+      return { ok: true, questions };
+    } catch (e) {
+      fail(400, e.message);
+    }
+  });
+  r.post('/api/teacher/exams/extract-hoosh', T, async (ctx) => {
+    const b = ctx.body;
+    const bookId = String(b.book_id || '').trim();
+    const pages = Array.isArray(b.pages) ? b.pages : [];
+    const subject = clampStr(b.subject, 40) || 'هوش و استعداد';
+    const maxQuestions = Math.max(1, Math.min(25, Number(b.count) || 15));
+    try {
+      const res = await extractTextExamFromBookPages({ bookId, pages, subject, maxQuestions });
+      return { ok: true, ...res };
+    } catch (e) {
+      fail(400, e.message);
+    }
   });
   const ownExam = (ctx) => {
     const e = get('SELECT * FROM exams WHERE id=? AND created_by=?', Number(ctx.params.id), ctx.user.id);
@@ -273,6 +357,65 @@ export default function register(r) {
 
   // ---------- دانش‌آموزان و مسیر یادگیری ----------
   r.get('/api/teacher/students', T, (ctx) => performanceList(ctx.user.center_id, classFilter(ctx.user.id, ctx.query).map((c) => c.id)));
+  r.post('/api/teacher/students', T, (ctx) => {
+    const b = ctx.body;
+    const full_name = clampStr(b.full_name, 80);
+    if (!full_name) fail(400, 'نام و نام خانوادگی را وارد کنید');
+    const national_code = normalizeNationalCode(b.national_code);
+    if (!isValidNationalCode(national_code)) fail(400, 'کد ملی ۱۰ رقمی معتبر نیست');
+
+    const cls = ownClass(ctx.user.id, b.class_id);
+
+    // ۱. بررسی تکراری نبودن کد ملی در کل کانون
+    const dupNc = get(`SELECT u.id, u.full_name, c.name class_name FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE u.role='student' AND u.national_code=?`, national_code);
+    if (dupNc) fail(400, `دانش‌آموزی با این کد ملی قبلاً با نام «${dupNc.full_name}» ${dupNc.class_name ? `در کلاس «${dupNc.class_name}»` : ''} ثبت شده است`);
+
+    // ۲. بررسی تکراری نبودن نام و نام خانوادگی در همان کلاس
+    const dupName = get(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.full_name=? AND s.class_id=?`, ctx.user.center_id, full_name, cls.id);
+    if (dupName) fail(400, `دانش‌آموزی با نام «${full_name}» قبلاً در این کلاس ثبت شده است`);
+
+    const hasPhone = !!String(b.parent_phone ?? '').trim();
+    const parent_phone = hasPhone ? normalizeIranianMobile(b.parent_phone) : null;
+    if (hasPhone && !parent_phone) fail(400, 'شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود');
+
+    let birth_date = null;
+    if (b.birth_date && String(b.birth_date).trim()) {
+      try { birth_date = parseBirthDate(b.birth_date); } catch (e) { fail(400, e.message); }
+    }
+    const school = clampStr(b.school, 100);
+    const gender = b.gender === 'f' ? 'f' : 'm';
+
+    const id = tx(() => {
+      const res = run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`,
+        ctx.user.center_id, 'student', national_code, hashPassword(national_code), full_name, gender);
+      const uid = Number(res.lastInsertRowid);
+      run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar, profile_done) VALUES (?,?,?,?,?,?,?,?,?)',
+        uid, school, cls.grade, cls.id, birth_date, parent_phone, '', 'sprout', 0);
+      return uid;
+    });
+
+    syncStudentsLater([id]);
+    return { ok: true, id, credentials: { student: `نام کاربری و رمز اولیه: کد ملی (${national_code})` } };
+  });
+
+  r.post('/api/teacher/students/:id/move', T, (ctx) => {
+    const s = ownStudent(ctx.user.id, ctx.params.id);
+    const targetClsId = Number(ctx.body.class_id);
+    if (!targetClsId) fail(400, 'کلاس مقصد انتخاب نشده است');
+    const targetCls = get('SELECT * FROM classes WHERE id=? AND center_id=?', targetClsId, ctx.user.center_id);
+    if (!targetCls) fail(404, 'کلاس مقصد یافت نشد');
+    if (s.class_id === targetCls.id) fail(400, 'دانش‌آموز در حال حاضر در همین کلاس قرار دارد');
+
+    // جلوگیری از نام تکراری در کلاس مقصد
+    const dupInTarget = get(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.full_name=? AND s.class_id=? AND u.id!=?`,
+      ctx.user.center_id, s.full_name, targetCls.id, s.id);
+    if (dupInTarget) fail(400, `دانش‌آموزی با نام «${s.full_name}» در کلاس مقصد از قبل وجود دارد`);
+
+    run('UPDATE students SET class_id=?, grade=? WHERE user_id=?', targetCls.id, targetCls.grade, s.id);
+    syncStudentsLater([s.id]);
+    return { ok: true, moved: true, class_name: targetCls.name, grade: targetCls.grade };
+  });
+
   r.get('/api/teacher/students/:id', T, (ctx) => studentDetail(ownStudent(ctx.user.id, ctx.params.id)));
   r.put('/api/teacher/students/:id/path', T, (ctx) => {
     const s = ownStudent(ctx.user.id, ctx.params.id);
@@ -332,6 +475,8 @@ export default function register(r) {
   });
 
   // ---------- ویدیو و جزوه ----------
+  const ALLOWED_MAT_EXT = new Set(['.pdf', '.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.jpg', '.jpeg', '.png', '.webp', '.zip', '.doc', '.docx', '.ppt', '.pptx', '.mp3']);
+
   r.get('/api/teacher/materials', T, (ctx) => all('SELECT * FROM materials WHERE center_id=? ORDER BY id DESC', ctx.user.center_id));
   r.post('/api/teacher/materials', T, (ctx) => {
     const b = ctx.body;
@@ -340,9 +485,44 @@ export default function register(r) {
     const kind = ['video', 'pdf', 'file'].includes(b.kind) ? b.kind : 'file';
     let url = clampStr(b.url, 500);
     let size = null;
-    if (b.file) { const name = saveUpload(b.file, 10); url = `/uploads/${name}`; size = Math.round(Buffer.byteLength(b.file.data) * 0.75 / 1024); }
+    if (b.file) { const name = saveUpload(b.file, 50); url = `/uploads/${name}`; size = Math.round(Buffer.byteLength(b.file.data) * 0.75 / 1024); }
     if (!url || !/^(https?:\/\/|\/uploads\/)/.test(url)) fail(400, 'فایل یا لینک معتبر لازم است');
-    run('INSERT INTO materials (center_id, grade, subject, title, kind, url, size_kb) VALUES (?,?,?,?,?,?,?)', ctx.user.center_id, Number(b.grade) || null, clampStr(b.subject, 40), title, kind, url, size);
+    const res = run('INSERT INTO materials (center_id, grade, subject, title, kind, url, size_kb) VALUES (?,?,?,?,?,?,?)', ctx.user.center_id, Number(b.grade) || null, clampStr(b.subject, 40), title, kind, url, size);
+    return { ok: true, id: Number(res.lastInsertRowid) };
+  });
+  r.post('/api/teacher/materials/upload', { roles: ['teacher'], rawBody: true }, async (ctx) => {
+    const title = clampStr(ctx.query.title || '', 150);
+    if (!title) fail(400, 'عنوان را وارد کنید');
+    const kind = ['video', 'pdf', 'file'].includes(ctx.query.kind) ? ctx.query.kind : 'file';
+    const rawName = String(ctx.query.filename || ctx.req.headers['x-file-name'] || 'file.bin');
+    let ext = path.extname(decodeURIComponent(rawName)).toLowerCase();
+    if (!ALLOWED_MAT_EXT.has(ext)) fail(400, 'پسوند فایل مجاز نیست');
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    const outName = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${ext}`;
+    const outPath = path.join(UPLOAD_DIR, outName);
+    let bytes = 0;
+    await new Promise((resolve, reject) => {
+      const ws = fs.createWriteStream(outPath);
+      ctx.req.on('data', (chunk) => { bytes += chunk.length; });
+      ctx.req.on('error', (err) => { ws.destroy(); try { fs.unlinkSync(outPath); } catch {} reject(err); });
+      ws.on('error', (err) => { try { fs.unlinkSync(outPath); } catch {} reject(err); });
+      ws.on('finish', resolve);
+      ctx.req.pipe(ws);
+    });
+    if (!bytes) { try { fs.unlinkSync(outPath); } catch {} fail(400, 'فایل خالی است'); }
+    const sizeKb = Math.max(1, Math.round(bytes / 1024));
+    const url = `/uploads/${outName}`;
+    const res = run('INSERT INTO materials (center_id, grade, subject, title, kind, url, size_kb) VALUES (?,?,?,?,?,?,?)',
+      ctx.user.center_id, Number(ctx.query.grade) || null, clampStr(ctx.query.subject || '', 40), title, kind, url, sizeKb);
+    return { ok: true, id: Number(res.lastInsertRowid), url, size_kb: sizeKb };
+  });
+  r.del('/api/teacher/materials/:id', T, (ctx) => {
+    const m = get('SELECT * FROM materials WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id);
+    if (!m) fail(404, 'فایل یافت نشد');
+    run('DELETE FROM materials WHERE id=?', m.id);
+    if (m.url?.startsWith('/uploads/')) {
+      try { fs.unlinkSync(path.join(UPLOAD_DIR, m.url.slice('/uploads/'.length))); } catch {}
+    }
     return { ok: true };
   });
 

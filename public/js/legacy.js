@@ -352,7 +352,36 @@ const ST = { present: 'حاضر', absent: 'غایب', excused: 'موجه' };
 export async function attLog(el, _p, me) {
   setHead('لاگ تغییرات حضور و غیاب', 'هر بار که وضعیت یک دانش‌آموز عوض شود اینجا ثبت می‌شود');
   const rows = await api(`/api/${me.user.role}/attendance/changes`);
-  el.innerHTML = `<section class="card">${rows.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>دانش‌آموز</th><th>کلاس</th><th>تاریخ حضور</th><th>تغییر</th><th>ویرایشگر</th><th>زمان ثبت</th></tr></thead><tbody>${rows.map((c) => `<tr><td>${esc(c.student_name)}</td><td>${esc(c.class_name || '')}</td><td>${c.date ? jdate(c.date) : '—'}</td><td>${ST[c.old_status] || esc(c.old_status)} ← <b>${ST[c.new_status] || esc(c.new_status)}</b></td><td>${esc(c.actor_name)}</td><td class="tiny muted">${dt(c.changed_at || c.created_at)}</td></tr>`).join('')}</tbody></table></div>` : empty('inbox', 'تغییری ثبت نشده')}</section>`;
+  const renderRows = (list) => list.length
+    ? `<div class="table-wrap"><table class="table"><thead><tr><th>دانش‌آموز</th><th>کلاس</th><th>تاریخ حضور</th><th>تغییر</th><th>ویرایشگر</th><th>زمان ثبت</th></tr></thead><tbody>${list.map((c) => `<tr><td>${esc(c.student_name)}</td><td>${esc(c.class_name || '')}</td><td>${c.date ? jdate(c.date) : '—'}</td><td>${ST[c.old_status] || esc(c.old_status)} ← <b>${ST[c.new_status] || esc(c.new_status)}</b></td><td>${esc(c.actor_name)}</td><td class="tiny muted">${dt(c.changed_at || c.created_at)}</td></tr>`).join('')}</tbody></table></div>`
+    : empty('inbox', 'تغییری ثبت نشده');
+  el.innerHTML = `<section class="card">
+    <div class="row between wrap" style="gap:10px;margin-bottom:14px;align-items:center">
+      <div class="row wrap" style="gap:8px;align-items:center;flex:1 1 260px">
+        <input class="input" id="attLogQ" placeholder="جستجوی دانش‌آموز، کلاس یا ویرایشگر…" style="max-width:320px">
+        <span class="tiny muted" id="attLogCnt">${fa(rows.length)} مورد</span>
+      </div>
+      ${rows.length ? `<button class="btn sm soft" id="attLogCsv" type="button">${icon('download', { size: 15 })} خروجی CSV</button>` : ''}
+    </div>
+    <div id="attLogBox">${renderRows(rows)}</div>
+  </section>`;
+  let filtered = rows;
+  const qEl = $('#attLogQ', el);
+  qEl?.addEventListener('input', () => {
+    const q = qEl.value.trim().toLowerCase();
+    filtered = q ? rows.filter((c) => `${c.student_name || ''} ${c.class_name || ''} ${c.actor_name || ''}`.toLowerCase().includes(q)) : rows;
+    $('#attLogCnt', el).textContent = `${fa(filtered.length)} مورد`;
+    $('#attLogBox', el).innerHTML = renderRows(filtered);
+  });
+  $('#attLogCsv', el)?.addEventListener('click', () => {
+    const header = ['دانش‌آموز', 'کلاس', 'تاریخ حضور', 'وضعیت قبلی', 'وضعیت جدید', 'ویرایشگر', 'زمان ثبت'];
+    const lines = [header, ...filtered.map((c) => [c.student_name || '', c.class_name || '', c.date ? jdate(c.date) : '', c.old_status || '', c.new_status || '', c.actor_name || '', dt(c.changed_at || c.created_at)])];
+    const csv = '\uFEFF' + lines.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'attendance-changes.csv';
+    a.click();
+  });
 }
 
 // ================= ولی: نمرات، فاکتورها، کارنامه فرزند =================
@@ -378,7 +407,33 @@ export async function mgrInvoices(el) {
     <div class="field"><label for="ivPer" id="ivPerLbl">دوره / شرح خرید</label><input class="input" id="ivPer" name="period" required maxlength="40" placeholder="مثلاً مهر ۱۴۰۵ یا ساندویچ بوفه"></div>
     <div class="field"><label for="ivAmt">مبلغ به تومان</label><input class="input" id="ivAmt" name="amount" type="number" min="1000" step="500" inputmode="numeric" required></div>
     <button class="btn" type="submit" id="ivSubmit">صدور فاکتور</button></div></form>
-    <section class="card span2"><div class="card-title">مانده بدهی کل: <b>${money(owed)}</b></div>${invoicesTable(list, { student: true })}</section></div>`;
+    <section class="card span2">
+      <div class="row between wrap" style="gap:10px;margin-bottom:12px;align-items:center">
+        <div class="card-title" style="margin:0">مانده بدهی کل: <b>${money(owed)}</b></div>
+        <div class="row wrap" style="gap:8px">
+          <input class="input" id="ivFilterQ" placeholder="جستجوی دانش‌آموز یا شرح…" style="width:190px">
+          <select class="input" id="ivFilterSt" style="width:145px">
+            <option value="">همه وضعیت‌ها</option>
+            <option value="unpaid">بدهکار / پرداخت‌نشده</option>
+            <option value="paid">تسویه‌شده</option>
+          </select>
+        </div>
+      </div>
+      <div id="ivListBox">${invoicesTable(list, { student: true })}</div>
+    </section></div>`;
+  const paintIvList = () => {
+    const q = ($('#ivFilterQ', el)?.value || '').trim().toLowerCase();
+    const st = $('#ivFilterSt', el)?.value || '';
+    const sub = list.filter((i) => {
+      if (st === 'unpaid' && !(i.remaining > 0)) return false;
+      if (st === 'paid' && i.remaining > 0) return false;
+      if (q && !`${i.student_name || ''} ${i.period || ''} ${FEE_TYPES[i.fee_type] || ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    $('#ivListBox', el).innerHTML = invoicesTable(sub, { student: true });
+  };
+  $('#ivFilterQ', el)?.addEventListener('input', paintIvList);
+  $('#ivFilterSt', el)?.addEventListener('change', paintIvList);
   const syncScope = () => {
     const isStu = $('#ivScope', el).value === 'student';
     $('#ivClsBox', el).style.display = isStu ? 'none' : '';
@@ -577,19 +632,42 @@ export async function openSmsModal(prefill = {}) {
 export async function smsOutbox(el) {
   setHead('صندوق خروجی پیامک', 'وضعیت همه‌ی پیامک‌های کانون و ارسال پیامک جدید به دانش‌آموزان و اولیا', `<button class="btn sm" id="btnNewSms">${icon('send', { size: 16 })} ارسال پیامک جدید</button>`);
   const rows = await api('/api/manager/sms-outbox');
+  const renderSmsTable = (list) => list.length ? `
+    <div class="table-wrap"><table class="table"><thead><tr><th>گیرنده</th><th>دانش‌آموز</th><th>متن</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead><tbody>
+    ${list.map((m) => `<tr><td dir="ltr">${esc(m.recipient_phone)}</td><td>${esc(m.student_name || '—')}</td><td class="small">${esc(m.content)}${m.error_message ? `<div class="tiny red-t">${esc(m.error_message)}</div>` : ''}</td><td><span class="badge ${(SMS[m.status] || ['', ''])[1]}">${(SMS[m.status] || [m.status])[0]}</span></td><td class="tiny muted">${dt(m.sent_at || m.created_at)}</td><td>${m.status === 'failed' ? `<button class="btn sm soft" data-retry="${m.id}">ارسال مجدد</button>` : ''}</td></tr>`).join('')}
+    </tbody></table></div>
+  ` : empty('inbox', 'پیامکی ثبت نشده');
   el.innerHTML = `
     <section class="card">
       <div class="row between" style="margin-bottom:14px;flex-wrap:wrap;gap:8px;align-items:center">
-        <div><b>تاریخچه پیامک‌های ارسالی</b> <span class="tiny muted">(${fa(rows.length)} پیام)</span></div>
-        <button class="btn sm" id="btnNewSmsInCard">${icon('send', { size: 16 })} ارسال پیامک جدید</button>
+        <div><b>تاریخچه پیامک‌های ارسالی</b> <span class="tiny muted" id="smsCnt">(${fa(rows.length)} پیام)</span></div>
+        <div class="row wrap" style="gap:8px;align-items:center">
+          <input class="input" id="smsFilterQ" placeholder="جستجوی شماره، نام یا متن…" style="width:200px">
+          <select class="input" id="smsFilterSt" style="width:135px">
+            <option value="">همه وضعیت‌ها</option>
+            <option value="sent">ارسال شد</option>
+            <option value="failed">ناموفق</option>
+            <option value="pending">در صف</option>
+          </select>
+          <button class="btn sm" id="btnNewSmsInCard">${icon('send', { size: 16 })} ارسال پیامک جدید</button>
+        </div>
       </div>
-      ${rows.length ? `
-        <div class="table-wrap"><table class="table"><thead><tr><th>گیرنده</th><th>دانش‌آموز</th><th>متن</th><th>وضعیت</th><th>زمان</th><th></th></tr></thead><tbody>
-        ${rows.map((m) => `<tr><td dir="ltr">${esc(m.recipient_phone)}</td><td>${esc(m.student_name || '—')}</td><td class="small">${esc(m.content)}${m.error_message ? `<div class="tiny red-t">${esc(m.error_message)}</div>` : ''}</td><td><span class="badge ${(SMS[m.status] || ['', ''])[1]}">${(SMS[m.status] || [m.status])[0]}</span></td><td class="tiny muted">${dt(m.sent_at || m.created_at)}</td><td>${m.status === 'failed' ? `<button class="btn sm soft" data-retry="${m.id}">ارسال مجدد</button>` : ''}</td></tr>`).join('')}
-        </tbody></table></div>
-      ` : empty('inbox', 'پیامکی ثبت نشده')}
+      <div id="smsTableBox">${renderSmsTable(rows)}</div>
     </section>
   `;
+  const paintSms = () => {
+    const q = ($('#smsFilterQ', el)?.value || '').trim().toLowerCase();
+    const st = $('#smsFilterSt', el)?.value || '';
+    const sub = rows.filter((m) => {
+      if (st && m.status !== st) return false;
+      if (q && !`${m.recipient_phone || ''} ${m.student_name || ''} ${m.content || ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    $('#smsCnt', el).textContent = `(${fa(sub.length)} پیام)`;
+    $('#smsTableBox', el).innerHTML = renderSmsTable(sub);
+  };
+  $('#smsFilterQ', el)?.addEventListener('input', paintSms);
+  $('#smsFilterSt', el)?.addEventListener('change', paintSms);
   on(el, 'click', '[data-retry]', (e, b) => busy(b, async () => { const r = await post(`/api/manager/sms-outbox/${b.dataset.retry}/retry`); toast(r.ok ? 'پیامک ارسال شد' : `ناموفق: ${r.error}`, r.ok ? 'ok' : ''); smsOutbox(el); }));
 
   const triggerNewSms = () => openSmsModal().then((res) => { if (res) smsOutbox(el); });
@@ -988,7 +1066,13 @@ export async function hooshStudio(el) {
                   <input type="checkbox" id="cfgNegative" ${examConfig.hasNegativeScore ? 'checked' : ''}> نمره منفی لحاظ شود (یک سوم غلط)
                 </label>
 
-                <div style="display:flex;gap:8px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn" id="extractTextExamBtn" type="button" style="background:#7c3aed;color:#fff;font-weight:800">
+                    ${icon('sparkles', { size: 16 })} استخراج آزمون متنی (بدون شکل)
+                  </button>
+                  <button class="btn" id="publishVisualExamBtn" type="button" style="background:#059669;color:#fff;font-weight:800">
+                    ${icon('file-check', { size: 16 })} تعریف آزمون تصویری برای کلاس‌ها
+                  </button>
                   <button class="btn" id="basketPrintBtn" type="button" style="background:#2563eb;color:#fff;font-weight:900">
                     ${icon('printer', { size: 16 })} پیش‌نمایش و چاپ آزمون (A4)
                   </button>
@@ -1146,11 +1230,190 @@ export async function hooshStudio(el) {
     const nInput = $('#cfgNegative', el);
     if (nInput) nInput.onchange = () => { examConfig.hasNegativeScore = nInput.checked; };
 
-    // Print Actions
+    // Print & Publish Actions
     $('#openPrintBookletBtn', el)?.addEventListener('click', () => openPrintModal('exam'));
     $('#basketPrintBtn', el)?.addEventListener('click', () => openPrintModal('exam'));
     $('#openPrintAnswerSheetBtn', el)?.addEventListener('click', () => openPrintModal('answers'));
     $('#openAiPromptBtn', el)?.addEventListener('click', openAiPromptModal);
+    $('#extractTextExamBtn', el)?.addEventListener('click', openExtractTextExamModal);
+    $('#publishVisualExamBtn', el)?.addEventListener('click', openPublishVisualExamModal);
+  }
+
+  async function fetchTeacherClassesForExam() {
+    try {
+      const d = await api('/api/teacher/overview');
+      return d.classes || [];
+    } catch {
+      try {
+        const md = await api('/api/manager/meta');
+        return md.classes || [];
+      } catch { return []; }
+    }
+  }
+
+  async function openExtractTextExamModal() {
+    const basket = window._examBasket;
+    if (!basket.length) return toast('ابتدا برگه‌های کتاب را به سبد اضافه کنید', 'err');
+    const teacherCls = await fetchTeacherClassesForExam();
+    if (!teacherCls.length) return toast('کلاسی برای تعریف آزمون یافت نشد', 'err');
+
+    let extracted = [];
+    const btn = $('#extractTextExamBtn', el);
+    await busy(btn, async () => {
+      const r = await post('/api/teacher/exams/extract-hoosh', {
+        book_id: basket[0].bookId,
+        pages: basket.map((b) => b.pageNum),
+        subject: 'هوش و استعداد',
+        count: 20,
+      });
+      extracted = r.questions || [];
+    });
+
+    if (!extracted.length) {
+      return toast('در صفحات انتخابی، سؤال کاملاً متنی (بدون شکل) پیدا نشد؛ می‌توانید از گزینه «تعریف آزمون تصویری» استفاده کنید.', 'err', 6000);
+    }
+
+    modal({
+      title: `آزمون متنی استخراج‌شده (${fa(extracted.length)} سؤال بدون شکل)`,
+      wide: true,
+      body: `<form id="hxTextForm" class="stack">
+        <div class="form-grid">
+          <div class="field"><label>عنوان آزمون</label><input class="input" name="title" value="${esc(examConfig.title)} (متنی)" required></div>
+          <div class="field"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="${examConfig.duration || 30}" min="1" max="180"></div>
+          <div class="field"><label>تاریخ مهلت (شمسی، اختیاری)</label>${dateField('hxTextDl', null, { minYear: 1404, maxYear: 1406 })}</div>
+          <div class="field"><label>ساعت مهلت</label><input class="input ltr" type="time" name="dl_time" value="23:59"></div>
+        </div>
+        <div class="field">
+          <label>انتخاب کلاس‌های هدف (هر کلاسی که می‌خواهید تیک بزنید)</label>
+          <div class="row wrap" style="gap:8px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+            ${teacherCls.map((c, idx) => `<label class="row" style="gap:5px;cursor:pointer;font-size:12px"><input type="checkbox" name="cls_pick" value="${c.id}" ${idx === 0 ? 'checked' : ''}> ${gradeName(c.grade)} ${esc(c.name)}</label>`).join('')}
+          </div>
+        </div>
+        <div id="hxTextQs" class="stack" style="max-height:420px;overflow-y:auto"></div>
+      </form>`,
+      onOpen: (m) => {
+        const drawQs = () => {
+          $('#hxTextQs', m).innerHTML = extracted.map((q, i) => `
+            <div class="card flat" style="padding:10px;border:1px solid #e2e8f0">
+              <div class="row between"><b class="small">سؤال ${fa(i + 1)}${q.sourcePage ? ` (صفحه ${fa(q.sourcePage)})` : ''}</b><button type="button" class="btn ghost sm" data-hx-rm="${i}">${icon('trash', { size: 14 })}</button></div>
+              <textarea class="input" data-hx-qt="${i}" style="min-height:55px;margin:6px 0">${esc(q.text)}</textarea>
+              <div class="form-grid">${q.options.map((o, j) => `<label class="row" style="gap:5px"><input type="radio" name="hxans${i}" data-hx-qa="${i}" value="${j}" ${q.answer === j ? 'checked' : ''}><input class="input sm" data-hx-qo="${i},${j}" value="${esc(o)}"></label>`).join('')}</div>
+            </div>`).join('');
+        };
+        drawQs();
+        on(m, 'input', '[data-hx-qt]', (e, t) => { extracted[t.dataset.hxQt].text = t.value; });
+        on(m, 'input', '[data-hx-qo]', (e, t) => { const [i, j] = t.dataset.hxQo.split(',').map(Number); extracted[i].options[j] = t.value; });
+        on(m, 'change', '[data-hx-qa]', (e, t) => { extracted[t.dataset.hxQa].answer = Number(t.value); });
+        on(m, 'click', '[data-hx-rm]', (e, b) => { extracted.splice(Number(b.dataset.hxRm), 1); drawQs(); });
+      },
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'انتشار آزمون متنی برای کلاس‌ها',
+          onClick: async (m) => {
+            const f = $('#hxTextForm', m);
+            const classIds = [...m.querySelectorAll('input[name=cls_pick]:checked')].map((x) => Number(x.value));
+            if (!classIds.length) { toast('حداقل یک کلاس انتخاب کنید', 'err'); return false; }
+            if (!extracted.length) { toast('سؤالی باقی نمانده است', 'err'); return false; }
+            const title = f.title.value.trim();
+            if (!title) { toast('عنوان آزمون را وارد کنید', 'err'); return false; }
+            const dlDate = readDate(m, 'hxTextDl');
+            const r = await post('/api/teacher/exams', {
+              title,
+              kind: 'online',
+              subject: 'هوش و استعداد',
+              class_ids: classIds,
+              duration_min: Number(f.duration_min.value) || 30,
+              deadline: dlDate ? tehranIso(dlDate, f.dl_time?.value || '23:59') : null,
+              questions: extracted,
+            });
+            toast(`آزمون متنی با موفقیت برای ${fa(classIds.length)} کلاس منتشر شد`, 'ok');
+            location.hash = `#/exams/${r.id}`;
+            return true;
+          }
+        }
+      ]
+    });
+  }
+
+  async function openPublishVisualExamModal() {
+    const basket = window._examBasket;
+    if (!basket.length) return toast('ابتدا برگه‌های کتاب را به سبد اضافه کنید', 'err');
+    const teacherCls = await fetchTeacherClassesForExam();
+    if (!teacherCls.length) return toast('کلاسی برای تعریف آزمون یافت نشد', 'err');
+
+    const visualQs = basket.map((item, idx) => ({
+      image: bookPageUrl(item.bookId, item.pageNum),
+      text: `سؤال تصویری صفحه ${fa(item.pageNum)} (${item.topicTitle || 'هوش کمپلکس'}) — گزینهٔ صحیح را انتخاب کنید:`,
+      options: ['گزینه ۱', 'گزینه ۲', 'گزینه ۳', 'گزینه ۴'],
+      answer: 0,
+      subject: 'هوش و استعداد',
+      pageNum: item.pageNum,
+      idx,
+    }));
+
+    modal({
+      title: `تعریف آزمون تصویری (${fa(visualQs.length)} صفحه)`,
+      wide: true,
+      body: `<form id="hxVisForm" class="stack">
+        <div class="form-grid">
+          <div class="field"><label>عنوان آزمون تصویری</label><input class="input" name="title" value="${esc(examConfig.title)} (تصویری)" required></div>
+          <div class="field"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="${examConfig.duration || 30}" min="1" max="180"></div>
+          <div class="field"><label>تاریخ مهلت (شمسی، اختیاری)</label>${dateField('hxVisDl', null, { minYear: 1404, maxYear: 1406 })}</div>
+          <div class="field"><label>ساعت مهلت</label><input class="input ltr" type="time" name="dl_time" value="23:59"></div>
+        </div>
+        <div class="field">
+          <label>انتخاب کلاس‌های هدف (هر کلاسی که می‌خواهید تیک بزنید)</label>
+          <div class="row wrap" style="gap:8px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+            ${teacherCls.map((c, idx) => `<label class="row" style="gap:5px;cursor:pointer;font-size:12px"><input type="checkbox" name="cls_pick" value="${c.id}" ${idx === 0 ? 'checked' : ''}> ${gradeName(c.grade)} ${esc(c.name)}</label>`).join('')}
+          </div>
+        </div>
+        <div class="stack" style="max-height:380px;overflow-y:auto;gap:10px">
+          ${visualQs.map((q, i) => `
+            <div class="card flat row wrap" style="gap:12px;padding:10px;border:1px solid #e2e8f0;align-items:center">
+              <img src="${esc(q.image)}" alt="صفحه ${q.pageNum}" style="width:90px;height:110px;object-fit:contain;border-radius:6px;border:1px solid #cbd5e1;background:#fff">
+              <div class="grow stack" style="gap:6px">
+                <b class="small">برگه شماره ${fa(q.pageNum)}</b>
+                <input class="input sm" data-vis-txt="${i}" value="${esc(q.text)}" placeholder="متن راهنمای سؤال">
+                <div class="row wrap" style="gap:8px">
+                  <span class="tiny muted">پاسخ صحیح:</span>
+                  ${[0, 1, 2, 3].map((o) => `<label class="row" style="gap:4px;font-size:12px;cursor:pointer"><input type="radio" name="visans${i}" data-vis-ans="${i}" value="${o}" ${o === 0 ? 'checked' : ''}> گزینه ${fa(o + 1)}</label>`).join('')}
+                </div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </form>`,
+      onOpen: (m) => {
+        on(m, 'input', '[data-vis-txt]', (e, t) => { visualQs[t.dataset.visTxt].text = t.value; });
+        on(m, 'change', '[data-vis-ans]', (e, t) => { visualQs[t.dataset.visAns].answer = Number(t.value); });
+      },
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'انتشار آزمون تصویری برای کلاس‌ها',
+          onClick: async (m) => {
+            const f = $('#hxVisForm', m);
+            const classIds = [...m.querySelectorAll('input[name=cls_pick]:checked')].map((x) => Number(x.value));
+            if (!classIds.length) { toast('حداقل یک کلاس انتخاب کنید', 'err'); return false; }
+            const title = f.title.value.trim();
+            if (!title) { toast('عنوان آزمون را وارد کنید', 'err'); return false; }
+            const dlDate = readDate(m, 'hxVisDl');
+            const r = await post('/api/teacher/exams', {
+              title,
+              kind: 'online',
+              subject: 'هوش و استعداد',
+              class_ids: classIds,
+              duration_min: Number(f.duration_min.value) || 30,
+              deadline: dlDate ? tehranIso(dlDate, f.dl_time?.value || '23:59') : null,
+              questions: visualQs,
+            });
+            toast(`آزمون تصویری با موفقیت برای ${fa(classIds.length)} کلاس منتشر شد`, 'ok');
+            location.hash = `#/exams/${r.id}`;
+            return true;
+          }
+        }
+      ]
+    });
   }
 
   function openPrintModal(mode) {

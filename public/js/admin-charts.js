@@ -20,6 +20,27 @@ const nice = (max) => { // سقف زیبای محور
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
 };
 const el = (tag, attrs = {}, parent) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); parent?.append(n); return n; };
+let gradSeq = 0;
+function makeGrad(svg, color, topOp = 1, botOp = 0.72) {
+  const id = `chg_${++gradSeq}`;
+  let defs = svg.querySelector('defs');
+  if (!defs) defs = el('defs', {}, svg);
+  const g = el('linearGradient', { id, x1: '0', y1: '0', x2: '0', y2: '1' }, defs);
+  el('stop', { offset: '0%', 'stop-color': color, 'stop-opacity': String(topOp) }, g);
+  el('stop', { offset: '100%', 'stop-color': color, 'stop-opacity': String(botOp) }, g);
+  return `url(#${id})`;
+}
+function smoothPath(pts) {
+  if (pts.length < 2) return pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
+  let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6, cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6, cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${cp1x.toFixed(1)} ${cp1y.toFixed(1)},${cp2x.toFixed(1)} ${cp2y.toFixed(1)},${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
 
 // تولتیپ مشترک
 let tip;
@@ -97,27 +118,31 @@ export function comboChart(host, { labels, bars = [], line = null, fmt = compact
     const ax = axes(svg, w, h, { labels, max, min, fmt });
     const zero = ax.y(0);
     const groupW = Math.min(46, ax.step * 0.72), bw = groupW / bars.length;
+    const barFills = bars.map((b) => makeGrad(svg, b.color, 1, 0.78));
+    const guide = el('line', { x1: 0, x2: 0, y1: ax.padT, y2: ax.padT + ax.ih, class: 'ch-guide', style: 'opacity:0' }, svg);
     const hit = [];
     labels.forEach((_, i) => {
       bars.forEach((b, j) => {
         const v = b.values[i] || 0, bh = Math.max(v ? 2 : 0, ((ax.ih * v) / (max - min)));
-        const r = el('rect', { x: ax.x(i) - groupW / 2 + j * bw + 1, y: zero - bh, width: Math.max(2, bw - 2), height: bh, rx: Math.min(4, bw / 3), class: 'ch-bar', style: `fill:${b.color};animation-delay:${i * 40 + j * 20}ms` }, svg);
+        const r = el('rect', { x: ax.x(i) - groupW / 2 + j * bw + 1, y: zero - bh, width: Math.max(2, bw - 2), height: bh, rx: Math.min(5, bw / 3), class: 'ch-bar', style: `fill:${barFills[j]};animation-delay:${i * 40 + j * 20}ms` }, svg);
         r.style.transformOrigin = `0 ${zero}px`;
       });
       hit.push(el('rect', { x: ax.x(i) - ax.step / 2, y: ax.padT, width: ax.step, height: ax.ih, class: 'ch-hit' }, svg));
     });
     if (line) {
       const pts = line.values.map((v, i) => [ax.x(i), ax.y(v)]);
-      const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
+      const d = smoothPath(pts);
       const p = el('path', { d, class: 'ch-line', style: `stroke:${line.color}` }, svg);
       const len = p.getTotalLength?.() || 600; p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
-      pts.forEach((q) => el('circle', { cx: q[0], cy: q[1], r: 3.2, class: 'ch-dot', style: `stroke:${line.color}` }, svg));
+      pts.forEach((q) => el('circle', { cx: q[0], cy: q[1], r: 3.6, class: 'ch-dot', style: `stroke:${line.color}` }, svg));
     }
     const move = (e, i) => {
+      const gx = ax.x(i);
+      guide.setAttribute('x1', gx); guide.setAttribute('x2', gx); guide.style.opacity = '1';
       const rows = [...bars.map((b) => `<div><i style="background:${b.color}"></i>${esc(b.name)}<b>${tipFmt(b.values[i] || 0)}</b></div>`), ...(line ? [`<div><i style="background:${line.color}"></i>${esc(line.name)}<b>${tipFmt(line.values[i] || 0)}</b></div>`] : [])].join('');
       showTip(`<strong>${esc(labels[i])}</strong>${rows}`, e.clientX, e.clientY);
     };
-    hit.forEach((r, i) => { r.addEventListener('pointermove', (e) => move(e, i)); r.addEventListener('pointerdown', (e) => move(e, i)); r.addEventListener('pointerleave', leave); });
+    hit.forEach((r, i) => { r.addEventListener('pointermove', (e) => move(e, i)); r.addEventListener('pointerdown', (e) => move(e, i)); r.addEventListener('pointerleave', (e) => { guide.style.opacity = '0'; leave(e); }); });
   }, { empty: !all.some(Boolean), height, label, emptyText });
   if (all.some(Boolean)) { legend(host, [...bars.map((b) => ({ name: b.name, color: b.color })), ...(line ? [{ name: line.name, color: line.color }] : [])]); srTable(host, label || 'نمودار', ['دوره', ...bars.map((b) => b.name), ...(line ? [line.name] : [])], labels.map((l, i) => [l, ...bars.map((b) => tipFmt(b.values[i] || 0)), ...(line ? [tipFmt(line.values[i] || 0)] : [])])); }
 }
@@ -154,26 +179,34 @@ export function lineChart(host, { labels, series, fmt = (v) => fa(Math.round(v *
     const top = max ?? nice(Math.max(...all, 1));
     const ax = axes(svg, w, h, { labels, max: top, min, fmt: (v) => fa(Math.round(v)), ticks });
     const hit = [];
+    const guide = el('line', { x1: 0, x2: 0, y1: ax.padT, y2: ax.padT + ax.ih, class: 'ch-guide', style: 'opacity:0' }, svg);
     series.forEach((s) => {
       const pts = s.values.map((v, i) => (v == null ? null : [ax.x(i), ax.y(v)]));
       const seg = pts.filter(Boolean); if (!seg.length) return;
-      const d = seg.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
-      if (area && seg.length > 1) el('path', { d: `${d}L${seg[seg.length - 1][0]} ${ax.padT + ax.ih}L${seg[0][0]} ${ax.padT + ax.ih}Z`, class: 'ch-area', style: `fill:${s.color}` }, svg);
+      const d = smoothPath(seg);
+      if (area && seg.length > 1) {
+        const areaGrad = makeGrad(svg, s.color, 0.24, 0.02);
+        el('path', { d: `${d}L${seg[seg.length - 1][0].toFixed(1)} ${ax.padT + ax.ih}L${seg[0][0].toFixed(1)} ${ax.padT + ax.ih}Z`, class: 'ch-area', style: `fill:${areaGrad};opacity:1` }, svg);
+      }
       const p = el('path', { d, class: 'ch-line', style: `stroke:${s.color}` }, svg);
       const len = p.getTotalLength?.() || 600; p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
-      seg.forEach((q) => el('circle', { cx: q[0], cy: q[1], r: 3.2, class: 'ch-dot', style: `stroke:${s.color}` }, svg));
+      seg.forEach((q) => el('circle', { cx: q[0], cy: q[1], r: 3.5, class: 'ch-dot', style: `stroke:${s.color}` }, svg));
     });
     labels.forEach((_, i) => hit.push(el('rect', { x: ax.x(i) - ax.step / 2, y: ax.padT, width: ax.step, height: ax.ih, class: 'ch-hit' }, svg)));
     hit.forEach((r, i) => {
-      const f = (e) => showTip(`<strong>${esc(labels[i])}</strong>${series.map((s) => `<div><i style="background:${s.color}"></i>${esc(s.name)}<b>${s.values[i] == null ? '—' : fmt(s.values[i])}</b></div>`).join('')}`, e.clientX, e.clientY);
-      r.addEventListener('pointermove', f); r.addEventListener('pointerdown', f); r.addEventListener('pointerleave', leave);
+      const f = (e) => {
+        const gx = ax.x(i);
+        guide.setAttribute('x1', gx); guide.setAttribute('x2', gx); guide.style.opacity = '1';
+        showTip(`<strong>${esc(labels[i])}</strong>${series.map((s) => `<div><i style="background:${s.color}"></i>${esc(s.name)}<b>${s.values[i] == null ? '—' : fmt(s.values[i])}</b></div>`).join('')}`, e.clientX, e.clientY);
+      };
+      r.addEventListener('pointermove', f); r.addEventListener('pointerdown', f); r.addEventListener('pointerleave', (e) => { guide.style.opacity = '0'; leave(e); });
     });
   }, { empty: !all.length, height, label, emptyText });
   if (all.length) { if (series.length > 1) legend(host, series.map((s) => ({ name: s.name, color: s.color }))); srTable(host, label || 'نمودار', ['دوره', ...series.map((x) => x.name)], labels.map((l, i) => [l, ...series.map((x) => (x.values[i] == null ? '—' : fmt(x.values[i])))])); }
 }
 
 // حلقه (نسبت): وصول، حضور
-export function donut(host, { segments, center, size = 168, label = '', emptyText }) {
+export function donut(host, { segments, center, size = 168, label = '', emptyText, valueFmt = fa, tipFmt = valueFmt }) {
   const total = segments.reduce((s, x) => s + x.value, 0);
   host.classList.add('ch', 'ch-donut'); host.replaceChildren();
   if (!total) { host.innerHTML = `<div class="ch-empty">${emptyText || 'داده‌ای برای نمایش نیست'}</div>`; return; }
@@ -185,15 +218,15 @@ export function donut(host, { segments, center, size = 168, label = '', emptyTex
     const len = (s.value / total) * C;
     const c = el('circle', { cx: 50, cy: 50, r: R, class: 'ch-ring', style: `stroke:${s.color};stroke-dasharray:${Math.max(0, len - 1.5)} ${C};stroke-dashoffset:${-off};` }, svg);
     c.setAttribute('transform', 'rotate(-90 50 50)');
-    const f = (e) => showTip(`<strong>${esc(s.name)}</strong><div>${fa(s.value)} (${fa(Math.round((s.value / total) * 100))}٪)</div>`, e.clientX, e.clientY);
+    const f = (e) => showTip(`<strong>${esc(s.name)}</strong><div>${tipFmt(s.value)} (${fa(Math.round((s.value / total) * 100))}٪)</div>`, e.clientX, e.clientY);
     c.addEventListener('pointermove', f); c.addEventListener('pointerdown', f); c.addEventListener('pointerleave', leave);
     off += len;
   });
   const wrap = document.createElement('div'); wrap.className = 'ch-ring-wrap'; wrap.append(svg);
   if (center) wrap.insertAdjacentHTML('beforeend', `<div class="ch-center"><b>${center.value}</b><small>${esc(center.label)}</small></div>`);
   host.append(wrap);
-  legend(host, segments.map((s) => ({ name: `${s.name} (${fa(s.value)})`, color: s.color })));
-  srTable(host, label || 'نمودار', ['وضعیت', 'تعداد'], segments.map((x) => [x.name, fa(x.value)]));
+  legend(host, segments.map((s) => ({ name: `${s.name} (${valueFmt(s.value)})`, color: s.color })));
+  srTable(host, label || 'نمودار', ['وضعیت', 'مقدار'], segments.map((x) => [x.name, tipFmt(x.value)]));
 }
 
 // نوار افقی ساده برای مقایسه (کلاس‌ها، پایه‌ها)

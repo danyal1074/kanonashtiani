@@ -148,6 +148,7 @@ async function takeExam(el, { id }) {
   const draw = () => {
     const q = ex.questions[cur];
     $('#qcard', el).innerHTML = `<div class="row between"><span class="badge">سؤال ${fa(cur + 1)} از ${fa(ex.questions.length)}</span>${q.subject ? `<span class="badge gray">${subjIcon(q.subject)} ${esc(q.subject)}</span>` : ''}</div>
+      ${q.image ? `<div style="margin-top:12px;text-align:center"><img src="${esc(q.image)}" alt="تصویر سؤال" style="max-width:100%;max-height:420px;border-radius:10px;border:1px solid var(--line)"></div>` : ''}
       <div style="margin-top:14px;line-height:2">${esc(q.text)}</div><div class="options">${q.options.map((o, i) => `<button class="option ${answers[cur] === i ? 'sel' : ''}" data-opt="${i}"><span class="k">${fa(i + 1)}</span><span>${esc(o)}</span></button>`).join('')}</div>`;
     $('#dots', el).innerHTML = ex.questions.map((_, i) => `<button class="${i === cur ? 'cur' : answers[i] != null ? 'ans' : ''}" data-go="${i}">${fa(i + 1)}</button>`).join('');
     $('#prev', el).disabled = cur === 0;

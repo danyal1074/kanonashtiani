@@ -4,7 +4,7 @@ import path from 'node:path';
 import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
 import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
 import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
-import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
+import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel, jalaliMonthContext } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
 import { syncStudentsLater, removeStudentsLater, classroomEnabled, pendingRemovals, fullSync, ClassroomError } from '../classroom.js';
@@ -51,9 +51,24 @@ function studentPayload(ctx, b, existingId = null) {
     address: clampStr(b.address, 300), gender: b.gender === 'f' ? 'f' : 'm' };
 }
 
+function currentPeriodSql(alias = 'p') {
+  const { curName, curStart } = jalaliMonthContext();
+  return `((${alias}.period IS NOT NULL AND (${alias}.period LIKE '%${curName}%' OR ${alias}.period LIKE '%کل سال%')) OR (${alias}.period IS NULL AND date(${alias}.created_at) >= '${curStart}'))`;
+}
+
 function paymentStateSql() {
-  return `CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL) THEN 'paid'
-    WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='pending' AND p.invoice_id IS NULL) THEN 'pending' ELSE 'unpaid' END`;
+  const matchCur = currentPeriodSql('p');
+  return `CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL AND ${matchCur}) THEN 'paid'
+    WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='pending' AND p.invoice_id IS NULL AND ${matchCur}) THEN 'pending' ELSE 'unpaid' END`;
+}
+
+function prevUnpaidSql() {
+  const { prevName, prevStart, curStart } = jalaliMonthContext();
+  const matchPrev = `((p.period IS NOT NULL AND (p.period LIKE '%${prevName}%' OR p.period LIKE '%کل سال%')) OR (p.period IS NULL AND date(p.created_at) >= '${prevStart}' AND date(p.created_at) < '${curStart}'))`;
+  return `CASE WHEN date(u.created_at) < '${curStart}'
+    AND COALESCE((SELECT amount FROM fee_settings fs WHERE fs.center_id=u.center_id AND fs.grade=s.grade), 0) > 0
+    AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL AND ${matchPrev})
+    THEN 1 ELSE 0 END`;
 }
 
 export default function register(r) {
@@ -78,7 +93,7 @@ export default function register(r) {
     const sysFee = sys?.system_fee_enabled ? sys.system_fee || 0 : 0;
     const feeBy = Object.fromEntries(all('SELECT grade, amount FROM fee_settings WHERE center_id=?', cid).map((f) => [f.grade, f.amount]));
     const studs = all(`SELECT u.id, s.grade, s.class_id, u.created_at, ${paymentStateSql()} st,
-        COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL), 0) paid
+        COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL AND ${currentPeriodSql('p')}), 0) paid
       FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1`, cid);
     const studsAll = studs, studsG = grade ? studs.filter((x) => x.grade === grade) : studs;
     const summarize = (list) => {
@@ -278,12 +293,14 @@ export default function register(r) {
     if (q.school) { where.push('s.school=?'); p.push(q.school); }
     if (q.gender === 'm' || q.gender === 'f') { where.push('u.gender=?'); p.push(q.gender); }
     if (['paid', 'pending', 'unpaid'].includes(q.pay)) { where.push(`${paymentStateSql()}=?`); p.push(q.pay); }
+    else if (q.pay === 'prev_unpaid') { where.push(`${prevUnpaidSql()}=1`); }
     const w = where.join(' AND ');
     const total = get(`SELECT COUNT(*) n FROM users u JOIN students s ON s.user_id=u.id WHERE ${w}`, ...p).n;
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 30)), offset = Math.max(0, Number(q.offset) || 0);
+    const { curLabel, prevLabel } = jalaliMonthContext();
     const rows = all(`SELECT u.id, u.full_name, u.national_code, u.gender, s.school, s.grade, s.class_id, c.name class_name, s.birth_date, s.parent_phone, s.phone2, s.father_name, s.mother_name, s.address, s.avatar,
-      ${paymentStateSql()} pay FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE ${w} ORDER BY s.grade, c.name, u.full_name LIMIT ? OFFSET ?`, ...p, limit, offset);
-    return { total, rows };
+      ${paymentStateSql()} pay, ${prevUnpaidSql()} prev_unpaid FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE ${w} ORDER BY s.grade, c.name, u.full_name LIMIT ? OFFSET ?`, ...p, limit, offset);
+    return { total, rows, current_period: curLabel, prev_period: prevLabel };
   });
   
   r.get('/api/manager/students/credentials', M, (ctx) => {
@@ -366,6 +383,7 @@ export default function register(r) {
     if (q.school) { where.push('s.school=?'); p.push(String(q.school)); }
     if (q.gender === 'm' || q.gender === 'f') { where.push('u.gender=?'); p.push(q.gender); }
     if (['paid', 'pending', 'unpaid'].includes(q.pay)) { where.push(`${paymentStateSql()}=?`); p.push(q.pay); }
+    else if (q.pay === 'prev_unpaid') { where.push(`${prevUnpaidSql()}=1`); }
     return all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE ${where.join(' AND ')}`, ...p).map((x) => x.id);
   };
   r.post('/api/manager/students/fee-paid', M, (ctx) => {
@@ -505,6 +523,16 @@ export default function register(r) {
     t.assign = all('SELECT class_id, subject FROM teacher_classes WHERE teacher_id=?', t.id);
     return t;
   });
+  r.del('/api/manager/teachers/:id', M, (ctx) => {
+    const t = get(`SELECT id FROM users WHERE id=? AND center_id=? AND role='teacher'`, Number(ctx.params.id), ctx.user.center_id);
+    if (!t) fail(404, 'معلم یافت نشد');
+    tx(() => {
+      run('UPDATE schedule SET teacher_id=NULL WHERE teacher_id=?', t.id);
+      run('DELETE FROM teacher_classes WHERE teacher_id=?', t.id);
+      run('DELETE FROM users WHERE id=?', t.id);
+    });
+    return { ok: true };
+  });
   r.get('/api/manager/schedule/colors', M, (ctx) => JSON.parse(get('SELECT config FROM schedule_colors WHERE center_id=?', ctx.user.center_id)?.config || '{}'));
   r.put('/api/manager/schedule/colors', M, (ctx) => {
     const config = { kinds: Object.create(null), subjects: Object.create(null) };
@@ -540,6 +568,33 @@ export default function register(r) {
     FROM schedule sc JOIN classes c ON c.id=sc.class_id LEFT JOIN users u ON u.id=sc.teacher_id WHERE c.center_id=? ORDER BY sc.weekday, sc.start, sc.room, c.grade, c.name`, ctx.user.center_id));
   r.del('/api/manager/schedule/:id', M, (ctx) => {
     run('DELETE FROM schedule WHERE id=? AND class_id IN (SELECT id FROM classes WHERE center_id=?)', Number(ctx.params.id), ctx.user.center_id);
+    return { ok: true };
+  });
+  r.put('/api/manager/schedule/:id', M, (ctx) => {
+    const sid = Number(ctx.params.id);
+    const item = get(`SELECT sc.* FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.id=? AND c.center_id=?`, sid, ctx.user.center_id);
+    if (!item) fail(404, 'جلسه پیدا نشد');
+    const b = ctx.body;
+    const wd = b.weekday !== undefined ? Number(b.weekday) : item.weekday;
+    const start = b.start !== undefined ? String(b.start).trim() : item.start;
+    const end = b.end !== undefined ? String(b.end).trim() : item.end;
+    if (!(wd >= 0 && wd <= 6) || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || end <= start) {
+      fail(400, 'روز و ساعت شروع/پایان را درست وارد کنید');
+    }
+    const subject = b.subject !== undefined ? clampStr(b.subject, 40) : item.subject;
+    if (!subject) fail(400, 'نام درس الزامی است');
+    const room = b.room !== undefined ? clampStr(b.room, 30) : item.room;
+    const kind = b.kind !== undefined && SESSION_KINDS.includes(b.kind) ? b.kind : item.kind;
+    const classId = b.class_id !== undefined ? ownClass(ctx, b.class_id).id : item.class_id;
+    let tid = item.teacher_id;
+    if (b.teacher_id !== undefined) {
+      tid = b.teacher_id ? (get(`SELECT id FROM users WHERE id=? AND center_id=? AND role='teacher'`, Number(b.teacher_id), ctx.user.center_id)?.id || null) : null;
+    }
+
+    const clash = get('SELECT 1 FROM schedule WHERE class_id=? AND weekday=? AND start<? AND end>? AND id!=?', classId, wd, end, start, sid);
+    if (clash) fail(400, 'در این روز و ساعت برای این کلاس جلسهٔ دیگری ثبت شده است');
+
+    run('UPDATE schedule SET class_id=?, weekday=?, start=?, end=?, subject=?, room=?, kind=?, teacher_id=? WHERE id=?', classId, wd, start, end, subject, room, kind, tid, sid);
     return { ok: true };
   });
   r.post('/api/manager/schedule/parse-image', M, async (ctx) => {
@@ -819,6 +874,12 @@ export default function register(r) {
       Math.max(0, Math.min(90, Number(b.discount_percent) || 0)), clampStr(b.cover, 8) || '📘', /^#[0-9a-f]{6}$/i.test(b.color) ? b.color : '#7c3aed', b.active === false ? 0 : 1];
     if (b.id) run('UPDATE products SET title=?, kind=?, grade=?, description=?, details=?, price=?, discount_percent=?, cover=?, color=?, active=? WHERE id=? AND center_id=?', ...vals, Number(b.id), ctx.user.center_id);
     else run('INSERT INTO products (title, kind, grade, description, details, price, discount_percent, cover, color, active, center_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)', ...vals, ctx.user.center_id);
+    return { ok: true };
+  });
+  r.del('/api/manager/products/:id', M, (ctx) => {
+    const p = get('SELECT id FROM products WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id);
+    if (!p) fail(404, 'محصول یافت نشد');
+    run('DELETE FROM products WHERE id=?', p.id);
     return { ok: true };
   });
   r.post('/api/manager/discount-codes', M, (ctx) => {

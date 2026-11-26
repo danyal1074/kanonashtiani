@@ -1,5 +1,5 @@
 // Shared recurring weekly timetable. Manager overview retains every simultaneous session.
-import { api, post, put, esc, fa, $, on, setHead, empty, gradeName, WEEKDAYS, printOverlay, jdate, addDays, faWeekday, ymdOf, state, icon, toast, modal, formData, fileToData, busy } from './core.js';
+import { api, post, put, del, esc, fa, $, on, setHead, empty, gradeName, WEEKDAYS, printOverlay, jdate, addDays, faWeekday, ymdOf, state, icon, toast, modal, formData, fileToData, busy } from './core.js';
 export const KINDS = {
  academic:{label:'درسی',cls:'k-academic',color:'#eee7fa'},tarbiati:{label:'تربیتی',cls:'k-tarbiati',color:'#ffe58f'},
  chess:{label:'شطرنج',cls:'k-chess',color:'#d7edff'},robotics:{label:'رباتیک',cls:'k-robotics',color:'#e0d9fc'},
@@ -15,7 +15,7 @@ const time=s=>`<bdi dir="ltr">${fa(s.start)} – ${fa(s.end)}</bdi>`;
 const overlap=(a,b)=>a.weekday===b.weekday&&a.start<b.end&&b.start<a.end&&a.id!==b.id;
 function card(s,p,rows,manager){
  const simultaneous=manager&&rows.some(x=>overlap(s,x));
- return `<article class="tt-event" data-session-id="${s.id}" ${paint(colorOf(s,p))}><div class="tt-event-title"><b>${label(s)}</b>${simultaneous?'<small class="tt-overlap">هم‌زمان</small>':''}</div><span class="tt-subject">${esc(s.subject)}</span><span class="tt-location">${icon('building',{size:16})}${esc(s.room||'مکان تعیین نشده')}</span><span class="tt-event-time">${time(s)}</span>${manager?`<small class="tt-teacher-name">${esc(s.teacher||'معلم تعیین نشده')}</small>`:''}</article>`;
+ return `<article class="tt-event ${manager?'tt-editable':''}" data-session-id="${s.id}" ${manager?'draggable="true" tabindex="0" role="button" aria-label="ویرایش یا جابجایی جلسه"':''} ${paint(colorOf(s,p))}><div class="tt-event-title"><b>${label(s)}</b>${simultaneous?'<small class="tt-overlap">هم‌زمان</small>':''}${manager?`<span class="tt-event-actions"><button type="button" class="tt-act-btn tt-edit-btn" data-edit-session="${s.id}" title="ویرایش ساعت و مکان">${icon('edit',{size:12})}</button></span>`:''}</div><span class="tt-subject">${esc(s.subject)}</span><span class="tt-location" title="مکان جلسه">${icon('building',{size:16})}${esc(s.room||'مکان تعیین نشده')}</span><span class="tt-event-time">${time(s)}</span>${manager?`<small class="tt-teacher-name">${esc(s.teacher||'معلم تعیین نشده')}</small>`:''}</article>`;
 }
 export async function teacherTimetable(el){
  setHead('برنامه هفتگی کلاس‌های من','فقط کلاس‌های اختصاص‌یافته به شما','');
@@ -61,7 +61,7 @@ function renderTimetable(el,rows,initialColors,manager,meta=null,reload=null){
  const selected=list.filter(s=>s.weekday===weekday).sort((a,b)=>a.start.localeCompare(b.start)||String(a.room).localeCompare(String(b.room),'fa'));
  const slots=[...new Set(list.map(s=>s.start+'|'+s.end))].sort();
  const event=s=>card(s,palette,list,manager);
- const grid=`<div class="tt-grid-wrap" tabindex="0" role="region" aria-label="جدول برنامه هفته؛ برای دیدن تمام روزها افقی پیمایش کنید"><table class="tt-grid"><thead><tr><th scope="col">ساعت</th>${WEEKDAYS.map((w,i)=>`<th scope="col" class="${i===weekday?'tt-selected':''}"><button type="button" data-select-day="${i}">${w}<small>${jdate(addDays(start,i),{year:false})}</small></button></th>`).join('')}</tr></thead><tbody>${slots.map(slot=>{const[a,b]=slot.split('|');return `<tr><th scope="row"><bdi dir="ltr">${fa(a)}<br>–<br>${fa(b)}</bdi></th>${WEEKDAYS.map((_,i)=>`<td>${list.filter(s=>s.weekday===i&&s.start===a&&s.end===b).map(event).join('')||'<span class="tt-free">—</span>'}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div>`;
+ const grid=`<div class="tt-grid-wrap" tabindex="0" role="region" aria-label="جدول برنامه هفته؛ برای دیدن تمام روزها افقی پیمایش کنید"><table class="tt-grid"><thead><tr><th scope="col">ساعت</th>${WEEKDAYS.map((w,i)=>`<th scope="col" class="${i===weekday?'tt-selected':''}" data-weekday="${i}"><button type="button" data-select-day="${i}">${w}<small>${jdate(addDays(start,i),{year:false})}</small></button></th>`).join('')}</tr></thead><tbody>${slots.map(slot=>{const[a,b]=slot.split('|');return `<tr><th scope="row"><bdi dir="ltr">${fa(a)}<br>–<br>${fa(b)}</bdi></th>${WEEKDAYS.map((_,i)=>`<td class="tt-slot-cell" data-weekday="${i}" data-start="${a}" data-end="${b}">${list.filter(s=>s.weekday===i&&s.start===a&&s.end===b).map(event).join('')||'<span class="tt-free">—</span>'}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div>`;
  const daily=`<div class="tt-agenda">${selected.map(s=>`<div class="tt-agenda-row"><div class="tt-agenda-time">${time(s)}</div>${event(s)}</div>`).join('')||empty('calendar','برای این روز جلسه‌ای ثبت نشده است')}</div>`;
  const listing=`<div class="tt-list">${WEEKDAYS.map((w,i)=>{const ds=list.filter(s=>s.weekday===i);return ds.length?`<section><h3>${w}</h3><div class="tt-agenda">${ds.map(s=>`<div class="tt-agenda-row"><div class="tt-agenda-time">${time(s)}</div>${event(s)}</div>`).join('')}</div></section>`:'';}).join('')}</div>`;
  el.innerHTML=`<section class="tt tt-reference ${manager?'tt-manager':'tt-teacher'}"><header class="tt-banner"><span class="tt-banner-icon">${icon('calendar',{size:64})}</span><div><h2>برنامه هفتگی کلاس‌ها</h2><p>${manager?'نمای کلی کانون و کلاس‌های هم‌زمان':'برنامه اختصاصی کلاس‌های شما'}</p></div></header><div class="tt-toolbar"><div class="tt-view-tabs" role="group" aria-label="نوع نمایش">${[['week','نمایش هفته'],['day','نمایش روز'],['list','لیست کلاس‌ها']].map(([v,t])=>`<button type="button" data-mode="${v}" aria-pressed="${mode===v}" class="${mode===v?'active':''}">${t}</button>`).join('')}</div><button class="btn ghost sm" id="ttPrint">چاپ برنامه</button></div><div class="tt-datebar"><button type="button" data-step="-1" aria-label="${mode==='day'?'روز':'هفته'} قبل">${icon('chevron-right')}</button><strong>${mode==='day'?WEEKDAYS[weekday]+' '+jdate(date):'هفتهٔ '+jdate(start)+' تا '+jdate(addDays(start,6))}</strong><button type="button" data-step="1" aria-label="${mode==='day'?'روز':'هفته'} بعد">${icon('chevron-left')}</button><button type="button" id="ttToday">امروز</button></div><p class="tt-repeat-note">برنامهٔ تکرارشوندهٔ هفتگی · تاریخ‌ها برای مرور هفته نمایش داده می‌شوند.</p><div class="tt-filters"><label>مکان<select id="ttRoom" class="input"><option value="">همهٔ مکان‌ها</option>${rooms.map(r=>`<option ${r===room?'selected':''}>${esc(r)}</option>`).join('')}</select></label><label>نوع درس<select id="ttKind" class="input"><option value="">همهٔ انواع</option>${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${kind===k?'selected':''}>${v.label}</option>`).join('')}</select></label></div><div id="ttContent">${!list.length?empty('calendar','جلسه‌ای مطابق این فیلتر ثبت نشده است'):mode==='week'?grid:mode==='day'?daily:listing}</div>${mode==='day'?`<div class="tt-daily-summary"><span><b>${fa(selected.length)}</b> کلاس</span><span><b>${fa(new Set(selected.map(s=>s.room).filter(Boolean)).size)}</b> مکان</span><span><b>${fa(selected.reduce((n,s)=>{const m=t=>Number(t.slice(0,2))*60+Number(t.slice(3));return n+m(s.end)-m(s.start)},0))}</b> دقیقه‌جلسه</span></div>`:''}<footer class="tt-legend"><b>راهنمای رنگ‌ها:</b>${Object.entries(KINDS).map(([k,v])=>`<span class="tt-chip" ${paint(valid(palette.kinds?.[k])?palette.kinds[k]:v.color)}>${v.label}</span>`).join('')}${Object.entries(palette.subjects||{}).filter(([,c])=>valid(c)).map(([s,c])=>`<span class="tt-chip" ${paint(c)}>${esc(s)}</span>`).join('')}</footer>${manager?colorEditor():''}</section>`;
@@ -78,6 +78,161 @@ function renderTimetable(el,rows,initialColors,manager,meta=null,reload=null){
  $('#ttDefaults',el).onclick=e=>save({kinds:{},subjects:{}},e.currentTarget);
  const allSubjects=[...new Set([...(meta?.subjects||[]),...subjects,'ریاضی','علوم','فارسی','هوش و استعداد','زبان انگلیسی','عربی','فیزیک','شیمی','زیست'])].sort((a,b)=>a.localeCompare(b,'fa'));
  const allRooms=[...new Set([...rooms,...(meta?.classes||[]).map(c=>`${gradeName(c.grade)} ${c.name}`)])].sort((a,b)=>a.localeCompare(b,'fa'));
+ const openEditModal=(s)=>{
+  modal({
+   title:'ویرایش ساعت، مکان و مشخصات جلسه',
+   body:`<form id="ttEdForm" class="stack">
+    <div class="form-grid">
+     <div class="field"><label>کلاس</label><select class="input" name="class_id">${(meta?.classes||[]).map(c=>`<option value="${c.id}" ${c.id===s.class_id?'selected':''}>${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
+     <div class="field"><label>روز هفته</label><select class="input" name="weekday">${WEEKDAYS.map((w,i)=>`<option value="${i}" ${i===s.weekday?'selected':''}>${w}</option>`).join('')}</select></div>
+     <div class="field"><label>ساعت شروع</label><input class="input ltr" type="time" name="start" value="${esc(s.start)}" required></div>
+     <div class="field"><label>ساعت پایان</label><input class="input ltr" type="time" name="end" value="${esc(s.end)}" required></div>
+     <div class="field"><label>درس</label><select class="input" name="subject_sel" id="ttEdSubj">${allSubjects.map(sub=>`<option value="${esc(sub)}" ${sub===s.subject?'selected':''}>${esc(sub)}</option>`).join('')}${!allSubjects.includes(s.subject)&&s.subject?`<option value="${esc(s.subject)}" selected>${esc(s.subject)}</option>`:''}<option value="__new__">➕ درس جدید...</option></select><input class="input" name="subject_new" id="ttEdSubjNew" placeholder="نام درس جدید" style="display:none;margin-top:6px" maxlength="40"></div>
+     <div class="field"><label>مکان کلاس</label><select class="input" name="room_sel" id="ttEdRoom"><option value="" ${!s.room?'selected':''}>بدون مکان</option>${allRooms.map(r=>`<option value="${esc(r)}" ${r===s.room?'selected':''}>${esc(r)}</option>`).join('')}${!allRooms.includes(s.room)&&s.room?`<option value="${esc(s.room)}" selected>${esc(s.room)}</option>`:''}<option value="__new__">➕ مکان جدید...</option></select><input class="input" name="room_new" id="ttEdRoomNew" placeholder="نام مکان جدید" style="display:none;margin-top:6px" maxlength="30"></div>
+     <div class="field"><label>نوع جلسه</label><select class="input" name="kind">${Object.entries(KINDS).map(([k,v])=>`<option value="${k}" ${(s.kind||'academic')===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
+     <div class="field"><label>دبیر</label><select class="input" name="teacher_id"><option value="">—</option>${(meta?.teachers||[]).map(t=>`<option value="${t.id}" ${s.teacher_id===t.id?'selected':''}>${esc(t.full_name)}</option>`).join('')}</select></div>
+    </div>
+   </form>`,
+   actions:[
+    {
+     label:'حذف جلسه',
+     cls:'danger soft',
+     onClick:async()=>{
+      if(!confirm('آیا از حذف این جلسه از برنامه هفتگی اطمینان دارید؟'))return false;
+      try{
+       await del(`/api/manager/schedule/${s.id}`);
+       toast('جلسه حذف شد','ok');
+       if(reload)reload();
+       return true;
+      }catch(err){
+       toast(err.message||'خطا در حذف جلسه','err');
+       return false;
+      }
+     }
+    },
+    {label:'انصراف',cls:'ghost',value:false},
+    {
+     label:'ذخیره تغییرات',
+     onClick:async(m)=>{
+      const f=$('#ttEdForm',m);
+      const subject=f.subject_sel.value==='__new__'?f.subject_new.value.trim():f.subject_sel.value;
+      const room=f.room_sel.value==='__new__'?f.room_new.value.trim():f.room_sel.value;
+      if(!subject){toast('نام درس را وارد کنید','err');return false;}
+      if(!f.start.value||!f.end.value||f.end.value<=f.start.value){
+       toast('ساعت شروع و پایان را به درستی وارد کنید','err');
+       return false;
+      }
+      try{
+       await put(`/api/manager/schedule/${s.id}`,{
+        class_id:Number(f.class_id.value),
+        weekday:Number(f.weekday.value),
+        start:f.start.value,
+        end:f.end.value,
+        subject,
+        room,
+        kind:f.kind.value,
+        teacher_id:f.teacher_id.value||null
+       });
+       toast('تغییرات جلسه ذخیره شد','ok');
+       if(reload)reload();
+       return true;
+      }catch(err){
+       toast(err.message||'خطا در ذخیره جلسه','err');
+       return false;
+      }
+     }
+    }
+   ],
+   onOpen:(m)=>{
+    const sync=(seId,ipId)=>{
+     const se=$(seId,m),ip=$(ipId,m);
+     const fn=()=>{const n=se.value==='__new__';ip.style.display=n?'':'none';ip.required=n;};
+     se.onchange=fn;fn();
+    };
+    sync('#ttEdSubj','#ttEdSubjNew');sync('#ttEdRoom','#ttEdRoomNew');
+   }
+  });
+ };
+ let isDragging=false;
+ el.querySelectorAll('.tt-event[draggable="true"]').forEach(cardEl=>{
+  cardEl.ondragstart=e=>{
+   isDragging=true;
+   e.dataTransfer.setData('text/plain',cardEl.dataset.sessionId);
+   e.dataTransfer.effectAllowed='move';
+   cardEl.classList.add('tt-dragging');
+  };
+  cardEl.ondragend=()=>{
+   cardEl.classList.remove('tt-dragging');
+   el.querySelectorAll('.tt-drag-over').forEach(c=>c.classList.remove('tt-drag-over'));
+   setTimeout(()=>{isDragging=false;},120);
+  };
+ });
+ el.querySelectorAll('.tt-slot-cell').forEach(cell=>{
+  cell.ondragover=e=>{
+   e.preventDefault();
+   e.dataTransfer.dropEffect='move';
+   cell.classList.add('tt-drag-over');
+  };
+  cell.ondragleave=e=>{
+   if(!cell.contains(e.relatedTarget)) cell.classList.remove('tt-drag-over');
+  };
+  cell.ondrop=async e=>{
+   e.preventDefault();
+   cell.classList.remove('tt-drag-over');
+   const sid=Number(e.dataTransfer.getData('text/plain'));
+   const s=rows.find(x=>x.id===sid);
+   if(!s)return;
+   const targetWeekday=Number(cell.dataset.weekday);
+   const targetStart=cell.dataset.start;
+   const targetEnd=cell.dataset.end;
+   if(s.weekday===targetWeekday&&s.start===targetStart&&s.end===targetEnd)return;
+   try{
+    await put(`/api/manager/schedule/${sid}`,{weekday:targetWeekday,start:targetStart,end:targetEnd});
+    toast(`جلسه به ${WEEKDAYS[targetWeekday]} (${fa(targetStart)} تا ${fa(targetEnd)}) منتقل شد`,'ok');
+    if(reload)reload();
+   }catch(err){
+    toast(err.message||'خطا در جابجایی جلسه','err');
+   }
+  };
+ });
+ el.querySelectorAll('th[data-weekday]').forEach(th=>{
+  th.ondragover=e=>{
+   e.preventDefault();
+   e.dataTransfer.dropEffect='move';
+   th.classList.add('tt-drag-over');
+  };
+  th.ondragleave=e=>{
+   if(!th.contains(e.relatedTarget)) th.classList.remove('tt-drag-over');
+  };
+  th.ondrop=async e=>{
+   e.preventDefault();
+   th.classList.remove('tt-drag-over');
+   const sid=Number(e.dataTransfer.getData('text/plain'));
+   const s=rows.find(x=>x.id===sid);
+   if(!s)return;
+   const targetWeekday=Number(th.dataset.weekday);
+   if(s.weekday===targetWeekday)return;
+   try{
+    await put(`/api/manager/schedule/${sid}`,{weekday:targetWeekday,start:s.start,end:s.end});
+    toast(`جلسه به ${WEEKDAYS[targetWeekday]} منتقل شد`,'ok');
+    if(reload)reload();
+   }catch(err){
+    toast(err.message||'خطا در جابجایی جلسه','err');
+   }
+  };
+ });
+ on(el,'click','.tt-act-btn[data-edit-session]',(e,btn)=>{
+  e.stopPropagation();
+  const sid=Number(btn.dataset.editSession);
+  const s=rows.find(x=>x.id===sid);
+  if(s)openEditModal(s);
+ });
+ on(el,'click','.tt-event.tt-editable',(e,cardEl)=>{
+  if(isDragging||e.target.closest('.tt-act-btn'))return;
+  const sid=Number(cardEl.dataset.sessionId);
+  const s=rows.find(x=>x.id===sid);
+  if(s)openEditModal(s);
+ });
  const ncBtn=document.getElementById('ttNewClass');
  if(ncBtn) ncBtn.onclick=()=>modal({
   title:'افزودن کلاس جدید',
