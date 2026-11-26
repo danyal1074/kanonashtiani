@@ -1280,7 +1280,8 @@ export async function hooshStudio(el) {
         <div class="form-grid">
           <div class="field"><label>عنوان آزمون</label><input class="input" name="title" value="${esc(examConfig.title)} (متنی)" required></div>
           <div class="field"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="${examConfig.duration || 30}" min="1" max="180"></div>
-          <div class="field"><label>مهلت شرکت (اختیاری)</label><input class="input ltr" type="datetime-local" name="deadline"></div>
+          <div class="field"><label>تاریخ مهلت (شمسی، اختیاری)</label>${dateField('hxTextDl', null, { minYear: 1404, maxYear: 1406 })}</div>
+          <div class="field"><label>ساعت مهلت</label><input class="input ltr" type="time" name="dl_time" value="23:59"></div>
         </div>
         <div class="field">
           <label>انتخاب کلاس‌های هدف (هر کلاسی که می‌خواهید تیک بزنید)</label>
@@ -1316,13 +1317,14 @@ export async function hooshStudio(el) {
             if (!extracted.length) { toast('سؤالی باقی نمانده است', 'err'); return false; }
             const title = f.title.value.trim();
             if (!title) { toast('عنوان آزمون را وارد کنید', 'err'); return false; }
+            const dlDate = readDate(m, 'hxTextDl');
             const r = await post('/api/teacher/exams', {
               title,
               kind: 'online',
               subject: 'هوش و استعداد',
               class_ids: classIds,
               duration_min: Number(f.duration_min.value) || 30,
-              deadline: f.deadline.value || null,
+              deadline: dlDate ? tehranIso(dlDate, f.dl_time?.value || '23:59') : null,
               questions: extracted,
             });
             toast(`آزمون متنی با موفقیت برای ${fa(classIds.length)} کلاس منتشر شد`, 'ok');
@@ -1357,7 +1359,8 @@ export async function hooshStudio(el) {
         <div class="form-grid">
           <div class="field"><label>عنوان آزمون تصویری</label><input class="input" name="title" value="${esc(examConfig.title)} (تصویری)" required></div>
           <div class="field"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="${examConfig.duration || 30}" min="1" max="180"></div>
-          <div class="field"><label>مهلت شرکت در آزمون (اختیاری)</label><input class="input ltr" type="datetime-local" name="deadline"></div>
+          <div class="field"><label>تاریخ مهلت (شمسی، اختیاری)</label>${dateField('hxVisDl', null, { minYear: 1404, maxYear: 1406 })}</div>
+          <div class="field"><label>ساعت مهلت</label><input class="input ltr" type="time" name="dl_time" value="23:59"></div>
         </div>
         <div class="field">
           <label>انتخاب کلاس‌های هدف (هر کلاسی که می‌خواهید تیک بزنید)</label>
@@ -1394,13 +1397,14 @@ export async function hooshStudio(el) {
             if (!classIds.length) { toast('حداقل یک کلاس انتخاب کنید', 'err'); return false; }
             const title = f.title.value.trim();
             if (!title) { toast('عنوان آزمون را وارد کنید', 'err'); return false; }
+            const dlDate = readDate(m, 'hxVisDl');
             const r = await post('/api/teacher/exams', {
               title,
               kind: 'online',
               subject: 'هوش و استعداد',
               class_ids: classIds,
               duration_min: Number(f.duration_min.value) || 30,
-              deadline: f.deadline.value || null,
+              deadline: dlDate ? tehranIso(dlDate, f.dl_time?.value || '23:59') : null,
               questions: visualQs,
             });
             toast(`آزمون تصویری با موفقیت برای ${fa(classIds.length)} کلاس منتشر شد`, 'ok');

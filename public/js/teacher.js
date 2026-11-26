@@ -122,7 +122,8 @@ function examEditor(classes) {
       <div class="field"><label>پایه</label><select class="input" name="grade" id="exGrade">${grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div>
       <div class="field"><label>کلاس</label><select class="input" name="class_id" id="exClass"></select></div>
       <div class="field" id="durField"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="15" min="1" max="180"></div>
-      <div class="field" id="dlField"><label>مهلت شرکت (اختیاری)</label><input class="input ltr" type="datetime-local" name="deadline"></div></form>
+      <div class="field" id="dlField"><label>تاریخ مهلت (شمسی، اختیاری)</label>${dateField('exDl', null, { minYear: 1404, maxYear: 1406 })}</div>
+      <div class="field" id="dlTimeField"><label>ساعت مهلت</label><input class="input ltr" type="time" name="dl_time" value="23:59"></div></form>
       <div id="aiGenBox" class="card flat" style="margin-top:12px;padding:12px;border:1px solid #bfdbfe;background:#eff6ff">
         <div class="row wrap" style="gap:8px;align-items:flex-end">
           <div class="field grow" style="min-width:160px"><label class="tiny bold">${icon('sparkles', { size: 14 })} طرح سؤال با هوش مصنوعی (بر اساس درس شما)</label><input class="input" id="aiTopic" placeholder="مبحث دلخواه (مثلاً: کسرها، هوش کلامی، انرژی...)"></div>
@@ -162,7 +163,7 @@ function examEditor(classes) {
         toast(`${fa(r.questions.length)} سؤال برای درس «${subject}» تولید شد`, 'ok');
         drawQ();
       });
-      on(m, 'click', '[data-kind]', (e, b) => { kind = b.dataset.kind; $$('[data-kind]', m).forEach((x) => x.classList.toggle('on', x === b)); $('#durField', m).style.display = kind === 'online' ? '' : 'none'; $('#dlField', m).style.display = kind === 'online' ? '' : 'none'; $('#aiGenBox', m).style.display = kind === 'online' ? '' : 'none'; drawQ(); });
+      on(m, 'click', '[data-kind]', (e, b) => { kind = b.dataset.kind; $$('[data-kind]', m).forEach((x) => x.classList.toggle('on', x === b)); $('#durField', m).style.display = kind === 'online' ? '' : 'none'; $('#dlField', m).style.display = kind === 'online' ? '' : 'none'; $('#dlTimeField', m).style.display = kind === 'online' ? '' : 'none'; $('#aiGenBox', m).style.display = kind === 'online' ? '' : 'none'; drawQ(); });
       on(m, 'input', '[data-qt]', (e, t) => { questions[t.dataset.qt].text = t.value; });
       on(m, 'input', '[data-qo]', (e, t) => { const [i, j] = t.dataset.qo.split(',').map(Number); questions[i].options[j] = t.value; });
       on(m, 'change', '[data-qa]', (e, t) => { questions[t.dataset.qa].answer = Number(t.value); });
@@ -177,7 +178,9 @@ function examEditor(classes) {
         const subject = f.subject;
         const qs_ = kind === 'online' ? questions.map((q) => ({ ...q, subject })) : key.map((a) => ({ answer: a, subject }));
         if (kind === 'paper' && key.some((a) => a == null)) throw new Error('کلید پاسخ همه سؤال‌ها را مشخص کنید');
-        const r = await post('/api/teacher/exams', { ...f, kind, questions: qs_ });
+        const dlDate = readDate(m, 'exDl');
+        const deadline = dlDate ? tehranIso(dlDate, f.dl_time || '23:59') : null;
+        const r = await post('/api/teacher/exams', { ...f, deadline, kind, questions: qs_ });
         toast('آزمون ساخته شد', 'ok');
         location.hash = `#/exams/${r.id}`;
       },
