@@ -85,11 +85,21 @@ async function readImportFile(f) {
 }
 
 function studentForm(m, s = {}) {
+  const curSchool = s.school || '';
+  const knownSchools = [...new Set([...(m.schools || [])])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fa'));
+  const isCustom = curSchool && !knownSchools.includes(curSchool);
   return `<form class="stack" id="stForm"><div class="form-grid">
     <div class="field"><label>نام و نام خانوادگی *</label><input class="input" name="full_name" value="${esc(s.full_name || '')}" required></div>
     <div class="field"><label>کد ملی ۱۰ رقمی *</label><input class="input ltr" name="national_code" value="${esc(s.national_code || '')}" maxlength="10" inputmode="numeric" required></div>
     <div class="field"><label>جنسیت</label><select class="input" name="gender"><option value="m" ${s.gender !== 'f' ? 'selected' : ''}>پسر</option><option value="f" ${s.gender === 'f' ? 'selected' : ''}>دختر</option></select></div>
-    <div class="field"><label>مدرسه</label><input class="input" name="school" value="${esc(s.school || '')}" list="schoolList"><datalist id="schoolList">${m.schools.map((x) => `<option value="${esc(x)}">`).join('')}</datalist></div>
+    <div class="field"><label>مدرسه</label>
+      <select class="input" name="school_sel" id="stSchoolSel">
+        <option value="">-- بدون انتخاب / نامشخص --</option>
+        ${knownSchools.map((x) => `<option value="${esc(x)}" ${x === curSchool ? 'selected' : ''}>${esc(x)}</option>`).join('')}
+        <option value="__new__" ${isCustom ? 'selected' : ''}>➕ سایر / افزودن مدرسه جدید...</option>
+      </select>
+      <input class="input" name="school_new" id="stSchoolNew" value="${isCustom ? esc(curSchool) : ''}" placeholder="نام مدرسه جدید را بنویسید" style="${isCustom ? 'margin-top:6px' : 'display:none;margin-top:6px'}" maxlength="100">
+    </div>
     <div class="field"><label>پایه *</label><select class="input" name="grade" id="stGrade">${m.grades.map((g) => `<option value="${g}" ${s.grade === g ? 'selected' : ''}>${gradeName(g)}</option>`).join('')}</select></div>
     <div class="field"><label>کلاس</label><select class="input" name="class_id" id="stClass"></select></div>
     <div class="field"><label>تاریخ تولد</label>${dateField('birth', s.birth_date, { minYear: 1385, maxYear: 1400 })}</div>
@@ -99,8 +109,27 @@ function studentForm(m, s = {}) {
 function bindStudentForm(m, md, s = {}) {
   const drawCls = () => { const g = Number($('#stGrade', m).value); $('#stClass', m).innerHTML = md.classes.filter((c) => c.grade === g).map((c) => `<option value="${c.id}" ${s.class_id === c.id ? 'selected' : ''}>کلاس ${esc(c.name)} (${fa(c.students)} نفر)</option>`).join(''); };
   drawCls(); $('#stGrade', m).onchange = drawCls;
+  const sel = $('#stSchoolSel', m), inp = $('#stSchoolNew', m);
+  if (sel && inp) {
+    sel.onchange = () => {
+      const isNew = sel.value === '__new__';
+      inp.style.display = isNew ? '' : 'none';
+      if (isNew) inp.focus();
+    };
+  }
 }
-const readStudent = (m) => ({ ...formData($('#stForm', m)), national_code: en($('#stForm [name=national_code]', m).value), parent_phone: en($('#stForm [name=parent_phone]', m).value), birth_date: readDate(m, 'birth') });
+const readStudent = (m) => {
+  const f = $('#stForm', m);
+  const d = formData(f);
+  const school = f.school_sel ? (f.school_sel.value === '__new__' ? (f.school_new?.value || '').trim() : f.school_sel.value) : (d.school || '');
+  return {
+    ...d,
+    school,
+    national_code: en(f.querySelector('[name=national_code]')?.value || ''),
+    parent_phone: en(f.querySelector('[name=parent_phone]')?.value || ''),
+    birth_date: readDate(m, 'birth'),
+  };
+};
 
 async function students(el) {
   let md = await meta();

@@ -236,22 +236,43 @@ async function students(el) {
   const addStBtn = document.getElementById('tAddStudent');
   if (addStBtn) addStBtn.onclick = () => {
     if (!classes.length) return toast('شما هنوز کلاسی برای ثبت دانش‌آموز ندارید', 'err');
+    const knownSchools = [...new Set([...(overview?.schools || [])])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fa'));
     modal({
       title: 'ثبت دستی دانش‌آموز جدید',
       body: `<form id="tAddStForm" class="stack">
-        <div class="field"><label for="tStName">نام و نام خانوادگی</label><input class="input" id="tStName" name="full_name" required maxlength="80" placeholder="مثلاً محمد رضایی"></div>
-        <div class="field"><label for="tStNc">کد ملی (۱۰ رقم - نام کاربری و رمز ورود اولیه)</label><input class="input ltr num" id="tStNc" name="national_code" required maxlength="10" placeholder="0123456789"></div>
-        <div class="field"><label for="tStCls">کلاس</label><select class="input" id="tStCls" name="class_id">${classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="tStName">نام و نام خانوادگی *</label><input class="input" id="tStName" name="full_name" required maxlength="80" placeholder="مثلاً محمد رضایی"></div>
+        <div class="field"><label for="tStNc">کد ملی (۱۰ رقم - نام کاربری و رمز ورود اولیه) *</label><input class="input ltr num" id="tStNc" name="national_code" required maxlength="10" placeholder="0123456789"></div>
+        <div class="field"><label for="tStCls">کلاس *</label><select class="input" id="tStCls" name="class_id">${classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
         <div class="field"><label for="tStGen">جنسیت</label><select class="input" id="tStGen" name="gender"><option value="m">پسر</option><option value="f">دختر</option></select></div>
+        <div class="field"><label for="tStSchoolSel">مدرسه</label>
+          <select class="input" id="tStSchoolSel" name="school_sel">
+            <option value="">-- بدون انتخاب / نامشخص --</option>
+            ${knownSchools.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}
+            <option value="__new__">➕ سایر / افزودن مدرسه جدید...</option>
+          </select>
+          <input class="input" id="tStSchoolNew" name="school_new" placeholder="نام مدرسه جدید را وارد کنید" style="display:none;margin-top:6px" maxlength="100">
+        </div>
         <div class="field"><label for="tStPhone">شماره موبایل والدین (اختیاری)</label><input class="input ltr num" id="tStPhone" name="parent_phone" maxlength="11" placeholder="09123456789"></div>
-        <div class="field"><label for="tStSchool">مدرسه (اختیاری)</label><input class="input" id="tStSchool" name="school" maxlength="100"></div>
       </form>`,
+      onOpen: (m) => {
+        const sel = $('#tStSchoolSel', m), inp = $('#tStSchoolNew', m);
+        if (sel && inp) {
+          sel.onchange = () => {
+            const isNew = sel.value === '__new__';
+            inp.style.display = isNew ? '' : 'none';
+            if (isNew) inp.focus();
+          };
+        }
+      },
       actions: [
         { label: 'انصراف', cls: 'ghost', value: false },
         {
           label: 'ثبت‌نام دانش‌آموز',
           onClick: async (m) => {
-            const d = formData($('#tAddStForm', m));
+            const f = $('#tAddStForm', m);
+            const d = formData(f);
+            const school = f.school_sel ? (f.school_sel.value === '__new__' ? (f.school_new?.value || '').trim() : f.school_sel.value) : (d.school || '');
+            d.school = school;
             if (!d.full_name?.trim()) { toast('نام و نام خانوادگی را وارد کنید', 'err'); return false; }
             if (!d.national_code?.trim()) { toast('کد ملی را وارد کنید', 'err'); return false; }
             try {

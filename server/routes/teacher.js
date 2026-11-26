@@ -114,6 +114,7 @@ export default function register(r) {
     return {
       classes,
       all_classes: all('SELECT c.id, c.grade, c.name FROM classes c WHERE c.center_id=? ORDER BY c.grade, c.name', t.center_id),
+      schools: all(`SELECT DISTINCT s.school FROM students s JOIN users u ON u.id=s.user_id WHERE u.center_id=? AND s.school<>'' ORDER BY s.school`, t.center_id).map((x) => x.school),
       today: all(`SELECT sc.start, sc.end, sc.subject, sc.room, c.name class_name, c.grade, c.id class_id FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.teacher_id=? AND sc.weekday=? ORDER BY sc.start`, t.id, faWeekday(today)),
       stats: {
         students: classes.reduce((a, c) => a + c.students, 0),
