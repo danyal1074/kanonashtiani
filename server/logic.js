@@ -30,7 +30,7 @@ export function addPoints(studentId, amount, category, reason, ref = null) {
   return true;
 }
 
-export const totalPoints = (sid) => get('SELECT COALESCE(SUM(amount),0) t FROM points WHERE student_id=?', sid).t;
+export const totalPoints = (sid) => Math.max(0, get('SELECT COALESCE(SUM(amount),0) t FROM points WHERE student_id=?', sid).t);
 
 export function gradeRanking(centerId, grade) {
   return all(`SELECT u.id, u.full_name, s.avatar, s.class_id, COALESCE(SUM(p.amount),0) total
@@ -41,7 +41,8 @@ export function gradeRanking(centerId, grade) {
 export function rankOf(centerId, grade, sid) {
   const list = gradeRanking(centerId, grade);
   const self = list.find((r) => r.id === sid);
-  const rank = self ? list.filter((r) => r.total > self.total).length + 1 : 1;
+  const myTotal = Math.max(0, self?.total || 0);
+  const rank = list.filter((r) => Math.max(0, r.total) > myTotal).length + 1;
   return { rank, of: list.length };
 }
 
@@ -53,7 +54,8 @@ export function studentRankings(centerId, classId, studentId) {
   const standing = rows => {
     const self = rows.find(row => row.id === studentId);
     if (!self) return { rank: null, of: rows.length };
-    return { rank: rows.filter(row => row.total > self.total).length + 1, of: rows.length };
+    const myTotal = Math.max(0, self.total);
+    return { rank: rows.filter(row => Math.max(0, row.total) > myTotal).length + 1, of: rows.length };
   };
   return {
     class: standing(classId == null ? [] : students.filter(row => row.class_id === classId)),
@@ -274,6 +276,7 @@ export function contactsOf(user) {
 
 // ---------- کار زمان‌بندی‌شده: جریمه‌های خودکار (تکرارناپذیر با ref) ----------
 export function runPenaltyJob() {
+  if (process.env.ROSHD_ENABLE_PENALTIES !== 'true') return 0;
   const today = ymd();
   const now = nowIso();
   let applied = 0;
