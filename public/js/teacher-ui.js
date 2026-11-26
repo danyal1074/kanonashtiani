@@ -40,6 +40,7 @@ export const nav = (me) => [
   { path: '/reports', icon: 'chart', label: 'گزارش‌ها' },
   { path: '/messages', icon: 'message', label: 'ارتباطات', badge: me.unread },
   { path: '/materials', icon: 'video', label: 'محتوای آموزشی' },
+  ...(me.textbooks_enabled ? [{ path: '/textbooks', icon: 'book', label: 'کتاب‌های درسی (دمو)' }] : []),
   { path: '/timetable', icon: 'calendar', label: 'برنامه هفتگی من' },
   { path: '/plans', icon: 'calendar', label: 'تقویم و برنامه' },
   { path: '/more', icon: 'more', label: 'موارد بیشتر' },
@@ -130,7 +131,8 @@ export async function home(el, _p, me) {
   const female = isFemale(me);
   const tiles = [
     ['#/attendance', 'check-circle', 'حضور و غیاب', 'mint', 3, ''], ['#/assignments?new=1', 'clipboard', 'ثبت تکلیف', 'mint2', 1, ''],
-    ['#/materials', 'video', 'محتوای آموزشی', 'rose', 6, ''], ['#/exams', 'file-check', 'آزمون جدید', 'sand', 5, ''], ['#/messages', 'users', 'پیام به دانش‌آموزان', 'sky', 4, ''],
+    ['#/hoosh-studio', 'sparkles', 'استودیوی هوش', 'lilac', 2, ''], ['#/materials', 'video', 'محتوای آموزشی', 'rose', 6, ''],
+    ['#/exams', 'file-check', 'آزمون جدید', 'sand', 5, ''], ['#/messages', 'users', 'پیام به دانش‌آموزان', 'sky', 4, ''],
   ];
   const perf = classPerformance(d.classes, students).slice(0, 3);
   const t = report.classes.reduce((a, c) => ({ o: a.o + (c.onTime || 0), l: a.l + (c.late || 0), m: a.m + (c.missing || 0) }), { o: 0, l: 0, m: 0 });

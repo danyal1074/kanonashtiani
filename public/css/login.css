@@ -44,13 +44,13 @@
 .lg-submit:focus-visible { outline: 3px solid var(--lg-orange); outline-offset: 3px; }
 .lg-submit:disabled { opacity: .75; cursor: progress; }
 
-.lg-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin-top: 22px; font-size: 15px; }
-.lg-links a { min-height: 44px; display: inline-flex; align-items: center; color: var(--lg-muted); text-decoration: none; }
-.lg-links a#shopLink { color: var(--lg-green); font-weight: 700; }
-.lg-links a:hover { text-decoration: underline; }
-.lg-center-pick { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 14px; color: var(--lg-muted); }
+.lg-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 10px; margin-top: 20px; font-size: 13.5px; }
+.lg-links a, .lg-links .pwa-install { min-height: 38px; padding: 4px 14px; border-radius: 999px; border: 1px solid var(--lg-line); background: #f8fafc; display: inline-flex; align-items: center; gap: 6px; color: var(--lg-muted); text-decoration: none; font-weight: 700; transition: background .15s, border-color .15s, transform .15s; }
+.lg-links a#shopLink { color: var(--lg-green); background: var(--lg-green-50); border-color: #bfe6d7; }
+.lg-links a:hover, .lg-links .pwa-install:hover { background: #eef3f8; border-color: #cbd5e1; text-decoration: none; transform: translateY(-1px); }
+.lg-center-pick { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 6px 12px; border-radius: 14px; border: 1px solid var(--lg-line); background: #f8fafc; font-size: 13.5px; color: var(--lg-muted); }
 .lg-center-pick label { font-weight: 700; flex: none; }
-.lg-center-pick select { height: 44px; border-radius: 12px; font-size: 14px; flex: 1; min-width: 0; }
+.lg-center-pick select { height: 40px; border-radius: 10px; font-size: 13.5px; flex: 1; min-width: 0; border-color: transparent; background: #fff; }
 .lg-demo { margin-top: 10px; border-top: 1px dashed var(--lg-line); padding-top: 10px; font-size: 13px; }
 .lg-demo summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; gap: 6px; color: var(--lg-muted); font-weight: 700; }
 .lg-demo .chips { margin-top: 8px; }

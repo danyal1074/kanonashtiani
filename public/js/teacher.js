@@ -1,5 +1,6 @@
 // پنل معلم
 import { teacherTimetable } from './timetable.js';
+import { textbooksView, textbookView } from './textbooks.js';
 import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, progress, ring, empty, cdHtml, jdate, jtime, jshort,
   timeAgo, subjIcon, gradeName, dateField, readDate, tehranIso, fileToData, barChart, lineChart, WEEKDAYS, addDays, formData, state, en, icon, kpiCard, nameAvatar, JMONTHS, jparts } from './core.js';
@@ -98,7 +99,7 @@ async function asgReport(el) {
 // ================= آزمون‌ها =================
 async function exams(el) {
   const classes = await myClasses();
-  setHead('آزمون‌ها', 'آزمون آنلاین با تصحیح خودکار یا آزمون کاغذی با اسکن پاسخ‌برگ', `<div class="row" style="gap:6px"><a class="btn sm soft" href="#/hoosh-studio"><span class="ib sun" style="display:inline-flex">${icon('sparkles', { size: 14 })}</span> استودیوی هوش کمپلکس</a><button class="btn sm" id="newExam">+ آزمون جدید</button></div>`);
+  setHead('آزمون‌ها', 'آزمون آنلاین با تصحیح خودکار یا آزمون کاغذی با اسکن پاسخ‌برگ', `<div class="row" style="gap:6px"><a class="btn sm" href="#/hoosh-studio" style="background:linear-gradient(135deg,#eef2ff,#e0e7ff);color:#3730a3;border:1px solid #c7d2fe">${icon('sparkles', { size: 15 })} استودیوی هوش کمپلکس</a><button class="btn sm" id="newExam">+ آزمون جدید</button></div>`);
   const list = await api('/api/teacher/exams');
   el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>عنوان</th><th>نوع</th><th>پایه/کلاس</th><th>سؤال</th><th>شرکت‌کننده</th><th>میانگین</th><th>تاریخ</th></tr></thead><tbody>
     ${list.map((e) => `<tr class="click" data-href="#/exams/${e.id}"><td class="bold">${subjIcon(e.subject)} ${esc(e.title)}</td><td><span class="badge ${e.kind === 'online' ? 'blue' : 'orange'}">${e.kind === 'online' ? ' آنلاین' : ' کاغذی'}</span></td>
@@ -507,6 +508,8 @@ async function materials(el) {
 export const routes = [
   { path: '/home', view: (...args) => lookModules.look === 'new' ? lookModules.ui.home(...args) : UI.home(...args) },
   { path: '/timetable', view: teacherTimetable },
+  { path: '/textbooks', view: textbooksView },
+  { path: '/textbooks/:id', view: textbookView },
   { path: '/classes', view: UI.classes },
   { path: '/reports', view: UI.reports },
   { path: '/more', view: UI.more },

@@ -210,6 +210,8 @@ body.teacher-ui .input { border-radius: 14px; border-color: var(--tp-line); back
 body.teacher-ui .chip { border-radius: 999px; border-color: var(--tp-line); }
 body.teacher-ui .chip.on { color: #fff; background: var(--tp-blue); border-color: var(--tp-blue); }
 body.teacher-ui .table th { background: #edf3fe; color: var(--tp-navy); }
+body.teacher-ui .table tbody tr { transition: background-color .14s ease; }
+body.teacher-ui .table tbody tr:hover td { background: rgba(237, 243, 254, .6); }
 
 /* ---------- موبایل (مطابق مرجع) ---------- */
 @media (max-width: 767px) {

@@ -319,7 +319,7 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; font-si
 .ft-ai { background: var(--teal-600); }
 
 /* ===== مودال، توست، تمام‌صفحه ===== */
-.modal-back { position: fixed; inset: 0; background: rgba(6, 47, 51, .5); z-index: 100; display: grid; place-items: center; padding: var(--s-4); animation: fadeIn var(--dur-2); }
+.modal-back { position: fixed; inset: 0; background: rgba(6, 47, 51, .46); backdrop-filter: blur(4px); z-index: 100; display: grid; place-items: center; padding: var(--s-4); animation: fadeIn var(--dur-2); }
 .modal { background: var(--surface); border-radius: var(--r-xl); width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; box-shadow: var(--shadow-lg); animation: popIn var(--dur-3) var(--ease); }
 .modal.wide { width: min(920px, 100%); }
 .modal-head { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-5) var(--s-6) var(--s-2); position: sticky; top: 0; background: var(--surface); z-index: 1; }

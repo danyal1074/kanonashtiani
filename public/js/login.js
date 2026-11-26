@@ -31,7 +31,7 @@ export async function loginView(root, onDone) {
         <div class="lg-roles" role="radiogroup" aria-label="نقش کاربری">${ROLES.map((r, i) => `<button type="button" class="role lg-role ${i ? '' : 'on'}" data-role="${r.key}" role="radio" aria-checked="${!i}" tabindex="${i ? -1 : 0}"><span class="lg-check">${icon('check-circle', { size: 20 })}</span>${icon(r.icon, { size: 40 })}<span class="lg-rn">${r.name}</span></button>`).join('')}</div>
         <form id="loginForm" class="lg-fields" autocomplete="on" novalidate>
           <div class="field lg-field"><label id="idLabel" for="ident">${role.label}</label><input class="input lg-input ltr" id="ident" name="identifier" placeholder="${role.ph}" autocomplete="username" required inputmode="text" aria-describedby="loginErr"></div>
-          <div class="field lg-field"><label for="pw">رمز عبور</label><div class="lg-pw"><input class="input lg-input ltr" id="pw" name="password" type="password" autocomplete="current-password" required aria-describedby="loginErr">
+          <div class="field lg-field"><label for="pw">رمز عبور</label><div class="lg-pw"><input class="input lg-input ltr" id="pw" name="password" type="password" placeholder="••••••••" autocomplete="current-password" required aria-describedby="loginErr">
             <button type="button" class="lg-eye" id="togglePw" aria-label="نمایش رمز" aria-pressed="false">${icon('eye', { size: 22 })}</button></div></div>
           <div class="field-error" id="loginErr" role="alert" aria-live="assertive"></div>
           <button class="lg-submit" type="submit" id="loginBtn">ورود به حساب</button>
