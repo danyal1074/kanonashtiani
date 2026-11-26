@@ -22,6 +22,7 @@
     "test:classroom": "node scripts/test-classroom.mjs",
     "test:teacher-look": "node scripts/test-teacher-look.mjs",
     "test:messenger": "node scripts/test-messenger.mjs",
+    "test:textbooks": "node scripts/test-textbooks.mjs",
     "sync:classroom": "node scripts/sync-classroom.mjs"
   }
 }

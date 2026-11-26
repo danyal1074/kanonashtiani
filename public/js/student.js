@@ -33,6 +33,7 @@ import { messagesView, announcementsView, passwordCard, bindPassword } from './c
 import { gamesHub, mathRush, storyView } from './games.js';
 import { panelShop } from './shop.js';
 import { mountOnlineClasses } from './online-classes.js';
+import { textbooksView, textbookView } from './textbooks.js';
 import * as L from './legacy.js';
 
 export const nav = (me) => [
@@ -40,6 +41,7 @@ export const nav = (me) => [
   { path: '/lessons', icon: 'book', label: 'درس‌ها' },
   { path: '/schedule', icon: 'calendar', label: 'برنامه هفتگی' },
   { path: '/library', icon: 'book', label: 'کتابخانه' },
+  ...(me.textbooks_enabled ? [{ path: '/textbooks', icon: 'book', label: 'کتاب‌های درسی (دمو)' }] : []),
   { path: '/classes', icon: 'video', label: 'کلاس آنلاین' },
   { path: '/assignments', icon: 'clipboard', label: 'تکالیف' },
   { path: '/exams', icon: 'file-check', label: 'آزمون‌ها' },
@@ -441,6 +443,8 @@ const baseRoutes = [
   { path: '/schedule', view: studentDesign.schedule },
   { path: '/classes', view: studentDesign.classes },
   { path: '/library', view: studentDesign.library },
+  { path: '/textbooks', view: textbooksView },
+  { path: '/textbooks/:id', view: textbookView },
   { path: '/more', view: studentDesign.more, open: true },
   { path: '/assignments', view: assignments },
   { path: '/exams', view: exams },

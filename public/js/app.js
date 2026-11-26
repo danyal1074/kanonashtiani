@@ -159,6 +159,7 @@ async function render() {
   window.scrollTo({ top: 0 });
   try {
     await found.r.view(view, found.params, me);
+    if (token === rendering && me.textbooks_enabled && ['/more','/library','/materials'].includes(path)) view.insertAdjacentHTML('afterbegin', `<a class="card tb-entry" href="#/textbooks">${icon('book',{size:26})}<span><b>کتاب‌های درسی من</b><small>نسخهٔ دمو · مطالعه و انتخاب فصل یا صفحه</small></span>${icon('chevron-left',{size:18})}</a>`);
     if (token === rendering) {
       if (path === '/home' && !['student', 'teacher', 'manager', 'counselor'].includes(me.user.role)) decorateDashboard(view, me, panel.nav(me));
       if (me.user.role === 'manager') lookModules.ui.decorateManager(view, me, path, panel.nav(me));

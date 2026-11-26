@@ -1,4 +1,5 @@
 import { resolveBookPage } from '../book-pages.js';
+import { availableTextbooks } from './textbooks.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CURATED_QUESTIONS } from '../self_exam.js';
@@ -109,6 +110,7 @@ export default function register(r) {
     if (u.role === 'parent') out.children = all(`SELECT u.id, u.full_name, s.grade, s.avatar, c.name class_name FROM parent_children pc JOIN users u ON u.id=pc.student_id JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE pc.parent_id=? ORDER BY s.grade`, u.id);
     out.unseen = u.role === 'manager' || u.role === 'admin' ? [] : announcementsFor(u).filter((a) => !a.seen_at).reverse();
     out.unread = get('SELECT COUNT(*) n FROM messages WHERE to_id=? AND read_at IS NULL', u.id).n;
+    if (['student','teacher'].includes(u.role)) out.textbooks_enabled = availableTextbooks(u).length > 0;
     // معلم بدون انتخاب قبلی، همان ظاهر فانتزی فعلی را می‌بیند.
     if (['manager', 'teacher'].includes(u.role)) {
       const saved = get('SELECT ui_look FROM users WHERE id=?', u.id)?.ui_look;
