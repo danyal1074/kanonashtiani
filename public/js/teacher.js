@@ -1,6 +1,7 @@
 // پنل معلم
 import { teacherTimetable } from './timetable.js';
 import { textbooksView, textbookView } from './textbooks.js';
+import { exerciseView, attemptView, quizView, papersView, paperView } from './textbook-exercises.js';
 import * as L from './legacy.js';
 import { api, post, put, del, esc, fa, num, pct, $, $$, on, toast, busy, modal, confirmBox, setHead, avatar, progress, ring, empty, cdHtml, jdate, jtime, jshort,
   timeAgo, subjIcon, gradeName, dateField, readDate, tehranIso, fileToData, barChart, lineChart, WEEKDAYS, addDays, formData, state, en, icon, kpiCard, nameAvatar, JMONTHS, jparts } from './core.js';
@@ -510,6 +511,11 @@ export const routes = [
   { path: '/timetable', view: teacherTimetable },
   { path: '/textbooks', view: textbooksView },
   { path: '/textbooks/:id', view: textbookView },
+  { path: '/textbooks/:id/practice', view: exerciseView },
+  { path: '/textbook-attempts/:id', view: attemptView },
+  { path: '/textbook-quizzes/:id', view: quizView },
+  { path: '/textbook-papers', view: papersView },
+  { path: '/textbook-papers/:id', view: paperView },
   { path: '/classes', view: UI.classes },
   { path: '/reports', view: UI.reports },
   { path: '/more', view: UI.more },

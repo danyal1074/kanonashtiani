@@ -23,6 +23,7 @@
     "test:teacher-look": "node scripts/test-teacher-look.mjs",
     "test:messenger": "node scripts/test-messenger.mjs",
     "test:textbooks": "node scripts/test-textbooks.mjs",
+    "test:textbook-exercises": "node scripts/test-textbook-exercises.mjs",
     "sync:classroom": "node scripts/sync-classroom.mjs"
   }
 }

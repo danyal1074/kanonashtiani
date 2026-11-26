@@ -34,6 +34,7 @@ import { gamesHub, mathRush, storyView } from './games.js';
 import { panelShop } from './shop.js';
 import { mountOnlineClasses } from './online-classes.js';
 import { textbooksView, textbookView } from './textbooks.js';
+import { exerciseView, attemptView, papersView, paperView } from './textbook-exercises.js';
 import * as L from './legacy.js';
 
 export const nav = (me) => [
@@ -445,6 +446,10 @@ const baseRoutes = [
   { path: '/library', view: studentDesign.library },
   { path: '/textbooks', view: textbooksView },
   { path: '/textbooks/:id', view: textbookView },
+  { path: '/textbooks/:id/practice', view: exerciseView },
+  { path: '/textbook-attempts/:id', view: attemptView },
+  { path: '/textbook-papers', view: papersView },
+  { path: '/textbook-papers/:id', view: paperView },
   { path: '/more', view: studentDesign.more, open: true },
   { path: '/assignments', view: assignments },
   { path: '/exams', view: exams },

@@ -4,6 +4,8 @@ import path from 'node:path';
 import { DATA_DIR, get, all } from '../db.js';
 import { fail } from '../util.js';
 import { serveFile } from '../http.js';
+import { aiStatus } from '../textbook-ai.js';
+export { bookFor, root as textbookRoot, allowed as bookAllowed, normalize };
 
 const catalog = JSON.parse(fs.readFileSync(new URL('../textbooks.json', import.meta.url), 'utf8'));
 const root = () => path.resolve(process.env.ROSHD_TEXTBOOKS_DIR || path.join(DATA_DIR, 'textbooks', 'pilot'));
@@ -29,9 +31,9 @@ export default function register(r) {
   const roles = { roles:['teacher','student'] };
   r.get('/api/textbooks', roles, ctx => {
     if (process.env.ROSHD_DEMO !== '1') fail(404,'این بخش فقط در نسخهٔ دمو فعال است');
-    return { demo:true, generation_enabled:false, books:availableTextbooks(ctx.user) };
+    return { demo:true, generation_enabled:aiStatus().enabled, ai:aiStatus(), books:availableTextbooks(ctx.user) };
   });
-  r.get('/api/textbooks/:id', roles, ctx => ({ ...bookFor(ctx), generation_enabled:false }));
+  r.get('/api/textbooks/:id', roles, ctx => ({ ...bookFor(ctx), generation_enabled:aiStatus().enabled, ai:aiStatus() }));
   r.get('/api/textbooks/:id/pages/:page', roles, async ctx => {
     const book=bookFor(ctx), n=Number(ctx.params.page);
     if (!/^\d+$/.test(ctx.params.page) || !Number.isInteger(n) || n<1 || n>book.printed_pages) fail(400,'شمارهٔ صفحه نامعتبر است');
