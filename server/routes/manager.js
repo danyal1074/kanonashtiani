@@ -542,6 +542,33 @@ export default function register(r) {
     run('DELETE FROM schedule WHERE id=? AND class_id IN (SELECT id FROM classes WHERE center_id=?)', Number(ctx.params.id), ctx.user.center_id);
     return { ok: true };
   });
+  r.put('/api/manager/schedule/:id', M, (ctx) => {
+    const sid = Number(ctx.params.id);
+    const item = get(`SELECT sc.* FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.id=? AND c.center_id=?`, sid, ctx.user.center_id);
+    if (!item) fail(404, 'جلسه پیدا نشد');
+    const b = ctx.body;
+    const wd = b.weekday !== undefined ? Number(b.weekday) : item.weekday;
+    const start = b.start !== undefined ? String(b.start).trim() : item.start;
+    const end = b.end !== undefined ? String(b.end).trim() : item.end;
+    if (!(wd >= 0 && wd <= 6) || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || end <= start) {
+      fail(400, 'روز و ساعت شروع/پایان را درست وارد کنید');
+    }
+    const subject = b.subject !== undefined ? clampStr(b.subject, 40) : item.subject;
+    if (!subject) fail(400, 'نام درس الزامی است');
+    const room = b.room !== undefined ? clampStr(b.room, 30) : item.room;
+    const kind = b.kind !== undefined && SESSION_KINDS.includes(b.kind) ? b.kind : item.kind;
+    const classId = b.class_id !== undefined ? ownClass(ctx, b.class_id).id : item.class_id;
+    let tid = item.teacher_id;
+    if (b.teacher_id !== undefined) {
+      tid = b.teacher_id ? (get(`SELECT id FROM users WHERE id=? AND center_id=? AND role='teacher'`, Number(b.teacher_id), ctx.user.center_id)?.id || null) : null;
+    }
+
+    const clash = get('SELECT 1 FROM schedule WHERE class_id=? AND weekday=? AND start<? AND end>? AND id!=?', classId, wd, end, start, sid);
+    if (clash) fail(400, 'در این روز و ساعت برای این کلاس جلسهٔ دیگری ثبت شده است');
+
+    run('UPDATE schedule SET class_id=?, weekday=?, start=?, end=?, subject=?, room=?, kind=?, teacher_id=? WHERE id=?', classId, wd, start, end, subject, room, kind, tid, sid);
+    return { ok: true };
+  });
   r.post('/api/manager/schedule/parse-image', M, async (ctx) => {
     const dataUrl = String(ctx.body.image || '');
     if (!dataUrl) fail(400, 'تصویر برنامه هفتگی ارسال نشده است');

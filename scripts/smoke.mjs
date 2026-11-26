@@ -214,7 +214,13 @@ ${nc4},علی کامل,نهم ب-تست,پرداخت شده
 check('ثبت‌نام گروهی دانش‌آموز موجود را به‌روز می‌کند (کلاس و پرداخت)، رد نمی‌کند', impUpd.status === 200 && impUpd.data.created === 0 && impUpd.data.updated === 1 && impUpd.data.fee_paid_recorded === 1, JSON.stringify(impUpd.data).slice(0, 200));
 check('ساخت کانون دوم ممنوع است (سامانهٔ اختصاصی آشتیانی)', (await call(S.admin.ck, 'POST', '/api/admin/centers', { name: 'کانون دیگر', slug: 'other-center', manager_username: 'other_mgr', manager_password: '123456' })).status === 403);
 check('حالت نمایشی در نسخهٔ واقعی خاموش است', (await call('', 'GET', '/api/public/mode')).data.demo === false);
-check('جدول هفتگی مدیر برمی‌گردد', Array.isArray((await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data));
+const schOverview = (await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data;
+check('جدول هفتگی مدیر برمی‌گردد', Array.isArray(schOverview));
+if (schOverview.length) {
+  const s0 = schOverview[0];
+  const updSch = await call(S.manager.ck, 'PUT', `/api/manager/schedule/${s0.id}`, { room: 'اتاق جدید ۱۰۱', subject: s0.subject });
+  check('ویرایش مشخصات جلسه برنامه هفتگی مدیر (مکان و درس)', updSch.status === 200);
+}
 check('جدول هفتگی معلم برمی‌گردد', Array.isArray((await call(S.teacher.ck, 'GET', '/api/teacher/schedule')).data?.sessions));
 
 // حق عضویت: رسید ← تأیید ← باز شدن قفل
