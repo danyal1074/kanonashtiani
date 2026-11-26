@@ -19,7 +19,7 @@ function scope(body,book){
   return {from,to,count,kind};
 }
 function quizAccess(ctx,id){
-  demo();const q=get('SELECT * FROM textbook_quizzes WHERE id=?',Number(id));if(!q)fail(404,'برگه یافت نشد');bookAccess(ctx,q.book_id);
+  demo();const q=get('SELECT * FROM textbook_quizzes WHERE id=?',Number(id));if(!q)fail(404,'برگه یافت نشد');if(q.source==='rejected')fail(409,'این نمونه در بررسی علمی کنار گذاشته شده است');bookAccess(ctx,q.book_id);
   if((q.source==='manual'||q.kind==='essay')&&q.owner_id!==ctx.user.id)fail(403,'این پیش‌نویس متعلق به شما نیست');return q;
 }
 function paperAccess(ctx,id){
@@ -51,12 +51,12 @@ export default function register(r){
   });
   r.get('/api/textbook-attempts/:id',roles,ctx=>{
     demo();const a=get('SELECT a.*,q.book_id,q.questions_json,q.from_page,q.to_page,q.source FROM textbook_attempts a JOIN textbook_quizzes q ON q.id=a.quiz_id WHERE a.id=? AND a.user_id=?',Number(ctx.params.id),ctx.user.id);
-    if(!a)fail(404,'تمرین یافت نشد');const book=bookAccess(ctx,a.book_id);
+    if(!a)fail(404,'تمرین یافت نشد');if(a.source==='rejected')fail(409,'این نمونه در بررسی علمی کنار گذاشته شده است؛ تمرین تازه‌ای انتخاب کن');const book=bookAccess(ctx,a.book_id);
     return {id:a.id,book_id:a.book_id,title:book.title,from:a.from_page,to:a.to_page,source:a.source,questions:a.submitted_at?questions(a):publicQuestions(a),result:a.result_json?JSON.parse(a.result_json):null};
   });
   r.post('/api/textbook-attempts/:id/submit',roles,ctx=>{
-    demo();const a=get('SELECT a.*,q.book_id,q.questions_json FROM textbook_attempts a JOIN textbook_quizzes q ON q.id=a.quiz_id WHERE a.id=? AND a.user_id=?',Number(ctx.params.id),ctx.user.id);
-    if(!a)fail(404,'تمرین یافت نشد');bookAccess(ctx,a.book_id);if(a.submitted_at)return JSON.parse(a.result_json);
+    demo();const a=get('SELECT a.*,q.book_id,q.questions_json,q.source FROM textbook_attempts a JOIN textbook_quizzes q ON q.id=a.quiz_id WHERE a.id=? AND a.user_id=?',Number(ctx.params.id),ctx.user.id);
+    if(!a)fail(404,'تمرین یافت نشد');if(a.source==='rejected')fail(409,'این نمونه در بررسی علمی کنار گذاشته شده است');bookAccess(ctx,a.book_id);if(a.submitted_at)return JSON.parse(a.result_json);
     const qs=questions(a),answers=ctx.body.answers;if(!Array.isArray(answers)||answers.length!==qs.length||answers.some(x=>x!==null&&(!Number.isInteger(x)||x<0||x>3)))fail(400,'پاسخ‌ها نامعتبرند');
     const correct=qs.filter((q,i)=>answers[i]===q.correct_index).length,blank=answers.filter(x=>x===null).length;
     const result={correct,blank,wrong:qs.length-correct-blank,total:qs.length,percent:Math.round(correct/qs.length*100),answers};

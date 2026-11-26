@@ -32,8 +32,8 @@ let attempt,paperId;
 try{
   await start();
   const body={from:2,to:3,count:3,kind:'mcq',figures:true};
-  const parallel=await Promise.all(Array.from({length:6},()=>req(1,'/api/textbooks/math-4/generate',body)));assert.ok(parallel.every(r=>r.status===200));assert.equal(nCalls(),1);attempt=parallel[0].data.attempt_id;
-  const a=await req(1,`/api/textbook-attempts/${attempt}`);assert.equal(a.data.questions.length,3);assert.equal(a.data.questions[0].figure.type,'bars');assert.ok(!('correct_index'in a.data.questions[0]));assert.ok(!('explanation'in a.data.questions[0]));
+  const parallel=await Promise.all(Array.from({length:6},()=>req(1,'/api/textbooks/math-4/generate',body)));assert.ok(parallel.every(r=>r.status===200));assert.equal(nCalls(),2);attempt=parallel[0].data.attempt_id;
+  const a=await req(1,`/api/textbook-attempts/${attempt}`);assert.equal(a.data.questions.length,3);assert.equal(a.data.questions[0].figure.type,'source_page');assert.ok(!('correct_index'in a.data.questions[0]));assert.ok(!('explanation'in a.data.questions[0]));
   assert.equal((await req(2,`/api/textbook-attempts/${attempt}`)).status,404);
   assert.equal((await req(1,`/api/textbook-attempts/${attempt}/submit`,{answers:[3,0,null]})).data.correct,1);
   const repeat=await req(1,`/api/textbook-attempts/${attempt}/submit`,{answers:[3,3,3]});assert.equal(repeat.data.correct,1);assert.ok((await req(1,`/api/textbook-attempts/${attempt}`)).data.questions[0].explanation);
@@ -42,7 +42,7 @@ try{
   assert.equal((await req(1,'/api/textbooks/math-4/generate',{...body,kind:'essay'})).status,403);
   const photo={data:'data:image/jpeg;base64,'+fs.readFileSync(path.join(root,'data/textbooks/pilot/math-4/pages/page_2.jpg')).toString('base64')};
   const manual=await req(4,'/api/textbooks/math-4/manual',{from:2,to:3,questions:[{text:'الگوی شکل را توضیح بده.',source_page:2,explanation:'پاسخ راهنمای محرمانهٔ معلم',file:photo}]});assert.equal(manual.status,200);const quiz=manual.data.quiz_id;
-  assert.equal(nCalls(),1,'Manual authoring must never call AI');
+  assert.equal(nCalls(),2,'Manual authoring must never call AI');
   assert.equal((await req(5,`/api/textbook-quizzes/${quiz}`)).status,403);
   assert.equal((await req(4,`/api/textbook-quizzes/${quiz}/publish`,{title:'برگهٔ آزمایشی',class_id:2,deadline:new Date(Date.now()+86400000).toISOString()})).status,403);
   const publish=await req(4,`/api/textbook-quizzes/${quiz}/publish`,{title:'برگهٔ آزمایشی',class_id:1,deadline:new Date(Date.now()+86400000).toISOString()});assert.equal(publish.status,200);paperId=publish.data.paper_id;
@@ -60,6 +60,7 @@ try{
   fs.writeFileSync(mode,'auth');const before=nCalls(),cost=get('SELECT SUM(reserved_micros) n FROM textbook_ai_spend').n;
   assert.equal((await req(4,'/api/textbooks/math-4/generate',{from:4,to:4,count:3,kind:'essay'})).status,502);assert.equal(nCalls(),before+1);assert.ok(get('SELECT SUM(reserved_micros) n FROM textbook_ai_spend').n>cost);
   const exit=once(server,'exit');server.kill();await exit;await start();assert.ok(get('SELECT SUM(reserved_micros) n FROM textbook_ai_spend').n>cost,'Reservation must survive restart');fs.writeFileSync(mode,'valid');
+  const setsBefore=get('SELECT COUNT(*) n FROM textbook_quizzes').n;fs.writeFileSync(mode,'reject');assert.equal((await req(4,'/api/textbooks/math-4/generate',{from:5,to:5,count:3,kind:'essay'})).status,422);assert.equal(get('SELECT COUNT(*) n FROM textbook_quizzes').n,setsBefore,'Rejected content must never enter question bank');fs.writeFileSync(mode,'valid');
   console.log('PASS: no paid calls; mocked AI, concurrent cache dedup, hidden answers, server grading/idempotency, teacher authoring/figure privacy, class publication, photo submission, review, authorization, failed-call accounting and restart persistence.');
   if(process.argv.includes('--browser')){
     const debugPort=await freePort();browser=spawn(process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless=new','--disable-gpu','--no-first-run',`--remote-debugging-port=${debugPort}`,`--user-data-dir=${path.join(temp,'chrome')}`,'about:blank'],{windowsHide:true,stdio:'ignore'});
@@ -76,7 +77,7 @@ try{
     for(const width of [1440,390]){
       await cdp('Emulation.setDeviceMetricsOverride',{width,height:950,deviceScaleFactor:1,mobile:width<600});
       await go('/textbooks/math-4/practice?from=2&to=3','#txGenerate');assert.ok(await ev('document.documentElement.scrollWidth<=innerWidth'));await shot(`generate-${width}.png`);
-      await ev('document.querySelector("#txFigures").checked=true;document.querySelector("#txCount").value="3";document.querySelector("#txGenerate").requestSubmit()');await wait('document.querySelector("#txAttempt")');assert.ok(await ev('!!document.querySelector(".tx-figure svg")'));await shot(`attempt-${width}.png`);
+      await ev('document.querySelector("#txFigures").checked=true;document.querySelector("#txCount").value="3";document.querySelector("#txGenerate").requestSubmit()');await wait('document.querySelector("#txAttempt")');assert.ok(await ev('!!document.querySelector(".tx-figure img")'));await shot(`attempt-${width}.png`);
       await ev('document.querySelectorAll(".tx-options").forEach(f=>f.querySelectorAll("input")[3].checked=true);document.querySelector("#txAttempt").requestSubmit()');await wait('document.querySelector(".tx-result")');assert.ok(await ev('document.querySelector(".tx-result").innerText.includes("۱۰۰")'));
       await go('/textbook-papers/'+paperId,'.tx-paper');assert.ok(await ev('document.body.innerText.includes("۱۸٫۵") || document.body.innerText.includes("۱۸.۵")'));assert.ok(await ev('document.documentElement.scrollWidth<=innerWidth'));
     }
