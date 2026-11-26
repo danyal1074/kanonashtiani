@@ -181,20 +181,104 @@ async function examDetail(el, { id }) {
 
 // ================= دانش‌آموزان =================
 async function students(el) {
-  const classes = await myClasses();
+  const [classes, overview] = await Promise.all([myClasses(), api('/api/teacher/overview').catch(() => ({}))]);
+  const allCenterClasses = overview?.all_classes || classes;
   const q = {};
   const m = /class=(\d+)/.exec(location.hash); if (m) q.class_id = m[1];
-  setHead('عملکرد دانش‌آموزان', 'امتیاز، رتبه، میانگین آزمون، غیبت و مطالعه هفته');
+  setHead('عملکرد دانش‌آموزان', 'امتیاز، رتبه، ثبت و انتقال کلاس دانش‌آموزان', `<button class="btn sm" id="tAddStudent">${icon('user-plus', { size: 16 })} ثبت دانش‌آموز جدید</button>`);
   const draw = async () => {
     const list = await api(`/api/teacher/students?${qs(q)}`);
-    el.innerHTML = filterBar(classes, q) + `<div class="card"><input class="input" id="sSearch" placeholder=" جستجوی نام…" style="margin-bottom:12px"><div class="table-wrap"><table class="table"><thead><tr><th>رتبه پایه</th><th>دانش‌آموز</th><th>کلاس</th><th>امتیاز</th><th>سطح</th><th>میانگین آزمون</th><th>غیبت ماه</th><th>مطالعه هفته</th></tr></thead><tbody id="sBody">
+    el.innerHTML = filterBar(classes, q) + `<div class="card"><input class="input" id="sSearch" placeholder=" جستجوی نام…" style="margin-bottom:12px"><div class="table-wrap"><table class="table"><thead><tr><th>رتبه پایه</th><th>دانش‌آموز</th><th>کلاس</th><th>امتیاز</th><th>سطح</th><th>میانگین آزمون</th><th>غیبت ماه</th><th>مطالعه هفته</th><th>عملیات</th></tr></thead><tbody id="sBody">
       ${list.map((s) => `<tr class="click" data-href="#/students/${s.id}" data-name="${esc(s.full_name)}"><td><b>${fa(s.rank)}</b></td><td>${esc(s.full_name)}</td><td>${gradeName(s.grade)} ${esc(s.class_name)}</td><td><b>${fa(s.points)}</b></td><td>${s.level.name}</td>
-      <td>${s.avg_percent == null ? '—' : `<span class="badge ${s.avg_percent >= 75 ? 'green' : s.avg_percent >= 50 ? 'yellow' : 'red'}">${pct(s.avg_percent)}</span>`}</td><td>${s.absences ? `<span class="neg">${fa(s.absences)}</span>` : '۰'}</td><td>${fa(s.week_minutes)} دقیقه</td></tr>`).join('')}</tbody></table></div></div>`;
+      <td>${s.avg_percent == null ? '—' : `<span class="badge ${s.avg_percent >= 75 ? 'green' : s.avg_percent >= 50 ? 'yellow' : 'red'}">${pct(s.avg_percent)}</span>`}</td><td>${s.absences ? `<span class="neg">${fa(s.absences)}</span>` : '۰'}</td><td>${fa(s.week_minutes)} دقیقه</td>
+      <td><button type="button" class="btn sm soft" data-transfer="${s.id}" data-name="${esc(s.full_name)}" data-cls="${s.class_id}" title="انتقال به کلاس دیگر" style="padding:3px 8px;font-size:11px;display:inline-flex;align-items:center;gap:4px">${icon('arrow-right-left', { size: 13 })} انتقال کلاس</button></td></tr>`).join('')}</tbody></table></div></div>`;
     bindFilter(el, q, draw);
     $('#sSearch', el).oninput = (e) => $$('#sBody tr', el).forEach((tr) => { tr.style.display = tr.dataset.name.includes(e.target.value.trim()) ? '' : 'none'; });
   };
   await draw();
-  on(el, 'click', 'tr[data-href]', (e, tr) => { location.hash = tr.dataset.href; });
+
+  const openTransferModal = (sid, sname, curCls) => {
+    const targets = allCenterClasses.filter((c) => c.id !== curCls);
+    if (!targets.length) return toast('کلاس مقصد دیگری برای انتقال وجود ندارد', 'err');
+    modal({
+      title: `انتقال «${esc(sname)}» به کلاس دیگر`,
+      body: `<form id="tMoveForm" class="stack">
+        <p class="small muted">کلاس مقصد را انتخاب کنید. با انتقال دانش‌آموز، کلاس و پایهٔ او به‌روزرسانی می‌شود.</p>
+        <div class="field"><label for="tMvCls">کلاس مقصد</label><select class="input" id="tMvCls" name="class_id">${targets.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
+      </form>`,
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'انتقال دانش‌آموز',
+          onClick: async (m) => {
+            const cid = Number($('#tMvCls', m).value);
+            try {
+              await post(`/api/teacher/students/${sid}/move`, { class_id: cid });
+              toast(`«${sname}» با موفقیت منتقل شد`, 'ok');
+              classesCache = null;
+              draw();
+              return true;
+            } catch (err) {
+              toast(err.message || 'خطا در انتقال دانش‌آموز', 'err');
+              return false;
+            }
+          }
+        }
+      ]
+    });
+  };
+
+  on(el, 'click', '[data-transfer]', (e, btn) => {
+    e.stopPropagation();
+    openTransferModal(Number(btn.dataset.transfer), btn.dataset.name, Number(btn.dataset.cls));
+  });
+
+  const addStBtn = document.getElementById('tAddStudent');
+  if (addStBtn) addStBtn.onclick = () => {
+    if (!classes.length) return toast('شما هنوز کلاسی برای ثبت دانش‌آموز ندارید', 'err');
+    modal({
+      title: 'ثبت دستی دانش‌آموز جدید',
+      body: `<form id="tAddStForm" class="stack">
+        <div class="field"><label for="tStName">نام و نام خانوادگی</label><input class="input" id="tStName" name="full_name" required maxlength="80" placeholder="مثلاً محمد رضایی"></div>
+        <div class="field"><label for="tStNc">کد ملی (۱۰ رقم - نام کاربری و رمز ورود اولیه)</label><input class="input ltr num" id="tStNc" name="national_code" required maxlength="10" placeholder="0123456789"></div>
+        <div class="field"><label for="tStCls">کلاس</label><select class="input" id="tStCls" name="class_id">${classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="tStGen">جنسیت</label><select class="input" id="tStGen" name="gender"><option value="m">پسر</option><option value="f">دختر</option></select></div>
+        <div class="field"><label for="tStPhone">شماره موبایل والدین (اختیاری)</label><input class="input ltr num" id="tStPhone" name="parent_phone" maxlength="11" placeholder="09123456789"></div>
+        <div class="field"><label for="tStSchool">مدرسه (اختیاری)</label><input class="input" id="tStSchool" name="school" maxlength="100"></div>
+      </form>`,
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'ثبت‌نام دانش‌آموز',
+          onClick: async (m) => {
+            const d = formData($('#tAddStForm', m));
+            if (!d.full_name?.trim()) { toast('نام و نام خانوادگی را وارد کنید', 'err'); return false; }
+            if (!d.national_code?.trim()) { toast('کد ملی را وارد کنید', 'err'); return false; }
+            try {
+              const r = await post('/api/teacher/students', d);
+              toast('دانش‌آموز با موفقیت ثبت شد', 'ok');
+              await modal({
+                title: 'ثبت‌نام با موفقیت انجام شد',
+                body: `<div class="stack small"><div><b>${esc(d.full_name)}</b> در کلاس ثبت شد.</div><div class="badge green" style="padding:8px">${esc(r.credentials?.student || '')}</div></div>`,
+                actions: [{ label: 'متوجه شدم', value: true }]
+              });
+              classesCache = null;
+              draw();
+              return true;
+            } catch (err) {
+              toast(err.message || 'خطا در ثبت دانش‌آموز', 'err');
+              return false;
+            }
+          }
+        }
+      ]
+    });
+  };
+
+  on(el, 'click', 'tr[data-href]', (e, tr) => {
+    if (e.target.closest('[data-transfer]')) return;
+    location.hash = tr.dataset.href;
+  });
 }
 
 export function studentDetailHtml(d) {
@@ -210,7 +294,7 @@ export function studentDetailHtml(d) {
 
 async function studentDetail(el, { id }) {
   const d = await api(`/api/teacher/students/${id}`);
-  setHead(esc(d.info.full_name), 'پرونده عملکرد، مسیر یادگیری و یادداشت مشاوره', `<a class="btn ghost sm" href="#/students">→ دانش‌آموزان</a> <a class="btn soft sm" href="#/messages/${id}">${icon('message', { size: 16 })} پیام</a> <button class="btn sm" id="givePts">${icon('star', { size: 16 })} امتیاز کلاسی</button>`);
+  setHead(esc(d.info.full_name), 'پرونده عملکرد، مسیر یادگیری و یادداشت مشاوره', `<a class="btn ghost sm" href="#/students">→ دانش‌آموزان</a> <button class="btn soft sm" id="tDetailMove">${icon('arrow-right-left', { size: 14 })} انتقال کلاس</button> <a class="btn soft sm" href="#/messages/${id}">${icon('message', { size: 16 })} پیام</a> <button class="btn sm" id="givePts">${icon('star', { size: 16 })} امتیاز کلاسی</button>`);
   let steps = d.path.steps.map((s) => ({ ...s }));
   let summary = d.path.summary || '';
   el.innerHTML = studentDetailHtml(d) + `
@@ -233,6 +317,38 @@ async function studentDetail(el, { id }) {
   $('#regen', el).onclick = (e) => busy(e.target, async () => { const g = await post(`/api/teacher/students/${id}/path/regenerate`); steps = g.steps; $('#lpSummary', el).value = g.summary; drawSteps(); toast('پیشنهاد جدید ساخته شد؛ پس از بازبینی ذخیره کنید'); });
   $('#savePath', el).onclick = (e) => busy(e.target, async () => { await put(`/api/teacher/students/${id}/path`, { steps, summary: $('#lpSummary', el).value }); toast('مسیر یادگیری ذخیره شد', 'ok'); });
   $('#noteForm', el).onsubmit = (e) => { e.preventDefault(); busy(e.submitter, async () => { await post(`/api/teacher/students/${id}/notes`, formData(e.target)); toast('یادداشت ثبت شد', 'ok'); studentDetail(el, { id }); }); };
+  const moveBtn = document.getElementById('tDetailMove');
+  if (moveBtn) moveBtn.onclick = async () => {
+    const overview = await api('/api/teacher/overview').catch(() => ({}));
+    const targets = (overview.all_classes || []).filter((c) => c.id !== d.info.class_id);
+    if (!targets.length) return toast('کلاس مقصد دیگری برای انتقال وجود ندارد', 'err');
+    modal({
+      title: `انتقال «${esc(d.info.full_name)}» به کلاس دیگر`,
+      body: `<form id="tMvDForm" class="stack">
+        <p class="small muted">کلاس مقصد را انتخاب کنید. با انتقال دانش‌آموز، کلاس و پایهٔ او به‌روزرسانی می‌شود.</p>
+        <div class="field"><label for="tMvDCls">کلاس مقصد</label><select class="input" id="tMvDCls" name="class_id">${targets.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></div>
+      </form>`,
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'انتقال دانش‌آموز',
+          onClick: async (m) => {
+            const cid = Number($('#tMvDCls', m).value);
+            try {
+              await post(`/api/teacher/students/${id}/move`, { class_id: cid });
+              toast('دانش‌آموز با موفقیت منتقل شد', 'ok');
+              classesCache = null;
+              studentDetail(el, { id });
+              return true;
+            } catch (err) {
+              toast(err.message || 'خطا در انتقال دانش‌آموز', 'err');
+              return false;
+            }
+          }
+        }
+      ]
+    });
+  };
   $('#givePts').onclick = () => modal({ title: ' امتیاز کلاسی', body: `<form class="stack" id="ptsForm"><div class="field"><label>امتیاز (بین ۲۰- تا ۲۰)</label><input class="input" type="number" name="amount" value="3" min="-20" max="20"></div><div class="field"><label>بابت</label><input class="input" name="reason" placeholder="مثلاً: مشارکت فعال در کلاس"></div></form>`,
     actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ثبت امتیاز', onClick: async (m) => { await post(`/api/teacher/students/${id}/points`, formData($('#ptsForm', m))); toast('امتیاز ثبت شد', 'ok'); studentDetail(el, { id }); } }] });
 }

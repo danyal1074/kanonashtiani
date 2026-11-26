@@ -1,8 +1,9 @@
 // پنل معلم
 import { all, get, run, tx } from '../db.js';
-import { fail, ymd, addDays, weekStart, faWeekday, clampStr, saveUpload } from '../util.js';
+import { fail, ymd, addDays, weekStart, faWeekday, clampStr, saveUpload, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate } from '../util.js';
 import { addPoints, totalPoints, levelOf, gradeRanking, saveExamResult, ensureLearningPath, generateLearningPath, subjectScores } from '../logic.js';
 import { studentResults, studyWeek } from './student.js';
+import { syncStudentsLater } from '../classroom.js';
 
 const T = { roles: ['teacher'] };
 
@@ -112,6 +113,7 @@ export default function register(r) {
     const ph = ids.map(() => '?').join(',') || 'NULL';
     return {
       classes,
+      all_classes: all('SELECT c.id, c.grade, c.name FROM classes c WHERE c.center_id=? ORDER BY c.grade, c.name', t.center_id),
       today: all(`SELECT sc.start, sc.end, sc.subject, sc.room, c.name class_name, c.grade, c.id class_id FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.teacher_id=? AND sc.weekday=? ORDER BY sc.start`, t.id, faWeekday(today)),
       stats: {
         students: classes.reduce((a, c) => a + c.students, 0),
@@ -273,6 +275,65 @@ export default function register(r) {
 
   // ---------- دانش‌آموزان و مسیر یادگیری ----------
   r.get('/api/teacher/students', T, (ctx) => performanceList(ctx.user.center_id, classFilter(ctx.user.id, ctx.query).map((c) => c.id)));
+  r.post('/api/teacher/students', T, (ctx) => {
+    const b = ctx.body;
+    const full_name = clampStr(b.full_name, 80);
+    if (!full_name) fail(400, 'نام و نام خانوادگی را وارد کنید');
+    const national_code = normalizeNationalCode(b.national_code);
+    if (!isValidNationalCode(national_code)) fail(400, 'کد ملی ۱۰ رقمی معتبر نیست');
+
+    const cls = ownClass(ctx.user.id, b.class_id);
+
+    // ۱. بررسی تکراری نبودن کد ملی در کل کانون
+    const dupNc = get(`SELECT u.id, u.full_name, c.name class_name FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE u.role='student' AND u.national_code=?`, national_code);
+    if (dupNc) fail(400, `دانش‌آموزی با این کد ملی قبلاً با نام «${dupNc.full_name}» ${dupNc.class_name ? `در کلاس «${dupNc.class_name}»` : ''} ثبت شده است`);
+
+    // ۲. بررسی تکراری نبودن نام و نام خانوادگی در همان کلاس
+    const dupName = get(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.full_name=? AND s.class_id=?`, ctx.user.center_id, full_name, cls.id);
+    if (dupName) fail(400, `دانش‌آموزی با نام «${full_name}» قبلاً در این کلاس ثبت شده است`);
+
+    const hasPhone = !!String(b.parent_phone ?? '').trim();
+    const parent_phone = hasPhone ? normalizeIranianMobile(b.parent_phone) : null;
+    if (hasPhone && !parent_phone) fail(400, 'شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود');
+
+    let birth_date = null;
+    if (b.birth_date && String(b.birth_date).trim()) {
+      try { birth_date = parseBirthDate(b.birth_date); } catch (e) { fail(400, e.message); }
+    }
+    const school = clampStr(b.school, 100);
+    const gender = b.gender === 'f' ? 'f' : 'm';
+
+    const id = tx(() => {
+      const res = run(`INSERT INTO users (center_id, role, national_code, pass_hash, full_name, gender, must_change_password) VALUES (?,?,?,?,?,?,1)`,
+        ctx.user.center_id, 'student', national_code, hashPassword(national_code), full_name, gender);
+      const uid = Number(res.lastInsertRowid);
+      run('INSERT INTO students (user_id, school, grade, class_id, birth_date, parent_phone, address, avatar, profile_done) VALUES (?,?,?,?,?,?,?,?,?)',
+        uid, school, cls.grade, cls.id, birth_date, parent_phone, '', 'sprout', 0);
+      return uid;
+    });
+
+    syncStudentsLater([id]);
+    return { ok: true, id, credentials: { student: `نام کاربری و رمز اولیه: کد ملی (${national_code})` } };
+  });
+
+  r.post('/api/teacher/students/:id/move', T, (ctx) => {
+    const s = ownStudent(ctx.user.id, ctx.params.id);
+    const targetClsId = Number(ctx.body.class_id);
+    if (!targetClsId) fail(400, 'کلاس مقصد انتخاب نشده است');
+    const targetCls = get('SELECT * FROM classes WHERE id=? AND center_id=?', targetClsId, ctx.user.center_id);
+    if (!targetCls) fail(404, 'کلاس مقصد یافت نشد');
+    if (s.class_id === targetCls.id) fail(400, 'دانش‌آموز در حال حاضر در همین کلاس قرار دارد');
+
+    // جلوگیری از نام تکراری در کلاس مقصد
+    const dupInTarget = get(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.full_name=? AND s.class_id=? AND u.id!=?`,
+      ctx.user.center_id, s.full_name, targetCls.id, s.id);
+    if (dupInTarget) fail(400, `دانش‌آموزی با نام «${s.full_name}» در کلاس مقصد از قبل وجود دارد`);
+
+    run('UPDATE students SET class_id=?, grade=? WHERE user_id=?', targetCls.id, targetCls.grade, s.id);
+    syncStudentsLater([s.id]);
+    return { ok: true, moved: true, class_name: targetCls.name, grade: targetCls.grade };
+  });
+
   r.get('/api/teacher/students/:id', T, (ctx) => studentDetail(ownStudent(ctx.user.id, ctx.params.id)));
   r.put('/api/teacher/students/:id/path', T, (ctx) => {
     const s = ownStudent(ctx.user.id, ctx.params.id);

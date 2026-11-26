@@ -131,7 +131,7 @@ async function students(el) {
     <td class="ad-first"><button type="button" class="ad-student ad-link" data-view="${s.id}" aria-label="پروفایل ${esc(s.full_name)}">${nameAvatar(s.full_name)}<span><b>${esc(s.full_name)}</b><small class="num">${fa(s.national_code)}</small></span></button></td>
     <td data-l="پایه و کلاس">${gradeName(s.grade)} · ${esc(s.class_name || '—')}</td><td data-l="موبایل والدین" class="num">${s.parent_phone ? fa(s.parent_phone) : '—'}</td>
     <td data-l="حق عضویت"><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td>
-    <td class="ad-act"><div class="row" style="gap:2px;justify-content:flex-end"><button class="icon-btn" data-view="${s.id}" title="پروفایل" aria-label="پروفایل">${icon('eye', { size: 17 })}</button><button class="icon-btn" data-imp="${s.id}" title="ورود به پنل دانش‌آموز" aria-label="ورود به پنل دانش‌آموز">${icon('user-check', { size: 17 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 17 })}</button><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'circle-x' : 'check-circle', { size: 17 })}</button><button class="icon-btn" data-sms="${s.id}" title="پیامک" aria-label="ارسال پیامک">${icon('message', { size: 17 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف" style="color:var(--red)">${icon('trash', { size: 17 })}</button></div></td></tr>`;
+    <td class="ad-act"><div class="row" style="gap:4px;justify-content:flex-end;align-items:center"><button class="btn sm soft green" data-pay-fee="${s.id}" title="پرداخت شهریه" style="padding:2px 8px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap">${icon('credit-card', { size: 14 })} پرداخت شهریه</button><button class="icon-btn" data-view="${s.id}" title="پروفایل" aria-label="پروفایل">${icon('eye', { size: 17 })}</button><button class="icon-btn" data-imp="${s.id}" title="ورود به پنل دانش‌آموز" aria-label="ورود به پنل دانش‌آموز">${icon('user-check', { size: 17 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 17 })}</button><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'circle-x' : 'check-circle', { size: 17 })}</button><button class="icon-btn" data-sms="${s.id}" title="پیامک" aria-label="ارسال پیامک">${icon('message', { size: 17 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف" style="color:var(--red)">${icon('trash', { size: 17 })}</button></div></td></tr>`;
   let seq = 0;
   const load = async () => {
     const my = ++seq;
@@ -198,6 +198,53 @@ async function students(el) {
         } }] });
     }
   });
+  const openPayFeeModal = (sid) => {
+    const s = rows.find((x) => x.id === sid);
+    if (!s) return;
+    const isPaid = s.pay === 'paid';
+    modal({
+      title: `پرداخت شهریه — ${esc(s.full_name)}`,
+      body: `<form id="payFeeForm" class="stack">
+        <div class="row between" style="padding:10px;background:var(--bg-card,#f4f8fd);border:1px solid var(--line,#d5e3f4);border-radius:12px;margin-bottom:8px">
+          <div>
+            <b>${esc(s.full_name)}</b>
+            <div class="tiny muted">کد ملی: ${fa(s.national_code)} · پایه ${gradeName(s.grade)} ${esc(s.class_name || '')}</div>
+          </div>
+          <span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span>
+        </div>
+        ${isPaid ? `<p class="small" style="color:var(--green,#16a34a);margin:4px 0">وضعیت شهریه این دانش‌آموز هم‌اکنون به صورت <b>پرداخت‌شده</b> ثبت است.</p>` : ''}
+        <div class="field"><label for="pfPeriod">بابت دوره / ماه</label><input class="input" id="pfPeriod" name="period" placeholder="مثلاً: ترم پاییز، آبان، یا کل سال"></div>
+        <div class="field"><label for="pfMethod">روش پرداخت</label><select class="input" id="pfMethod" name="method"><option value="card">کارت‌به‌کارت / انتقال بانکی</option><option value="cash">نقدی</option><option value="pos">دستگاه پوز کانون</option><option value="buffet">بوفه کانون</option></select></div>
+        <div class="field"><label for="pfNote">شماره پیگیری / یادداشت</label><input class="input" id="pfNote" name="note" placeholder="اختیاری"></div>
+      </form>`,
+      actions: [
+        ...(isPaid ? [{
+          label: 'لغو پرداخت',
+          cls: 'danger soft',
+          onClick: async () => {
+            if (!confirm(`آیا پرداخت شهریه «${esc(s.full_name)}» لغو شود؟`)) return false;
+            await post('/api/manager/students/fee-paid', { ids: [s.id], paid: false });
+            toast('پرداخت شهریه لغو شد', 'ok');
+            load();
+            return true;
+          }
+        }] : []),
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: isPaid ? 'ثبت مجدد / بروزرسانی' : 'تأیید و ثبت پرداخت شهریه',
+          cls: 'green',
+          onClick: async (m) => {
+            const period = $('#pfPeriod', m).value.trim();
+            await post('/api/manager/students/fee-paid', { ids: [s.id], paid: true, period: period || undefined });
+            toast(`پرداخت شهریه برای «${s.full_name}» ثبت شد`, 'ok');
+            load();
+            return true;
+          }
+        }
+      ]
+    });
+  };
+  on(el, 'click', '[data-pay-fee]', (e, b) => openPayFeeModal(Number(b.dataset.payFee)));
   on(el, 'click', '[data-paid]', (e, b) => busy(b, async () => {
     const s = rows.find((x) => x.id === Number(b.dataset.paid)), paid = s.pay !== 'paid';
     if (!paid && !(await confirmBox(`پرداخت حق عضویت «${esc(s.full_name)}» لغو شود؟ سند اصلاحی ثبت می‌شود.`, 'لغو پرداخت'))) return;
@@ -968,7 +1015,7 @@ async function studentsClassic(el) {
   const fillClasses = () => { $('#fc', el).innerHTML = `<option value="">همه کلاس‌ها</option>${md.classes.filter((c) => !q.grade || c.grade === Number(q.grade)).map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}`; };
   fillClasses();
   const rowHtml = (s) => `<tr><td><input type="checkbox" data-sel="${s.id}" ${sel.has(s.id) ? 'checked' : ''} aria-label="انتخاب ${esc(s.full_name)}"></td><td class="click" data-view="${s.id}"><b>${esc(s.full_name)}</b></td><td class="num">${fa(s.national_code)}</td><td>${gradeName(s.grade)} ${esc(s.class_name || '—')}<div class="tiny muted">پنل ${s.grade <= 6 ? 'دبستان' : 'متوسطه'}</div></td><td class="small">${esc(s.school || '')}</td><td class="num">${fa(s.parent_phone)}</td>
-    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td><td><div class="row" style="gap:4px"><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'x' : 'check-circle', { size: 16 })}</button><button class="icon-btn" data-sms="${s.id}" title="ارسال پیامک" aria-label="ارسال پیامک">${icon('message', { size: 16 })}</button><button class="icon-btn" data-imp="${s.id}" title="ورود به پنل دانش‌آموز" aria-label="ورود به پنل دانش‌آموز">${icon('user-check', { size: 17 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
+    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td><td><div class="row" style="gap:4px;align-items:center"><button class="btn sm soft green" data-pay-fee="${s.id}" title="پرداخت شهریه" style="padding:2px 8px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap">${icon('credit-card', { size: 14 })} پرداخت شهریه</button><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'x' : 'check-circle', { size: 16 })}</button><button class="icon-btn" data-sms="${s.id}" title="ارسال پیامک" aria-label="ارسال پیامک">${icon('message', { size: 16 })}</button><button class="icon-btn" data-imp="${s.id}" title="ورود به پنل دانش‌آموز" aria-label="ورود به پنل دانش‌آموز">${icon('user-check', { size: 17 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
   let seq = 0;
   const load = async (append) => {
     const my = ++seq;
@@ -1019,6 +1066,53 @@ async function studentsClassic(el) {
         } }] });
     }
   });
+  const openPayFeeModal = (sid) => {
+    const s = rows.find((x) => x.id === sid);
+    if (!s) return;
+    const isPaid = s.pay === 'paid';
+    modal({
+      title: `پرداخت شهریه — ${esc(s.full_name)}`,
+      body: `<form id="payFeeForm" class="stack">
+        <div class="row between" style="padding:10px;background:var(--bg-card,#f4f8fd);border:1px solid var(--line,#d5e3f4);border-radius:12px;margin-bottom:8px">
+          <div>
+            <b>${esc(s.full_name)}</b>
+            <div class="tiny muted">کد ملی: ${fa(s.national_code)} · پایه ${gradeName(s.grade)} ${esc(s.class_name || '')}</div>
+          </div>
+          <span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span>
+        </div>
+        ${isPaid ? `<p class="small" style="color:var(--green,#16a34a);margin:4px 0">وضعیت شهریه این دانش‌آموز هم‌اکنون به صورت <b>پرداخت‌شده</b> ثبت است.</p>` : ''}
+        <div class="field"><label for="pfPeriod">بابت دوره / ماه</label><input class="input" id="pfPeriod" name="period" placeholder="مثلاً: ترم پاییز، آبان، یا کل سال"></div>
+        <div class="field"><label for="pfMethod">روش پرداخت</label><select class="input" id="pfMethod" name="method"><option value="card">کارت‌به‌کارت / انتقال بانکی</option><option value="cash">نقدی</option><option value="pos">دستگاه پوز کانون</option><option value="buffet">بوفه کانون</option></select></div>
+        <div class="field"><label for="pfNote">شماره پیگیری / یادداشت</label><input class="input" id="pfNote" name="note" placeholder="اختیاری"></div>
+      </form>`,
+      actions: [
+        ...(isPaid ? [{
+          label: 'لغو پرداخت',
+          cls: 'danger soft',
+          onClick: async () => {
+            if (!confirm(`آیا پرداخت شهریه «${esc(s.full_name)}» لغو شود؟`)) return false;
+            await post('/api/manager/students/fee-paid', { ids: [s.id], paid: false });
+            toast('پرداخت شهریه لغو شد', 'ok');
+            load();
+            return true;
+          }
+        }] : []),
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: isPaid ? 'ثبت مجدد / بروزرسانی' : 'تأیید و ثبت پرداخت شهریه',
+          cls: 'green',
+          onClick: async (m) => {
+            const period = $('#pfPeriod', m).value.trim();
+            await post('/api/manager/students/fee-paid', { ids: [s.id], paid: true, period: period || undefined });
+            toast(`پرداخت شهریه برای «${s.full_name}» ثبت شد`, 'ok');
+            load();
+            return true;
+          }
+        }
+      ]
+    });
+  };
+  on(el, 'click', '[data-pay-fee]', (e, b) => openPayFeeModal(Number(b.dataset.payFee)));
   on(el, 'click', '[data-paid]', (e, b) => busy(b, async () => {
     const s = rows.find((x) => x.id === Number(b.dataset.paid)), paid = s.pay !== 'paid';
     if (!paid && !(await confirmBox(`پرداخت حق عضویت «${esc(s.full_name)}» لغو شود؟ سند اصلاحی ثبت می‌شود.`, 'لغو پرداخت'))) return;

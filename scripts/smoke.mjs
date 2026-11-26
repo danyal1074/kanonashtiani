@@ -94,6 +94,27 @@ check('ورود والدین غیرفعال است (پنل والدین حذف �
 // معلم فقط دانش‌آموز کلاس خودش
 const other = (await call(S.manager.ck, 'GET', '/api/manager/students?grade=4&limit=1')).data.rows[0];
 check('معلم: دانش‌آموز کلاس دیگر ممنوع', (await call(S.teacher.ck, 'GET', `/api/teacher/students/${other.id}`)).status === 403);
+
+// ثبت‌نام دستی دانش‌آموز توسط معلم و انتقال کلاس
+const tClasses = (await call(S.teacher.ck, 'GET', '/api/teacher/overview')).data.classes;
+if (tClasses.length) {
+  const tCls = tClasses[0];
+  const tNc = (() => { const d = [9, 8, 7, 6, 5, 4, 3, 2, 1]; const s = d.reduce((a, x, i) => a + x * (10 - i), 0) % 11; return d.join('') + (s < 2 ? s : 11 - s); })();
+  const regT = await call(S.teacher.ck, 'POST', '/api/teacher/students', { full_name: 'دانش‌آموز دستی معلم', national_code: tNc, class_id: tCls.id, gender: 'm' });
+  check('ثبت دستی دانش‌آموز توسط معلم', regT.status === 200, JSON.stringify(regT.data));
+
+  // تست عدم ثبت دانش‌آموز تکراری با همان کد ملی
+  const dupNcReg = await call(S.teacher.ck, 'POST', '/api/teacher/students', { full_name: 'نام دیگر', national_code: tNc, class_id: tCls.id });
+  check('جلوگیری از ثبت کد ملی تکراری توسط معلم', dupNcReg.status === 400);
+
+  // تست انتقال دانش‌آموز به کلاس دیگر
+  const allCls = (await call(S.teacher.ck, 'GET', '/api/teacher/overview')).data.all_classes;
+  const targetCls = allCls?.find(c => c.id !== tCls.id);
+  if (targetCls && regT.data?.id) {
+    const moveRes = await call(S.teacher.ck, 'POST', `/api/teacher/students/${regT.data.id}/move`, { class_id: targetCls.id });
+    check('انتقال دانش‌آموز به کلاس دیگر توسط معلم', moveRes.status === 200 && moveRes.data.moved === true);
+  }
+}
 // پیام‌رسان: فقط مخاطب مجاز (دانش‌آموز کانون دیگر ممنوع)
 check('پیام به مخاطب غیرمجاز ممنوع', (await call(S.student.ck, 'POST', '/api/messages', { to: 999999, body: 'سلام' })).status === 403);
 
