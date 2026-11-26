@@ -523,6 +523,16 @@ export default function register(r) {
     t.assign = all('SELECT class_id, subject FROM teacher_classes WHERE teacher_id=?', t.id);
     return t;
   });
+  r.del('/api/manager/teachers/:id', M, (ctx) => {
+    const t = get(`SELECT id FROM users WHERE id=? AND center_id=? AND role='teacher'`, Number(ctx.params.id), ctx.user.center_id);
+    if (!t) fail(404, 'معلم یافت نشد');
+    tx(() => {
+      run('UPDATE schedule SET teacher_id=NULL WHERE teacher_id=?', t.id);
+      run('DELETE FROM teacher_classes WHERE teacher_id=?', t.id);
+      run('DELETE FROM users WHERE id=?', t.id);
+    });
+    return { ok: true };
+  });
   r.get('/api/manager/schedule/colors', M, (ctx) => JSON.parse(get('SELECT config FROM schedule_colors WHERE center_id=?', ctx.user.center_id)?.config || '{}'));
   r.put('/api/manager/schedule/colors', M, (ctx) => {
     const config = { kinds: Object.create(null), subjects: Object.create(null) };
@@ -864,6 +874,12 @@ export default function register(r) {
       Math.max(0, Math.min(90, Number(b.discount_percent) || 0)), clampStr(b.cover, 8) || '📘', /^#[0-9a-f]{6}$/i.test(b.color) ? b.color : '#7c3aed', b.active === false ? 0 : 1];
     if (b.id) run('UPDATE products SET title=?, kind=?, grade=?, description=?, details=?, price=?, discount_percent=?, cover=?, color=?, active=? WHERE id=? AND center_id=?', ...vals, Number(b.id), ctx.user.center_id);
     else run('INSERT INTO products (title, kind, grade, description, details, price, discount_percent, cover, color, active, center_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)', ...vals, ctx.user.center_id);
+    return { ok: true };
+  });
+  r.del('/api/manager/products/:id', M, (ctx) => {
+    const p = get('SELECT id FROM products WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id);
+    if (!p) fail(404, 'محصول یافت نشد');
+    run('DELETE FROM products WHERE id=?', p.id);
     return { ok: true };
   });
   r.post('/api/manager/discount-codes', M, (ctx) => {

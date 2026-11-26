@@ -357,3 +357,11 @@ section[hidden] { display: none; }
 :is(.manager-ui, .teacher-minimal).look-new .look-toggle > span { padding: 0 6px; font-weight: 700; white-space: nowrap; }
 :is(.manager-ui, .teacher-minimal).look-new .look-toggle button { flex: 1; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; font-weight: 700; padding: 4px 6px; cursor: pointer; }
 :is(.manager-ui, .teacher-minimal).look-new .look-toggle button[aria-pressed="true"] { background: #fff; color: var(--brand-900); box-shadow: var(--shadow-xs); }
+
+/* ---------- ظرافت بصری بیشتر در پنل مدیر ---------- */
+:is(.manager-ui, .teacher-minimal).look-new .ad-card { transition: box-shadow .18s ease, border-color .18s ease; }
+:is(.manager-ui, .teacher-minimal).look-new .ad-card:hover { border-color: var(--line-strong); box-shadow: 0 6px 18px rgba(15, 27, 45, .06); }
+:is(.manager-ui, .teacher-minimal).look-new .table.ad-cards tbody tr { transition: background-color .12s ease; }
+:is(.manager-ui, .teacher-minimal).look-new .table.ad-cards tbody tr:hover { background-color: color-mix(in srgb, var(--brand-50) 45%, transparent); }
+:is(.manager-ui, .teacher-minimal).look-new .ad-act .icon-btn:hover { background: var(--surface-2); transform: translateY(-1px); }
+:is(.manager-ui, .teacher-minimal).look-new .ad-actions .btn { border-radius: 10px; font-weight: 700; }
