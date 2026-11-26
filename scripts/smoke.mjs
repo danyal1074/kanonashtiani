@@ -237,6 +237,8 @@ check('ساخت کانون دوم ممنوع است (سامانهٔ اختصاص
 check('حالت نمایشی در نسخهٔ واقعی خاموش است', (await call('', 'GET', '/api/public/mode')).data.demo === false);
 const schOverview = (await call(S.manager.ck, 'GET', '/api/manager/schedule/overview')).data;
 check('جدول هفتگی مدیر برمی‌گردد', Array.isArray(schOverview));
+const stPage = (await call(S.manager.ck, 'GET', '/api/manager/students?limit=2')).data;
+check('گزارش دانش‌آموزان شامل دوره ماه جاری و ماه قبل است', !!stPage.current_period && !!stPage.prev_period);
 if (schOverview.length) {
   const s0 = schOverview[0];
   const updSch = await call(S.manager.ck, 'PUT', `/api/manager/schedule/${s0.id}`, { room: 'اتاق جدید ۱۰۱', subject: s0.subject });

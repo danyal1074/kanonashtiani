@@ -692,6 +692,11 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
     const cols = database.prepare('PRAGMA table_info(centers)').all().map((c) => c.name);
     if (!cols.includes('subjects')) database.exec('ALTER TABLE centers ADD COLUMN subjects TEXT');
   },
+  // مهلت شرکت در آزمون آنلاین (deadline)
+  (database) => {
+    const cols = database.prepare('PRAGMA table_info(exams)').all().map((c) => c.name);
+    if (!cols.includes('deadline')) database.exec('ALTER TABLE exams ADD COLUMN deadline TEXT');
+  },
 ];
 
 export function migrate(database = db) {

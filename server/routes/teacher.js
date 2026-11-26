@@ -4,22 +4,46 @@ import { fail, ymd, addDays, weekStart, faWeekday, clampStr, saveUpload, hashPas
 import { addPoints, totalPoints, levelOf, gradeRanking, saveExamResult, ensureLearningPath, generateLearningPath, subjectScores } from '../logic.js';
 import { studentResults, studyWeek } from './student.js';
 import { syncStudentsLater } from '../classroom.js';
+import { generateExamQuestions, extractTextExamFromBookPages } from '../exam-ai.js';
 
 const T = { roles: ['teacher'] };
 
-export const teacherClasses = (tid) => all(`SELECT c.id, c.grade, c.name, GROUP_CONCAT(tc.subject, '، ') subjects,
-  (SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1) students
-  FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=? GROUP BY c.id ORDER BY c.grade, c.name`, tid);
+export const teacherClasses = (tid) => {
+  const tcRows = all(`SELECT c.id, c.grade, c.name, tc.subject
+    FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=?`, tid);
+  const scRows = all(`SELECT c.id, c.grade, c.name, sc.subject
+    FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.teacher_id=?`, tid);
+  const byId = new Map();
+  for (const r of [...scRows, ...tcRows]) {
+    if (!byId.has(r.id)) {
+      byId.set(r.id, { id: r.id, grade: r.grade, name: r.name, subjectsSet: new Set() });
+    }
+    if (r.subject && r.subject.trim()) byId.get(r.id).subjectsSet.add(r.subject.trim());
+  }
+  return [...byId.values()].map((c) => ({
+    id: c.id,
+    grade: c.grade,
+    name: c.name,
+    subjects: [...c.subjectsSet].join('، '),
+    students: get('SELECT COUNT(*) n FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=? AND u.active=1', c.id)?.n || 0,
+  })).sort((a, b) => a.grade - b.grade || a.name.localeCompare(b.name, 'fa'));
+};
 
 function ownClass(tid, classId) {
-  const c = get('SELECT c.* FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=? AND c.id=?', tid, Number(classId));
+  const c = get(`SELECT c.* FROM classes c WHERE c.id=? AND (
+    EXISTS (SELECT 1 FROM teacher_classes tc WHERE tc.teacher_id=? AND tc.class_id=c.id)
+    OR EXISTS (SELECT 1 FROM schedule sc WHERE sc.teacher_id=? AND sc.class_id=c.id)
+  )`, Number(classId), tid, tid);
   if (!c) fail(403, 'این کلاس متعلق به شما نیست');
   return c;
 }
 function ownStudent(tid, sid) {
   const s = get(`SELECT u.id, u.full_name, u.national_code, s.grade, s.class_id, s.school, s.avatar, s.birth_date, c.name class_name, u.center_id
     FROM students s JOIN users u ON u.id=s.user_id JOIN classes c ON c.id=s.class_id
-    WHERE u.id=? AND s.class_id IN (SELECT class_id FROM teacher_classes WHERE teacher_id=?)`, Number(sid), tid);
+    WHERE u.id=? AND (
+      s.class_id IN (SELECT class_id FROM teacher_classes WHERE teacher_id=?)
+      OR s.class_id IN (SELECT class_id FROM schedule WHERE teacher_id=?)
+    )`, Number(sid), tid, tid);
   if (!s) fail(403, 'این دانش‌آموز در کلاس‌های شما نیست');
   return s;
 }
@@ -85,8 +109,10 @@ export function parseQuestions(raw, needText) {
     const answer = Number(q.answer);
     if (!(answer >= 0 && answer <= 3)) fail(400, `کلید پاسخ سؤال ${i + 1} مشخص نیست`);
     const out = { answer, subject: clampStr(q.subject, 40) || undefined };
+    const img = typeof q.image === 'string' && /^\/(api\/exam-books|uploads)\//.test(q.image) ? q.image.slice(0, 300) : undefined;
+    if (img) out.image = img;
     if (needText) {
-      out.text = clampStr(q.text, 1000);
+      out.text = clampStr(q.text, 1000) || (img ? `سؤال تصویری شماره ${i + 1}` : '');
       out.options = (q.options || []).slice(0, 4).map((o) => clampStr(o, 300));
       if (!out.text || out.options.length !== 4 || out.options.some((o) => !o)) fail(400, `متن سؤال ${i + 1} و هر چهار گزینه را کامل کنید`);
     }
@@ -111,8 +137,10 @@ export default function register(r) {
     const classes = teacherClasses(t.id);
     const ids = classes.map((c) => c.id);
     const ph = ids.map(() => '?').join(',') || 'NULL';
+    const subjects = [...new Set(classes.flatMap((c) => String(c.subjects || '').split('،').map((s) => s.trim())).filter(Boolean))];
     return {
       classes,
+      subjects,
       all_classes: all('SELECT c.id, c.grade, c.name FROM classes c WHERE c.center_id=? ORDER BY c.grade, c.name', t.center_id),
       schools: all(`SELECT DISTINCT s.school FROM students s JOIN users u ON u.id=s.user_id WHERE u.center_id=? AND s.school<>'' ORDER BY s.school`, t.center_id).map((x) => x.school),
       today: all(`SELECT sc.start, sc.end, sc.subject, sc.room, c.name class_name, c.grade, c.id class_id FROM schedule sc JOIN classes c ON c.id=sc.class_id WHERE sc.teacher_id=? AND sc.weekday=? ORDER BY sc.start`, t.id, faWeekday(today)),
@@ -237,7 +265,7 @@ export default function register(r) {
   });
 
   // ---------- آزمون ----------
-  r.get('/api/teacher/exams', T, (ctx) => all(`SELECT e.id, e.title, e.kind, e.subject, e.grade, e.duration_min, e.created_at, c.name class_name,
+  r.get('/api/teacher/exams', T, (ctx) => all(`SELECT e.id, e.title, e.kind, e.subject, e.grade, e.duration_min, e.deadline, e.created_at, c.name class_name,
     json_array_length(e.questions) qcount, (SELECT COUNT(*) FROM exam_results r WHERE r.exam_id=e.id) results, (SELECT AVG(percent) FROM exam_results r WHERE r.exam_id=e.id) avg
     FROM exams e LEFT JOIN classes c ON c.id=e.class_id WHERE e.created_by=? ORDER BY e.id DESC`, ctx.user.id));
   r.post('/api/teacher/exams', T, (ctx) => {
@@ -246,13 +274,63 @@ export default function register(r) {
     const title = clampStr(b.title, 150);
     if (!title) fail(400, 'عنوان آزمون را وارد کنید');
     const cls = teacherClasses(ctx.user.id);
-    const grade = Number(b.grade);
-    if (!cls.some((c) => c.grade === grade)) fail(403, 'این پایه را تدریس نمی‌کنید');
-    const classId = b.class_id ? ownClass(ctx.user.id, b.class_id).id : null;
     const qs = parseQuestions(b.questions, kind === 'online');
-    const res = run('INSERT INTO exams (center_id, title, kind, subject, grade, class_id, duration_min, questions, created_by) VALUES (?,?,?,?,?,?,?,?,?)',
-      ctx.user.center_id, title, kind, clampStr(b.subject, 40), grade, classId, Math.max(1, Math.min(180, Number(b.duration_min) || 15)), JSON.stringify(qs), ctx.user.id);
+    const durationMin = Math.max(1, Math.min(180, Number(b.duration_min) || 15));
+    const deadline = b.deadline ? String(b.deadline).trim().slice(0, 32) : null;
+    const subject = clampStr(b.subject, 40);
+
+    // پشتیبانی از انتخاب چند کلاس یا یک کلاس مشخص یا همهٔ کلاس‌های پایه
+    const rawClassIds = Array.isArray(b.class_ids) ? b.class_ids.map(Number).filter(Boolean) : [];
+    if (rawClassIds.length) {
+      const ids = [];
+      tx(() => {
+        for (const cid of rawClassIds) {
+          const targetClass = ownClass(ctx.user.id, cid);
+          const res = run('INSERT INTO exams (center_id, title, kind, subject, grade, class_id, duration_min, deadline, questions, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)',
+            ctx.user.center_id, title, kind, subject, targetClass.grade, targetClass.id, durationMin, deadline, JSON.stringify(qs), ctx.user.id);
+          ids.push(Number(res.lastInsertRowid));
+        }
+      });
+      return { ok: true, id: ids[0], ids };
+    }
+
+    let grade = Number(b.grade);
+    const classId = b.class_id ? ownClass(ctx.user.id, b.class_id).id : null;
+    if (classId) {
+      grade = ownClass(ctx.user.id, classId).grade;
+    } else if (!cls.some((c) => c.grade === grade)) {
+      fail(403, 'این پایه را تدریس نمی‌کنید');
+    }
+    const res = run('INSERT INTO exams (center_id, title, kind, subject, grade, class_id, duration_min, deadline, questions, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      ctx.user.center_id, title, kind, subject, grade, classId, durationMin, deadline, JSON.stringify(qs), ctx.user.id);
     return { ok: true, id: Number(res.lastInsertRowid) };
+  });
+  r.post('/api/teacher/exams/ai-generate', T, async (ctx) => {
+    const b = ctx.body;
+    const subject = clampStr(b.subject, 40) || 'ریاضی';
+    const grade = Number(b.grade) || 6;
+    const topic = clampStr(b.topic, 120);
+    const count = Math.max(1, Math.min(20, Number(b.count) || 5));
+    const difficulty = ['easy', 'medium', 'hard'].includes(b.difficulty) ? b.difficulty : 'medium';
+    try {
+      const questions = await generateExamQuestions({ subject, grade, topic, count, difficulty });
+      return { ok: true, questions };
+    } catch (e) {
+      fail(400, e.message);
+    }
+  });
+  r.post('/api/teacher/exams/extract-hoosh', T, async (ctx) => {
+    const b = ctx.body;
+    const bookId = String(b.book_id || '').trim();
+    const pages = Array.isArray(b.pages) ? b.pages : [];
+    const subject = clampStr(b.subject, 40) || 'هوش و استعداد';
+    const maxQuestions = Math.max(1, Math.min(25, Number(b.count) || 15));
+    try {
+      const res = await extractTextExamFromBookPages({ bookId, pages, subject, maxQuestions });
+      return { ok: true, ...res };
+    } catch (e) {
+      fail(400, e.message);
+    }
   });
   const ownExam = (ctx) => {
     const e = get('SELECT * FROM exams WHERE id=? AND created_by=?', Number(ctx.params.id), ctx.user.id);

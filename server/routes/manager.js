@@ -4,7 +4,7 @@ import path from 'node:path';
 import { parseBarpaPdfFile } from '../../scripts/barpa-parser.mjs';
 import { all, get, run, tx, ROOT, UPLOAD_DIR } from '../db.js';
 import { fail, ymd, addDays, clampStr, hashPassword, isValidNationalCode, normalizeNationalCode, normalizeIranianMobile, parseBirthDate, toEnDigits, j2g, jMonthOf, JMONTHS, saveUpload } from '../util.js';
-import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel } from '../logic.js';
+import { feeStatus, announcementAudience, saveExamResult, recalcInvoice, markFeePaid, unmarkFeePaid, backfillZeroPayments, periodLabel, jalaliMonthContext } from '../logic.js';
 export { recalcInvoice };
 import { importStudents } from '../importer.js';
 import { syncStudentsLater, removeStudentsLater, classroomEnabled, pendingRemovals, fullSync, ClassroomError } from '../classroom.js';
@@ -52,8 +52,19 @@ function studentPayload(ctx, b, existingId = null) {
 }
 
 function paymentStateSql() {
-  return `CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL) THEN 'paid'
-    WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='pending' AND p.invoice_id IS NULL) THEN 'pending' ELSE 'unpaid' END`;
+  const { curName, curStart } = jalaliMonthContext();
+  const matchCur = `((p.period IS NOT NULL AND (p.period LIKE '%${curName}%' OR p.period LIKE '%کل سال%')) OR (p.period IS NULL AND date(p.created_at) >= '${curStart}'))`;
+  return `CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL AND ${matchCur}) THEN 'paid'
+    WHEN EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='pending' AND p.invoice_id IS NULL AND ${matchCur}) THEN 'pending' ELSE 'unpaid' END`;
+}
+
+function prevUnpaidSql() {
+  const { prevName, prevStart, curStart } = jalaliMonthContext();
+  const matchPrev = `((p.period IS NOT NULL AND (p.period LIKE '%${prevName}%' OR p.period LIKE '%کل سال%')) OR (p.period IS NULL AND date(p.created_at) >= '${prevStart}' AND date(p.created_at) < '${curStart}'))`;
+  return `CASE WHEN date(u.created_at) < '${curStart}'
+    AND COALESCE((SELECT amount FROM fee_settings fs WHERE fs.center_id=u.center_id AND fs.grade=s.grade), 0) > 0
+    AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.student_id=u.id AND p.status='approved' AND p.invoice_id IS NULL AND ${matchPrev})
+    THEN 1 ELSE 0 END`;
 }
 
 export default function register(r) {
@@ -278,12 +289,14 @@ export default function register(r) {
     if (q.school) { where.push('s.school=?'); p.push(q.school); }
     if (q.gender === 'm' || q.gender === 'f') { where.push('u.gender=?'); p.push(q.gender); }
     if (['paid', 'pending', 'unpaid'].includes(q.pay)) { where.push(`${paymentStateSql()}=?`); p.push(q.pay); }
+    else if (q.pay === 'prev_unpaid') { where.push(`${prevUnpaidSql()}=1`); }
     const w = where.join(' AND ');
     const total = get(`SELECT COUNT(*) n FROM users u JOIN students s ON s.user_id=u.id WHERE ${w}`, ...p).n;
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 30)), offset = Math.max(0, Number(q.offset) || 0);
+    const { curLabel, prevLabel } = jalaliMonthContext();
     const rows = all(`SELECT u.id, u.full_name, u.national_code, u.gender, s.school, s.grade, s.class_id, c.name class_name, s.birth_date, s.parent_phone, s.phone2, s.father_name, s.mother_name, s.address, s.avatar,
-      ${paymentStateSql()} pay FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE ${w} ORDER BY s.grade, c.name, u.full_name LIMIT ? OFFSET ?`, ...p, limit, offset);
-    return { total, rows };
+      ${paymentStateSql()} pay, ${prevUnpaidSql()} prev_unpaid FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id WHERE ${w} ORDER BY s.grade, c.name, u.full_name LIMIT ? OFFSET ?`, ...p, limit, offset);
+    return { total, rows, current_period: curLabel, prev_period: prevLabel };
   });
   
   r.get('/api/manager/students/credentials', M, (ctx) => {
@@ -366,6 +379,7 @@ export default function register(r) {
     if (q.school) { where.push('s.school=?'); p.push(String(q.school)); }
     if (q.gender === 'm' || q.gender === 'f') { where.push('u.gender=?'); p.push(q.gender); }
     if (['paid', 'pending', 'unpaid'].includes(q.pay)) { where.push(`${paymentStateSql()}=?`); p.push(q.pay); }
+    else if (q.pay === 'prev_unpaid') { where.push(`${prevUnpaidSql()}=1`); }
     return all(`SELECT u.id FROM users u JOIN students s ON s.user_id=u.id WHERE ${where.join(' AND ')}`, ...p).map((x) => x.id);
   };
   r.post('/api/manager/students/fee-paid', M, (ctx) => {

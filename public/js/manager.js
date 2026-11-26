@@ -136,14 +136,14 @@ async function students(el) {
   const hq = new URLSearchParams(location.hash.split('?')[1] || '');
   const q = { q: hq.get('q') || '', grade: '', class_id: '', school: '', gender: '', pay: '', offset: 0 };
   const PAGE = 30;
-  let rows = [], total = 0, allResults = false;
+  let rows = [], total = 0, allResults = false, curPeriod = '', prevPeriod = '';
   const sel = new Set();
   setHead('دانش‌آموزان', 'جست‌وجو، فیلتر و مدیریت ثبت‌نام‌ها', `<button class="btn sm" id="addSt">${icon('user-plus', { size: 16 })} ثبت دانش‌آموز</button> <button class="btn ghost sm" id="importSt">${icon('upload', { size: 16 })} ثبت‌نام گروهی</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">${icon('more', { size: 17 })}</summary><div class="ad-dd-menu"><button type="button" id="printCreds">${icon('printer', { size: 16 })} چاپ کارت‌های ورود</button><button type="button" id="classesSt">${icon('layers', { size: 16 })} مدیریت کلاس‌ها</button><button type="button" id="syncClassroom">${icon('refresh', { size: 16 })} همگام‌سازی کلاس آنلاین</button><button type="button" id="delAllSt" class="danger">${icon('trash', { size: 16 })} حذف همهٔ دانش‌آموزان…</button></div></details>`);
   el.innerHTML = `<div class="ad-toolbar" role="search">
       <label class="ad-searchbox"><span class="si">${icon('search', { size: 17 })}</span><input class="input" id="q" type="search" placeholder="جست‌وجوی نام یا کد ملی…" value="${esc(q.q)}" aria-label="جست‌وجوی دانش‌آموز" autocomplete="off"></label>
       <select class="input ad-f" id="fg" aria-label="پایه"><option value="">همهٔ پایه‌ها</option>${md.grades.map((g) => `<option value="${g}">پایه ${gradeName(g)}</option>`).join('')}</select>
       <select class="input ad-f" id="fc" aria-label="کلاس"><option value="">همهٔ کلاس‌ها</option></select>
-      <select class="input ad-f" id="fpay" aria-label="وضعیت پرداخت"><option value="">همهٔ وضعیت‌های پرداخت</option><option value="paid">پرداخت‌شده</option><option value="pending">در انتظار تأیید</option><option value="unpaid">پرداخت‌نشده</option></select>
+      <select class="input ad-f" id="fpay" aria-label="وضعیت پرداخت"><option value="">همهٔ وضعیت‌های پرداخت</option><option value="paid">پرداخت‌شده (ماه جاری)</option><option value="pending">در انتظار تأیید</option><option value="unpaid">پرداخت‌نشده (ماه جاری)</option><option value="prev_unpaid">طلبکار از ماه قبل</option></select>
       <select class="input ad-f" id="fgender" aria-label="جنسیت"><option value="">همهٔ جنسیت‌ها</option><option value="m">پسر</option><option value="f">دختر</option></select>
       <select class="input ad-f" id="fs" aria-label="مدرسه"><option value="">همهٔ مدارس</option>${md.schools.map((x) => `<option>${esc(x)}</option>`).join('')}</select>
       <button class="btn ghost sm" id="clearF" type="button" hidden>${icon('x', { size: 14 })} پاک‌کردن فیلترها</button></div>
@@ -159,7 +159,7 @@ async function students(el) {
   const rowHtml = (s) => `<tr><td class="ad-sel"><input type="checkbox" data-sel="${s.id}" ${sel.has(s.id) || allResults ? 'checked' : ''} aria-label="انتخاب ${esc(s.full_name)}"></td>
     <td class="ad-first"><button type="button" class="ad-student ad-link" data-view="${s.id}" aria-label="پروفایل ${esc(s.full_name)}">${nameAvatar(s.full_name)}<span><b>${esc(s.full_name)}</b><small class="num">${fa(s.national_code)}</small></span></button></td>
     <td data-l="پایه و کلاس">${gradeName(s.grade)} · ${esc(s.class_name || '—')}</td><td data-l="موبایل والدین" class="num">${s.parent_phone ? fa(s.parent_phone) : '—'}</td>
-    <td data-l="حق عضویت"><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td>
+    <td data-l="حق عضویت"><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span>${s.prev_unpaid ? `<div style="margin-top:3px"><span class="badge orange" style="font-size:10px">طلب ماه قبل (${esc((prevPeriod || 'ماه قبل').split(' ')[0])})</span></div>` : ''}</td>
     <td class="ad-act"><div class="row" style="gap:4px;justify-content:flex-end;align-items:center"><button class="btn sm soft green" data-pay-fee="${s.id}" title="پرداخت شهریه" style="padding:2px 8px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap">${icon('credit-card', { size: 14 })} پرداخت شهریه</button><button class="icon-btn" data-view="${s.id}" title="پروفایل" aria-label="پروفایل">${icon('eye', { size: 17 })}</button><button class="icon-btn" data-imp="${s.id}" title="ورود به پنل دانش‌آموز" aria-label="ورود به پنل دانش‌آموز">${icon('user-check', { size: 17 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 17 })}</button><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'circle-x' : 'check-circle', { size: 17 })}</button><button class="icon-btn" data-sms="${s.id}" title="پیامک" aria-label="ارسال پیامک">${icon('message', { size: 17 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف" style="color:var(--red)">${icon('trash', { size: 17 })}</button></div></td></tr>`;
   let seq = 0;
   const load = async () => {
@@ -167,6 +167,8 @@ async function students(el) {
     const r = await api(`/api/manager/students?${new URLSearchParams({ ...q, limit: PAGE })}`);
     if (my !== seq) return;
     rows = r.rows; total = r.total;
+    if (r.current_period) curPeriod = r.current_period;
+    if (r.prev_period) prevPeriod = r.prev_period;
     $('#tb', el).innerHTML = rows.map(rowHtml).join('') || `<tr><td colspan="6">${empty('search', 'دانش‌آموزی با این مشخصات پیدا نشد')}</td></tr>`;
     $('#total', el).textContent = `${fa(total)} دانش‌آموز`;
     const pages = Math.max(1, Math.ceil(total / PAGE)), page = Math.floor(q.offset / PAGE) + 1;
@@ -227,28 +229,60 @@ async function students(el) {
         } }] });
     }
   });
-  const openPayFeeModal = (sid) => {
+  const openPayFeeModal = async (sid) => {
     const s = rows.find((x) => x.id === sid);
     if (!s) return;
+    const det = await api(`/api/manager/students/${sid}`).catch(() => ({ fee: {} }));
+    const fee = det.fee || {};
+    const pays = fee.payments || [];
+    const curPer = fee.current_period || curPeriod || 'ماه جاری';
+    const prevPer = fee.prev_period || prevPeriod || 'ماه قبل';
     const isPaid = s.pay === 'paid';
+    const defaultPer = s.prev_unpaid ? prevPer : curPer;
+    const pBadge = { approved: ['تأییدشده', 'green'], pending: ['در انتظار', 'orange'], rejected: ['ردشده', 'red'], reversed: ['لغوشده', 'gray'] };
     modal({
       title: `پرداخت شهریه — ${esc(s.full_name)}`,
+      wide: true,
       body: `<form id="payFeeForm" class="stack">
         <div class="row between" style="padding:10px;background:var(--bg-card,#f4f8fd);border:1px solid var(--line,#d5e3f4);border-radius:12px;margin-bottom:8px">
           <div>
             <b>${esc(s.full_name)}</b>
             <div class="tiny muted">کد ملی: ${fa(s.national_code)} · پایه ${gradeName(s.grade)} ${esc(s.class_name || '')}</div>
           </div>
-          <span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span>
+          <div style="text-align:left">
+            <span class="badge ${PAY[s.pay][1]}">${esc(curPer)}: ${PAY[s.pay][0]}</span>
+            ${s.prev_unpaid ? `<div style="margin-top:4px"><span class="badge orange">طلبکار از ${esc(prevPer)}</span></div>` : ''}
+          </div>
         </div>
-        ${isPaid ? `<p class="small" style="color:var(--green,#16a34a);margin:4px 0">وضعیت شهریه این دانش‌آموز هم‌اکنون به صورت <b>پرداخت‌شده</b> ثبت است.</p>` : ''}
-        <div class="field"><label for="pfPeriod">بابت دوره / ماه</label><input class="input" id="pfPeriod" name="period" placeholder="مثلاً: ترم پاییز، آبان، یا کل سال"></div>
-        <div class="field"><label for="pfMethod">روش پرداخت</label><select class="input" id="pfMethod" name="method"><option value="card">کارت‌به‌کارت / انتقال بانکی</option><option value="cash">نقدی</option><option value="pos">دستگاه پوز کانون</option><option value="buffet">بوفه کانون</option></select></div>
-        <div class="field"><label for="pfNote">شماره پیگیری / یادداشت</label><input class="input" id="pfNote" name="note" placeholder="اختیاری"></div>
+        ${s.prev_unpaid ? `<div class="card flat" style="padding:8px 12px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:12px">این دانش‌آموز هنوز شهریه ماه قبل (<b>${esc(prevPer)}</b>) را پرداخت نکرده است.</div>` : ''}
+        <div class="field">
+          <label for="pfPeriod">بابت دوره / ماه</label>
+          <div class="row wrap" style="gap:6px;margin-bottom:6px">
+            <button type="button" class="btn sm soft" data-set-per="${esc(curPer)}">${esc(curPer)} (ماه جاری)</button>
+            ${prevPer ? `<button type="button" class="btn sm soft" data-set-per="${esc(prevPer)}">${esc(prevPer)} (ماه قبل)</button>` : ''}
+            <button type="button" class="btn sm soft" data-set-per="کل سال">کل سال</button>
+          </div>
+          <input class="input" id="pfPeriod" name="period" value="${esc(defaultPer)}" placeholder="مثلاً: آذر ۱۴۰۵، آبان ۱۴۰۵، یا کل سال">
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="pfMethod">روش پرداخت</label><select class="input" id="pfMethod" name="method"><option value="card">کارت‌به‌کارت / انتقال بانکی</option><option value="cash">نقدی</option><option value="pos">دستگاه پوز کانون</option><option value="buffet">بوفه کانون</option></select></div>
+          <div class="field"><label for="pfNote">شماره پیگیری / یادداشت</label><input class="input" id="pfNote" name="note" placeholder="اختیاری"></div>
+        </div>
+        <div style="margin-top:8px">
+          <b class="small">سوابق پرداخت شهریه ثبت‌شده (${fa(pays.length)} مورد):</b>
+          <div class="table-wrap" style="max-height:180px;overflow-y:auto;margin-top:6px">
+            <table class="table"><thead><tr><th>دوره/ماه</th><th>مبلغ</th><th>وضعیت</th><th>تاریخ</th></tr></thead><tbody>
+              ${pays.map((p) => `<tr><td>${esc(p.period || '—')}</td><td class="num">${p.amount ? money(p.amount) : 'ثبت‌شده'}</td><td><span class="badge ${(pBadge[p.status] || ['—', 'gray'])[1]}">${(pBadge[p.status] || [p.status])[0]}</span></td><td class="tiny">${jdate(p.reviewed_at || p.created_at)}</td></tr>`).join('') || '<tr><td colspan="4" class="center muted small">هنوز پرداختی ثبت نشده است</td></tr>'}
+            </tbody></table>
+          </div>
+        </div>
       </form>`,
+      onOpen: (m) => {
+        on(m, 'click', '[data-set-per]', (ev, bt) => { $('#pfPeriod', m).value = bt.dataset.setPer; });
+      },
       actions: [
         ...(isPaid ? [{
-          label: 'لغو پرداخت',
+          label: 'لغو پرداخت ماه جاری',
           cls: 'danger soft',
           onClick: async () => {
             if (!confirm(`آیا پرداخت شهریه «${esc(s.full_name)}» لغو شود؟`)) return false;
@@ -260,12 +294,12 @@ async function students(el) {
         }] : []),
         { label: 'انصراف', cls: 'ghost', value: false },
         {
-          label: isPaid ? 'ثبت مجدد / بروزرسانی' : 'تأیید و ثبت پرداخت شهریه',
+          label: 'تأیید و ثبت پرداخت شهریه',
           cls: 'green',
           onClick: async (m) => {
-            const period = $('#pfPeriod', m).value.trim();
-            await post('/api/manager/students/fee-paid', { ids: [s.id], paid: true, period: period || undefined });
-            toast(`پرداخت شهریه برای «${s.full_name}» ثبت شد`, 'ok');
+            const period = $('#pfPeriod', m).value.trim() || curPer;
+            await post('/api/manager/students/fee-paid', { ids: [s.id], paid: true, period });
+            toast(`پرداخت شهریه (${period}) برای «${s.full_name}» ثبت شد`, 'ok');
             load();
             return true;
           }
@@ -1044,7 +1078,7 @@ async function studentsClassic(el) {
   const fillClasses = () => { $('#fc', el).innerHTML = `<option value="">همه کلاس‌ها</option>${md.classes.filter((c) => !q.grade || c.grade === Number(q.grade)).map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}`; };
   fillClasses();
   const rowHtml = (s) => `<tr><td><input type="checkbox" data-sel="${s.id}" ${sel.has(s.id) ? 'checked' : ''} aria-label="انتخاب ${esc(s.full_name)}"></td><td class="click" data-view="${s.id}"><b>${esc(s.full_name)}</b></td><td class="num">${fa(s.national_code)}</td><td>${gradeName(s.grade)} ${esc(s.class_name || '—')}<div class="tiny muted">پنل ${s.grade <= 6 ? 'دبستان' : 'متوسطه'}</div></td><td class="small">${esc(s.school || '')}</td><td class="num">${fa(s.parent_phone)}</td>
-    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span></td><td><div class="row" style="gap:4px;align-items:center"><button class="btn sm soft green" data-pay-fee="${s.id}" title="پرداخت شهریه" style="padding:2px 8px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap">${icon('credit-card', { size: 14 })} پرداخت شهریه</button><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'x' : 'check-circle', { size: 16 })}</button><button class="icon-btn" data-sms="${s.id}" title="ارسال پیامک" aria-label="ارسال پیامک">${icon('message', { size: 16 })}</button><button class="icon-btn" data-imp="${s.id}" title="ورود به پنل دانش‌آموز" aria-label="ورود به پنل دانش‌آموز">${icon('user-check', { size: 17 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
+    <td><span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span>${s.prev_unpaid ? `<div style="margin-top:3px"><span class="badge orange" style="font-size:10px">طلب ماه قبل</span></div>` : ''}</td><td><div class="row" style="gap:4px;align-items:center"><button class="btn sm soft green" data-pay-fee="${s.id}" title="پرداخت شهریه" style="padding:2px 8px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap">${icon('credit-card', { size: 14 })} پرداخت شهریه</button><button class="icon-btn" data-paid="${s.id}" title="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}" aria-label="${s.pay === 'paid' ? 'لغو پرداخت حق عضویت' : 'ثبت پرداخت حق عضویت'}">${icon(s.pay === 'paid' ? 'x' : 'check-circle', { size: 16 })}</button><button class="icon-btn" data-sms="${s.id}" title="ارسال پیامک" aria-label="ارسال پیامک">${icon('message', { size: 16 })}</button><button class="icon-btn" data-imp="${s.id}" title="ورود به پنل دانش‌آموز" aria-label="ورود به پنل دانش‌آموز">${icon('user-check', { size: 17 })}</button><button class="icon-btn" data-edit="${s.id}" title="ویرایش" aria-label="ویرایش">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-del="${s.id}" title="حذف" aria-label="حذف">${icon('trash', { size: 16 })}</button></div></td></tr>`;
   let seq = 0;
   const load = async (append) => {
     const my = ++seq;
@@ -1095,28 +1129,60 @@ async function studentsClassic(el) {
         } }] });
     }
   });
-  const openPayFeeModal = (sid) => {
+  const openPayFeeModal = async (sid) => {
     const s = rows.find((x) => x.id === sid);
     if (!s) return;
+    const det = await api(`/api/manager/students/${sid}`).catch(() => ({ fee: {} }));
+    const fee = det.fee || {};
+    const pays = fee.payments || [];
+    const curPer = fee.current_period || curPeriod || 'ماه جاری';
+    const prevPer = fee.prev_period || prevPeriod || 'ماه قبل';
     const isPaid = s.pay === 'paid';
+    const defaultPer = s.prev_unpaid ? prevPer : curPer;
+    const pBadge = { approved: ['تأییدشده', 'green'], pending: ['در انتظار', 'orange'], rejected: ['ردشده', 'red'], reversed: ['لغوشده', 'gray'] };
     modal({
       title: `پرداخت شهریه — ${esc(s.full_name)}`,
+      wide: true,
       body: `<form id="payFeeForm" class="stack">
         <div class="row between" style="padding:10px;background:var(--bg-card,#f4f8fd);border:1px solid var(--line,#d5e3f4);border-radius:12px;margin-bottom:8px">
           <div>
             <b>${esc(s.full_name)}</b>
             <div class="tiny muted">کد ملی: ${fa(s.national_code)} · پایه ${gradeName(s.grade)} ${esc(s.class_name || '')}</div>
           </div>
-          <span class="badge ${PAY[s.pay][1]}">${PAY[s.pay][0]}</span>
+          <div style="text-align:left">
+            <span class="badge ${PAY[s.pay][1]}">${esc(curPer)}: ${PAY[s.pay][0]}</span>
+            ${s.prev_unpaid ? `<div style="margin-top:4px"><span class="badge orange">طلبکار از ${esc(prevPer)}</span></div>` : ''}
+          </div>
         </div>
-        ${isPaid ? `<p class="small" style="color:var(--green,#16a34a);margin:4px 0">وضعیت شهریه این دانش‌آموز هم‌اکنون به صورت <b>پرداخت‌شده</b> ثبت است.</p>` : ''}
-        <div class="field"><label for="pfPeriod">بابت دوره / ماه</label><input class="input" id="pfPeriod" name="period" placeholder="مثلاً: ترم پاییز، آبان، یا کل سال"></div>
-        <div class="field"><label for="pfMethod">روش پرداخت</label><select class="input" id="pfMethod" name="method"><option value="card">کارت‌به‌کارت / انتقال بانکی</option><option value="cash">نقدی</option><option value="pos">دستگاه پوز کانون</option><option value="buffet">بوفه کانون</option></select></div>
-        <div class="field"><label for="pfNote">شماره پیگیری / یادداشت</label><input class="input" id="pfNote" name="note" placeholder="اختیاری"></div>
+        ${s.prev_unpaid ? `<div class="card flat" style="padding:8px 12px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:12px">این دانش‌آموز هنوز شهریه ماه قبل (<b>${esc(prevPer)}</b>) را پرداخت نکرده است.</div>` : ''}
+        <div class="field">
+          <label for="pfPeriod">بابت دوره / ماه</label>
+          <div class="row wrap" style="gap:6px;margin-bottom:6px">
+            <button type="button" class="btn sm soft" data-set-per="${esc(curPer)}">${esc(curPer)} (ماه جاری)</button>
+            ${prevPer ? `<button type="button" class="btn sm soft" data-set-per="${esc(prevPer)}">${esc(prevPer)} (ماه قبل)</button>` : ''}
+            <button type="button" class="btn sm soft" data-set-per="کل سال">کل سال</button>
+          </div>
+          <input class="input" id="pfPeriod" name="period" value="${esc(defaultPer)}" placeholder="مثلاً: آذر ۱۴۰۵، آبان ۱۴۰۵، یا کل سال">
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="pfMethod">روش پرداخت</label><select class="input" id="pfMethod" name="method"><option value="card">کارت‌به‌کارت / انتقال بانکی</option><option value="cash">نقدی</option><option value="pos">دستگاه پوز کانون</option><option value="buffet">بوفه کانون</option></select></div>
+          <div class="field"><label for="pfNote">شماره پیگیری / یادداشت</label><input class="input" id="pfNote" name="note" placeholder="اختیاری"></div>
+        </div>
+        <div style="margin-top:8px">
+          <b class="small">سوابق پرداخت شهریه ثبت‌شده (${fa(pays.length)} مورد):</b>
+          <div class="table-wrap" style="max-height:180px;overflow-y:auto;margin-top:6px">
+            <table class="table"><thead><tr><th>دوره/ماه</th><th>مبلغ</th><th>وضعیت</th><th>تاریخ</th></tr></thead><tbody>
+              ${pays.map((p) => `<tr><td>${esc(p.period || '—')}</td><td class="num">${p.amount ? money(p.amount) : 'ثبت‌شده'}</td><td><span class="badge ${(pBadge[p.status] || ['—', 'gray'])[1]}">${(pBadge[p.status] || [p.status])[0]}</span></td><td class="tiny">${jdate(p.reviewed_at || p.created_at)}</td></tr>`).join('') || '<tr><td colspan="4" class="center muted small">هنوز پرداختی ثبت نشده است</td></tr>'}
+            </tbody></table>
+          </div>
+        </div>
       </form>`,
+      onOpen: (m) => {
+        on(m, 'click', '[data-set-per]', (ev, bt) => { $('#pfPeriod', m).value = bt.dataset.setPer; });
+      },
       actions: [
         ...(isPaid ? [{
-          label: 'لغو پرداخت',
+          label: 'لغو پرداخت ماه جاری',
           cls: 'danger soft',
           onClick: async () => {
             if (!confirm(`آیا پرداخت شهریه «${esc(s.full_name)}» لغو شود؟`)) return false;
@@ -1128,12 +1194,12 @@ async function studentsClassic(el) {
         }] : []),
         { label: 'انصراف', cls: 'ghost', value: false },
         {
-          label: isPaid ? 'ثبت مجدد / بروزرسانی' : 'تأیید و ثبت پرداخت شهریه',
+          label: 'تأیید و ثبت پرداخت شهریه',
           cls: 'green',
           onClick: async (m) => {
-            const period = $('#pfPeriod', m).value.trim();
-            await post('/api/manager/students/fee-paid', { ids: [s.id], paid: true, period: period || undefined });
-            toast(`پرداخت شهریه برای «${s.full_name}» ثبت شد`, 'ok');
+            const period = $('#pfPeriod', m).value.trim() || curPer;
+            await post('/api/manager/students/fee-paid', { ids: [s.id], paid: true, period });
+            toast(`پرداخت شهریه (${period}) برای «${s.full_name}» ثبت شد`, 'ok');
             load();
             return true;
           }

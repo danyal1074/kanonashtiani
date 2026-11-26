@@ -988,7 +988,13 @@ export async function hooshStudio(el) {
                   <input type="checkbox" id="cfgNegative" ${examConfig.hasNegativeScore ? 'checked' : ''}> نمره منفی لحاظ شود (یک سوم غلط)
                 </label>
 
-                <div style="display:flex;gap:8px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn" id="extractTextExamBtn" type="button" style="background:#7c3aed;color:#fff;font-weight:800">
+                    ${icon('sparkles', { size: 16 })} استخراج آزمون متنی (بدون شکل)
+                  </button>
+                  <button class="btn" id="publishVisualExamBtn" type="button" style="background:#059669;color:#fff;font-weight:800">
+                    ${icon('file-check', { size: 16 })} تعریف آزمون تصویری برای کلاس‌ها
+                  </button>
                   <button class="btn" id="basketPrintBtn" type="button" style="background:#2563eb;color:#fff;font-weight:900">
                     ${icon('printer', { size: 16 })} پیش‌نمایش و چاپ آزمون (A4)
                   </button>
@@ -1146,11 +1152,186 @@ export async function hooshStudio(el) {
     const nInput = $('#cfgNegative', el);
     if (nInput) nInput.onchange = () => { examConfig.hasNegativeScore = nInput.checked; };
 
-    // Print Actions
+    // Print & Publish Actions
     $('#openPrintBookletBtn', el)?.addEventListener('click', () => openPrintModal('exam'));
     $('#basketPrintBtn', el)?.addEventListener('click', () => openPrintModal('exam'));
     $('#openPrintAnswerSheetBtn', el)?.addEventListener('click', () => openPrintModal('answers'));
     $('#openAiPromptBtn', el)?.addEventListener('click', openAiPromptModal);
+    $('#extractTextExamBtn', el)?.addEventListener('click', openExtractTextExamModal);
+    $('#publishVisualExamBtn', el)?.addEventListener('click', openPublishVisualExamModal);
+  }
+
+  async function fetchTeacherClassesForExam() {
+    try {
+      const d = await api('/api/teacher/overview');
+      return d.classes || [];
+    } catch {
+      try {
+        const md = await api('/api/manager/meta');
+        return md.classes || [];
+      } catch { return []; }
+    }
+  }
+
+  async function openExtractTextExamModal() {
+    const basket = window._examBasket;
+    if (!basket.length) return toast('ابتدا برگه‌های کتاب را به سبد اضافه کنید', 'err');
+    const teacherCls = await fetchTeacherClassesForExam();
+    if (!teacherCls.length) return toast('کلاسی برای تعریف آزمون یافت نشد', 'err');
+
+    let extracted = [];
+    const btn = $('#extractTextExamBtn', el);
+    await busy(btn, async () => {
+      const r = await post('/api/teacher/exams/extract-hoosh', {
+        book_id: basket[0].bookId,
+        pages: basket.map((b) => b.pageNum),
+        subject: 'هوش و استعداد',
+        count: 20,
+      });
+      extracted = r.questions || [];
+    });
+
+    if (!extracted.length) {
+      return toast('در صفحات انتخابی، سؤال کاملاً متنی (بدون شکل) پیدا نشد؛ می‌توانید از گزینه «تعریف آزمون تصویری» استفاده کنید.', 'err', 6000);
+    }
+
+    modal({
+      title: `آزمون متنی استخراج‌شده (${fa(extracted.length)} سؤال بدون شکل)`,
+      wide: true,
+      body: `<form id="hxTextForm" class="stack">
+        <div class="form-grid">
+          <div class="field"><label>عنوان آزمون</label><input class="input" name="title" value="${esc(examConfig.title)} (متنی)" required></div>
+          <div class="field"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="${examConfig.duration || 30}" min="1" max="180"></div>
+          <div class="field"><label>مهلت شرکت (اختیاری)</label><input class="input ltr" type="datetime-local" name="deadline"></div>
+        </div>
+        <div class="field">
+          <label>انتخاب کلاس‌های هدف (هر کلاسی که می‌خواهید تیک بزنید)</label>
+          <div class="row wrap" style="gap:8px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+            ${teacherCls.map((c, idx) => `<label class="row" style="gap:5px;cursor:pointer;font-size:12px"><input type="checkbox" name="cls_pick" value="${c.id}" ${idx === 0 ? 'checked' : ''}> ${gradeName(c.grade)} ${esc(c.name)}</label>`).join('')}
+          </div>
+        </div>
+        <div id="hxTextQs" class="stack" style="max-height:420px;overflow-y:auto"></div>
+      </form>`,
+      onOpen: (m) => {
+        const drawQs = () => {
+          $('#hxTextQs', m).innerHTML = extracted.map((q, i) => `
+            <div class="card flat" style="padding:10px;border:1px solid #e2e8f0">
+              <div class="row between"><b class="small">سؤال ${fa(i + 1)}${q.sourcePage ? ` (صفحه ${fa(q.sourcePage)})` : ''}</b><button type="button" class="btn ghost sm" data-hx-rm="${i}">${icon('trash', { size: 14 })}</button></div>
+              <textarea class="input" data-hx-qt="${i}" style="min-height:55px;margin:6px 0">${esc(q.text)}</textarea>
+              <div class="form-grid">${q.options.map((o, j) => `<label class="row" style="gap:5px"><input type="radio" name="hxans${i}" data-hx-qa="${i}" value="${j}" ${q.answer === j ? 'checked' : ''}><input class="input sm" data-hx-qo="${i},${j}" value="${esc(o)}"></label>`).join('')}</div>
+            </div>`).join('');
+        };
+        drawQs();
+        on(m, 'input', '[data-hx-qt]', (e, t) => { extracted[t.dataset.hxQt].text = t.value; });
+        on(m, 'input', '[data-hx-qo]', (e, t) => { const [i, j] = t.dataset.hxQo.split(',').map(Number); extracted[i].options[j] = t.value; });
+        on(m, 'change', '[data-hx-qa]', (e, t) => { extracted[t.dataset.hxQa].answer = Number(t.value); });
+        on(m, 'click', '[data-hx-rm]', (e, b) => { extracted.splice(Number(b.dataset.hxRm), 1); drawQs(); });
+      },
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'انتشار آزمون متنی برای کلاس‌ها',
+          onClick: async (m) => {
+            const f = $('#hxTextForm', m);
+            const classIds = [...m.querySelectorAll('input[name=cls_pick]:checked')].map((x) => Number(x.value));
+            if (!classIds.length) { toast('حداقل یک کلاس انتخاب کنید', 'err'); return false; }
+            if (!extracted.length) { toast('سؤالی باقی نمانده است', 'err'); return false; }
+            const title = f.title.value.trim();
+            if (!title) { toast('عنوان آزمون را وارد کنید', 'err'); return false; }
+            const r = await post('/api/teacher/exams', {
+              title,
+              kind: 'online',
+              subject: 'هوش و استعداد',
+              class_ids: classIds,
+              duration_min: Number(f.duration_min.value) || 30,
+              deadline: f.deadline.value || null,
+              questions: extracted,
+            });
+            toast(`آزمون متنی با موفقیت برای ${fa(classIds.length)} کلاس منتشر شد`, 'ok');
+            location.hash = `#/exams/${r.id}`;
+            return true;
+          }
+        }
+      ]
+    });
+  }
+
+  async function openPublishVisualExamModal() {
+    const basket = window._examBasket;
+    if (!basket.length) return toast('ابتدا برگه‌های کتاب را به سبد اضافه کنید', 'err');
+    const teacherCls = await fetchTeacherClassesForExam();
+    if (!teacherCls.length) return toast('کلاسی برای تعریف آزمون یافت نشد', 'err');
+
+    const visualQs = basket.map((item, idx) => ({
+      image: bookPageUrl(item.bookId, item.pageNum),
+      text: `سؤال تصویری صفحه ${fa(item.pageNum)} (${item.topicTitle || 'هوش کمپلکس'}) — گزینهٔ صحیح را انتخاب کنید:`,
+      options: ['گزینه ۱', 'گزینه ۲', 'گزینه ۳', 'گزینه ۴'],
+      answer: 0,
+      subject: 'هوش و استعداد',
+      pageNum: item.pageNum,
+      idx,
+    }));
+
+    modal({
+      title: `تعریف آزمون تصویری (${fa(visualQs.length)} صفحه)`,
+      wide: true,
+      body: `<form id="hxVisForm" class="stack">
+        <div class="form-grid">
+          <div class="field"><label>عنوان آزمون تصویری</label><input class="input" name="title" value="${esc(examConfig.title)} (تصویری)" required></div>
+          <div class="field"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="${examConfig.duration || 30}" min="1" max="180"></div>
+          <div class="field"><label>مهلت شرکت در آزمون (اختیاری)</label><input class="input ltr" type="datetime-local" name="deadline"></div>
+        </div>
+        <div class="field">
+          <label>انتخاب کلاس‌های هدف (هر کلاسی که می‌خواهید تیک بزنید)</label>
+          <div class="row wrap" style="gap:8px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+            ${teacherCls.map((c, idx) => `<label class="row" style="gap:5px;cursor:pointer;font-size:12px"><input type="checkbox" name="cls_pick" value="${c.id}" ${idx === 0 ? 'checked' : ''}> ${gradeName(c.grade)} ${esc(c.name)}</label>`).join('')}
+          </div>
+        </div>
+        <div class="stack" style="max-height:380px;overflow-y:auto;gap:10px">
+          ${visualQs.map((q, i) => `
+            <div class="card flat row wrap" style="gap:12px;padding:10px;border:1px solid #e2e8f0;align-items:center">
+              <img src="${esc(q.image)}" alt="صفحه ${q.pageNum}" style="width:90px;height:110px;object-fit:contain;border-radius:6px;border:1px solid #cbd5e1;background:#fff">
+              <div class="grow stack" style="gap:6px">
+                <b class="small">برگه شماره ${fa(q.pageNum)}</b>
+                <input class="input sm" data-vis-txt="${i}" value="${esc(q.text)}" placeholder="متن راهنمای سؤال">
+                <div class="row wrap" style="gap:8px">
+                  <span class="tiny muted">پاسخ صحیح:</span>
+                  ${[0, 1, 2, 3].map((o) => `<label class="row" style="gap:4px;font-size:12px;cursor:pointer"><input type="radio" name="visans${i}" data-vis-ans="${i}" value="${o}" ${o === 0 ? 'checked' : ''}> گزینه ${fa(o + 1)}</label>`).join('')}
+                </div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </form>`,
+      onOpen: (m) => {
+        on(m, 'input', '[data-vis-txt]', (e, t) => { visualQs[t.dataset.visTxt].text = t.value; });
+        on(m, 'change', '[data-vis-ans]', (e, t) => { visualQs[t.dataset.visAns].answer = Number(t.value); });
+      },
+      actions: [
+        { label: 'انصراف', cls: 'ghost', value: false },
+        {
+          label: 'انتشار آزمون تصویری برای کلاس‌ها',
+          onClick: async (m) => {
+            const f = $('#hxVisForm', m);
+            const classIds = [...m.querySelectorAll('input[name=cls_pick]:checked')].map((x) => Number(x.value));
+            if (!classIds.length) { toast('حداقل یک کلاس انتخاب کنید', 'err'); return false; }
+            const title = f.title.value.trim();
+            if (!title) { toast('عنوان آزمون را وارد کنید', 'err'); return false; }
+            const r = await post('/api/teacher/exams', {
+              title,
+              kind: 'online',
+              subject: 'هوش و استعداد',
+              class_ids: classIds,
+              duration_min: Number(f.duration_min.value) || 30,
+              deadline: f.deadline.value || null,
+              questions: visualQs,
+            });
+            toast(`آزمون تصویری با موفقیت برای ${fa(classIds.length)} کلاس منتشر شد`, 'ok');
+            location.hash = `#/exams/${r.id}`;
+            return true;
+          }
+        }
+      ]
+    });
   }
 
   function openPrintModal(mode) {

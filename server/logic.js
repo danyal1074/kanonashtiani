@@ -1,6 +1,6 @@
 // منطق دامنه: امتیاز، سطح، رتبه، قفل پنل، اطلاعیه‌ها، مسیر یادگیری، جریمه‌های خودکار
 import { all, get, run, tx } from './db.js';
-import { ymd, addDays, weekStart, faWeekday, nowIso, jMonthOf, JMONTHS } from './util.js';
+import { ymd, addDays, weekStart, faWeekday, nowIso, jMonthOf, JMONTHS, j2g } from './util.js';
 
 export const LEVELS = [
   { min: 0, name: 'جوانه', icon: '🌱' },
@@ -64,22 +64,58 @@ export function studentRankings(centerId, classId, studentId) {
 }
 
 // ---------- حق عضویت و قفل ----------
+export function jalaliMonthContext(todayStr = ymd()) {
+  const [y, m] = jMonthOf(todayStr);
+  const py = m === 1 ? y - 1 : y;
+  const pm = m === 1 ? 12 : m - 1;
+  const curName = JMONTHS[m - 1];
+  const prevName = JMONTHS[pm - 1];
+  return {
+    y, m, curName, curLabel: `${curName} ${y}`, curStart: j2g(y, m, 1),
+    py, pm, prevName, prevLabel: `${prevName} ${py}`, prevStart: j2g(py, pm, 1),
+  };
+}
+
+export function isPaymentForPeriod(p, monthName, monthStart, nextMonthStart = null) {
+  if (p.period && String(p.period).trim()) {
+    const per = String(p.period);
+    return per.includes(monthName) || per.includes('کل سال');
+  }
+  const d = String(p.created_at || '').slice(0, 10);
+  if (!d) return false;
+  if (nextMonthStart) return d >= monthStart && d < nextMonthStart;
+  return d >= monthStart;
+}
+
 export function feeStatus(sid) {
-  const st = get('SELECT s.grade, u.center_id FROM students s JOIN users u ON u.id=s.user_id WHERE s.user_id=?', sid);
+  const st = get('SELECT s.grade, u.center_id, u.created_at FROM students s JOIN users u ON u.id=s.user_id WHERE s.user_id=?', sid);
   if (!st) return null;
+  const ctx = jalaliMonthContext();
   const fee = get('SELECT amount, lock_date FROM fee_settings WHERE center_id=? AND grade=?', st.center_id, st.grade) || { amount: 0, lock_date: null };
   const cen = get('SELECT system_fee, system_fee_enabled FROM centers WHERE id=?', st.center_id);
   const sysFee = fee.amount && cen?.system_fee_enabled ? (cen.system_fee ?? 0) : 0;
   const pays = all('SELECT id, amount, system_fee, status, reject_reason, receipt_path, created_at, reviewed_at, period, manual FROM payments WHERE student_id=? AND invoice_id IS NULL ORDER BY id DESC', sid);
   const activePays = pays.filter((p) => p.status !== 'reversed');
+  const curPays = activePays.filter((p) => isPaymentForPeriod(p, ctx.curName, ctx.curStart));
+
   let status = 'unpaid';
-  if (activePays.some((p) => p.status === 'approved')) status = 'paid';
-  else if (activePays.some((p) => p.status === 'pending')) status = 'pending';
-  else if (activePays.length && activePays[0].status === 'rejected') status = 'rejected';
+  if (curPays.some((p) => p.status === 'approved')) status = 'paid';
+  else if (curPays.some((p) => p.status === 'pending')) status = 'pending';
+  else if (curPays.length && curPays[0].status === 'rejected') status = 'rejected';
   if (!fee.amount) status = status === 'unpaid' || status === 'rejected' ? 'free' : status;
+
+  const prevPaid = activePays.some((p) => p.status === 'approved' && isPaymentForPeriod(p, ctx.prevName, ctx.prevStart, ctx.curStart));
+  const stCreated = String(st.created_at || '').slice(0, 10);
+  const prevUnpaid = !!fee.amount && !!stCreated && stCreated < ctx.curStart && !prevPaid;
+
   const deadlinePassed = !!fee.lock_date && ymd() > fee.lock_date;
   const locked = deadlinePassed && !['paid', 'free'].includes(status);
-  return { grade: st.grade, amount: fee.amount, system_fee_enabled: !!cen?.system_fee_enabled, period: activePays.find((p) => p.status === 'approved')?.period || null, system_fee: sysFee, total: fee.amount + sysFee, lock_date: fee.lock_date, status, locked, payments: pays };
+  return {
+    grade: st.grade, amount: fee.amount, system_fee_enabled: !!cen?.system_fee_enabled,
+    period: curPays.find((p) => p.status === 'approved')?.period || null,
+    current_period: ctx.curLabel, prev_period: ctx.prevLabel, prev_unpaid: prevUnpaid,
+    system_fee: sysFee, total: fee.amount + sysFee, lock_date: fee.lock_date, status, locked, payments: pays,
+  };
 }
 
 export function recalcInvoice(invoiceId) {
@@ -329,9 +365,13 @@ export const periodLabel = () => { const [y, m] = jMonthOf(ymd()); return `${JMO
 export function markFeePaid(centerId, sid, { period } = {}) {
   const fs = feeStatus(sid);
   if (!fs) return null;
-  if (fs.status === 'paid') return { result: 'already' };
-  const name = get('SELECT full_name FROM users WHERE id=?', sid)?.full_name || '';
   const label = period || periodLabel();
+  const alreadyForLabel = (fs.payments || []).some((p) => p.status === 'approved' && (
+    (p.period && (p.period === label || label.includes(p.period) || p.period.includes(label.split(' ')[0]))) ||
+    (!p.period && !period && fs.status === 'paid')
+  ));
+  if (alreadyForLabel) return { result: 'already' };
+  const name = get('SELECT full_name FROM users WHERE id=?', sid)?.full_name || '';
   const pending = get("SELECT id, amount FROM payments WHERE student_id=? AND invoice_id IS NULL AND status='pending' ORDER BY id DESC", sid);
   let pid, amount;
   if (pending) {

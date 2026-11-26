@@ -109,18 +109,28 @@ async function exams(el) {
 
 function examEditor(classes) {
   const grades = [...new Set(classes.map((c) => c.grade))];
-  const subjects = [...new Set(classes.flatMap((c) => c.subjects.split('، ')))];
+  const subjects = [...new Set(classes.flatMap((c) => String(c.subjects || '').split('،').map((t) => t.trim())).filter(Boolean))];
+  if (!subjects.length) subjects.push('ریاضی', 'علوم', 'هوش و استعداد');
   let kind = 'online';
   let questions = [{ text: '', options: ['', '', '', ''], answer: 0 }];
   let keyCount = 10, key = Array(10).fill(null);
   modal({
     title: ' ساخت آزمون', wide: true,
     body: `<div class="seg" style="margin-bottom:14px"><button class="on" data-kind="online"> آزمون آنلاین (تستی)</button><button data-kind="paper">${icon('file-text', { size: 16 })} آزمون کاغذی + کلید پاسخ</button></div>
-      <form id="exForm" class="form-grid"><div class="field"><label>عنوان آزمون</label><input class="input" name="title" required></div>
-      <div class="field"><label>درس</label><select class="input" name="subject">${subjects.map((s) => `<option>${esc(s)}</option>`).join('')}</select></div>
+      <form id="exForm" class="form-grid"><div class="field"><label>عنوان آزمون</label><input class="input" name="title" required placeholder="مثلاً آزمون فصل دوم"></div>
+      <div class="field"><label>درس</label><select class="input" name="subject" id="exSubj">${subjects.map((s) => `<option>${esc(s)}</option>`).join('')}</select></div>
       <div class="field"><label>پایه</label><select class="input" name="grade" id="exGrade">${grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div>
       <div class="field"><label>کلاس</label><select class="input" name="class_id" id="exClass"></select></div>
-      <div class="field" id="durField"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="15" min="1" max="180"></div></form>
+      <div class="field" id="durField"><label>مدت (دقیقه)</label><input class="input" type="number" name="duration_min" value="15" min="1" max="180"></div>
+      <div class="field" id="dlField"><label>مهلت شرکت (اختیاری)</label><input class="input ltr" type="datetime-local" name="deadline"></div></form>
+      <div id="aiGenBox" class="card flat" style="margin-top:12px;padding:12px;border:1px solid #bfdbfe;background:#eff6ff">
+        <div class="row wrap" style="gap:8px;align-items:flex-end">
+          <div class="field grow" style="min-width:160px"><label class="tiny bold">${icon('sparkles', { size: 14 })} طرح سؤال با هوش مصنوعی (بر اساس درس شما)</label><input class="input" id="aiTopic" placeholder="مبحث دلخواه (مثلاً: کسرها، هوش کلامی، انرژی...)"></div>
+          <div class="field" style="width:90px"><label class="tiny bold">تعداد</label><input class="input" type="number" id="aiCount" value="5" min="1" max="20"></div>
+          <div class="field" style="width:110px"><label class="tiny bold">سطح</label><select class="input" id="aiDiff"><option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">چالشی</option></select></div>
+          <button type="button" class="btn sm" id="aiGenBtn" style="background:#2563eb;color:#fff">${icon('sparkles', { size: 15 })} تولید سؤال</button>
+        </div>
+      </div>
       <div id="qArea" style="margin-top:16px"></div>`,
     onOpen: (m) => {
       const drawCls = () => { const g = Number($('#exGrade', m).value); $('#exClass', m).innerHTML = `<option value="">همه کلاس‌های پایه</option>${classes.filter((c) => c.grade === g).map((c) => `<option value="${c.id}">کلاس ${esc(c.name)}</option>`).join('')}`; };
@@ -137,7 +147,22 @@ function examEditor(classes) {
         }
       };
       drawQ();
-      on(m, 'click', '[data-kind]', (e, b) => { kind = b.dataset.kind; $$('[data-kind]', m).forEach((x) => x.classList.toggle('on', x === b)); $('#durField', m).style.display = kind === 'online' ? '' : 'none'; drawQ(); });
+      $('#aiGenBtn', m).onclick = (e) => busy(e.currentTarget, async () => {
+        const subject = $('#exSubj', m).value;
+        const grade = Number($('#exGrade', m).value);
+        const topic = $('#aiTopic', m).value.trim();
+        const count = Number($('#aiCount', m).value) || 5;
+        const difficulty = $('#aiDiff', m).value;
+        const r = await post('/api/teacher/exams/ai-generate', { subject, grade, topic, count, difficulty });
+        if (questions.length === 1 && !questions[0].text.trim()) questions = r.questions;
+        else questions = questions.concat(r.questions);
+        if (!$('#exForm [name=title]', m).value.trim()) {
+          $('#exForm [name=title]', m).value = topic ? `آزمون ${subject} — ${topic}` : `آزمون ${subject}`;
+        }
+        toast(`${fa(r.questions.length)} سؤال برای درس «${subject}» تولید شد`, 'ok');
+        drawQ();
+      });
+      on(m, 'click', '[data-kind]', (e, b) => { kind = b.dataset.kind; $$('[data-kind]', m).forEach((x) => x.classList.toggle('on', x === b)); $('#durField', m).style.display = kind === 'online' ? '' : 'none'; $('#dlField', m).style.display = kind === 'online' ? '' : 'none'; $('#aiGenBox', m).style.display = kind === 'online' ? '' : 'none'; drawQ(); });
       on(m, 'input', '[data-qt]', (e, t) => { questions[t.dataset.qt].text = t.value; });
       on(m, 'input', '[data-qo]', (e, t) => { const [i, j] = t.dataset.qo.split(',').map(Number); questions[i].options[j] = t.value; });
       on(m, 'change', '[data-qa]', (e, t) => { questions[t.dataset.qa].answer = Number(t.value); });
