@@ -21,6 +21,7 @@
     "test:counselor": "node scripts/test-counselor.mjs",
     "test:classroom": "node scripts/test-classroom.mjs",
     "test:teacher-look": "node scripts/test-teacher-look.mjs",
+    "test:messenger": "node scripts/test-messenger.mjs",
     "sync:classroom": "node scripts/sync-classroom.mjs"
   }
 }

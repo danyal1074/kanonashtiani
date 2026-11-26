@@ -12,6 +12,7 @@ import { prepareTeacher } from './teacher-ui.js';
 import * as manager from './manager.js';
 import * as admin from './admin.js';
 import * as counselor from './counselor.js';
+import { leaveMessages } from './messenger.js';
 
 const PANELS = { student, teacher, counselor, manager, admin };
 document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.contact, tr[data-href], tr.click, .feature-tile[onclick]')) { e.preventDefault(); e.target.click(); } });
@@ -108,6 +109,7 @@ function matchPanel(routes, path) {
 
 let rendering = 0;
 async function render() {
+  leaveMessages();
   const token = ++rendering;
   student.leavePage();
   const path = (location.hash.replace(/^#/, '') || '/home').split('?')[0];

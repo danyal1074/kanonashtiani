@@ -2,76 +2,7 @@
 import { api, post, esc, fa, $, on, toast, busy, setHead, avatar, nameAvatar, empty, jdate, jtime, timeAgo, ROLE_NAMES, formData, state, icon } from './core.js';
 import { lookToggleHtml } from './look.js';
 
-const roleIcon = { teacher: 'board', student: 'backpack', parent: 'users', manager: 'building' };
-
-export async function messagesView(el, params) {
-  setHead('پیام‌رسان کانون', 'گفت‌وگوی امن داخلی — شماره تلفن هیچ‌کس نمایش داده نمی‌شود');
-  let contacts = await api('/api/messages/contacts');
-  let active = params.id ? Number(params.id) : null;
-  let filter = '';
-  let poll;
-
-  el.innerHTML = `<div class="card chat ${active ? 'has-active' : ''}">
-    <div class="chat-list"><div class="search"><input class="input" id="cSearch" placeholder=" جستجوی مخاطب…"></div><div id="cList"></div></div>
-    <div class="chat-pane" id="pane"></div></div>`;
-
-  const listHtml = () => {
-    const rows = contacts.filter((c) => !filter || c.name.includes(filter));
-    if (!rows.length) return empty('search', 'مخاطبی پیدا نشد');
-    return rows.map((c) => `<div class="contact ${c.id === active ? 'on' : ''}" data-id="${c.id}">
-      ${c.role === 'student' ? avatar(c.avatar, 'sm') : `<div class="avatar sm">${icon(roleIcon[c.role] || 'user', { size: 18 })}</div>`}
-      <div class="grow"><div class="bold small ellipsis">${esc(c.name)}</div><div class="tiny muted ellipsis">${esc(c.last?.body || c.sub || '')}</div></div>
-      <div class="stack" style="gap:2px;align-items:flex-end">${c.last ? `<span class="tiny muted">${timeAgo(c.last.created_at)}</span>` : ''}${c.unread ? `<span class="unread">${fa(c.unread)}</span>` : ''}</div></div>`).join('');
-  };
-  const drawList = () => { $('#cList', el).innerHTML = listHtml(); };
-
-  async function openThread(id) {
-    active = id;
-    clearInterval(poll);
-    el.querySelector('.chat').classList.toggle('has-active', !!id);
-    drawList();
-    const pane = $('#pane', el);
-    if (!id) { pane.innerHTML = empty('message', 'یک گفت‌وگو را انتخاب کن'); return; }
-    const c = contacts.find((x) => x.id === id);
-    if (!c) { pane.innerHTML = empty('user-x', 'این مخاطب در دسترس نیست'); return; }
-    pane.innerHTML = `<div class="head"><button class="icon-btn" id="back" aria-label="بازگشت">→</button>${c.role === 'student' ? avatar(c.avatar, 'sm') : `<div class="avatar sm">${icon(roleIcon[c.role] || 'user', { size: 18 })}</div>`}
-      <div class="grow"><div class="bold">${esc(c.name)}</div><div class="tiny muted">${esc(c.sub || ROLE_NAMES[c.role])}</div></div></div>
-      <div class="msgs" id="msgs">${'<div class="empty">…</div>'}</div>
-      <form class="composer" id="composer"><textarea class="input" name="body" placeholder="پیامت را بنویس…" maxlength="2000"></textarea><button class="btn" type="submit">ارسال </button></form>`;
-    $('#back', pane).onclick = () => { location.hash = '#/messages'; };
-    const msgsEl = $('#msgs', pane);
-    const draw = (msgs) => {
-      msgsEl.innerHTML = `<div class="secure-note">${icon('lock', { size: 16 })} پیام‌ها داخل کانون می‌ماند و شماره تماس دو طرف محفوظ است</div>` + (msgs.length ? msgs.map((m) => `<div class="bubble ${m.from_id === state.me.user.id ? 'me' : 'them'}">${esc(m.body)}<span class="tm">${jdate(m.created_at, { year: false })} ${jtime(m.created_at)}${m.from_id === state.me.user.id ? (m.read_at ? ' ' : ' ') : ''}</span></div>`).join('') : empty('message', 'اولین پیام را بفرست!'));
-      msgsEl.scrollTop = msgsEl.scrollHeight;
-    };
-    let last = '';
-    const load = async () => {
-      const msgs = await api(`/api/messages/${id}`);
-      const sig = msgs.map((m) => m.id + (m.read_at || '')).join();
-      if (sig !== last) { last = sig; draw(msgs); }
-      if (c.unread) { c.unread = 0; drawList(); }
-    };
-    await load();
-    poll = setInterval(() => { if (!document.body.contains(msgsEl)) return clearInterval(poll); load().catch(() => clearInterval(poll)); }, 5000);
-    const form = $('#composer', pane);
-    const send = () => busy(form.querySelector('button'), async () => {
-      const body = form.body.value.trim();
-      if (!body) return;
-      await post('/api/messages', { to: id, body });
-      form.body.value = '';
-      c.last = { body, created_at: new Date().toISOString() };
-      await load();
-    });
-    form.onsubmit = (e) => { e.preventDefault(); send(); };
-    form.body.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
-    form.body.focus();
-  }
-
-  $('#cSearch', el).oninput = (e) => { filter = e.target.value.trim(); drawList(); };
-  on(el, 'click', '.contact', (e, t) => { location.hash = `#/messages/${t.dataset.id}`; });
-  drawList();
-  openThread(active);
-}
+export { messagesView } from './messenger.js';
 
 export async function announcementsView(el) {
   setHead('اطلاعیه‌ها', 'آخرین خبرها و اطلاعیه‌های کانون');
