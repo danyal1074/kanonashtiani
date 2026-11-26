@@ -27,11 +27,15 @@ function matchTeacher(name, teachers = []) {
 }
 
 function parseDataUrl(dataUrl) {
-  const m = String(dataUrl || '').match(/^data:(image\/(?:png|jpeg|jpg|webp)|application\/pdf);base64,([A-Za-z0-9+/=\s]+)$/i);
-  if (!m) throw new Error('فرمت فایل نامعتبر است (فقط PNG، JPG، WEBP یا PDF مجاز است)');
-  const mime = m[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : m[1].toLowerCase();
+  const m = String(dataUrl || '').match(/^data:([^;,]+);base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!m) throw new Error('فرمت فایل نامعتبر است (تصویر یا PDF انتخاب کنید)');
+  let mime = m[1].toLowerCase().trim();
+  if (mime === 'image/jpg' || mime === 'image/pjpeg') mime = 'image/jpeg';
+  if (!mime.startsWith('image/') && mime !== 'application/pdf') {
+    throw new Error('فقط فایل تصویری (PNG، JPG، WEBP) یا PDF مجاز است');
+  }
   const buf = Buffer.from(m[2].replace(/\s+/g, ''), 'base64');
-  if (buf.length > 8 * 1024 * 1024) throw new Error('حجم فایل نباید بیشتر از ۸ مگابایت باشد');
+  if (buf.length > 10 * 1024 * 1024) throw new Error('حجم فایل نباید بیشتر از ۱۰ مگابایت باشد');
   return { mime, base64: buf.toString('base64') };
 }
 

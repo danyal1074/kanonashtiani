@@ -378,15 +378,85 @@ async function staff(el) {
   let schedClass = md.classes[0]?.id;
   el.innerHTML = `<div class="grid c2"><div class="card"><div class="card-title"><span class="ib">${icon('board', { size: 18 })}</span>معلمان</div><div class="list">${md.teachers.map((t) => `<div class="list-item">${nameAvatar(t.full_name)}<div class="grow"><b class="small">${esc(t.full_name)}</b> ${t.active ? '' : '<span class="badge red">غیرفعال</span>'}<div class="tiny muted">${esc(t.username)} • ${fa(esc(t.classes || 'بدون کلاس').replace(/:/g, ' ').replace(/،/g, ' ·'))}</div></div><button class="btn sm ghost" data-et="${t.id}" aria-label="ویرایش معلم" title="ویرایش معلم">${icon('edit', { size: 16 })}</button></div>`).join('')}</div></div>
     <div class="card"><div class="card-title"><span class="ib">${icon('building', { size: 18 })}</span>کلاس‌ها</div><div class="grid c3">${md.classes.map((c) => `<div class="card flat center" style="padding:12px"><b>${gradeName(c.grade)} ${esc(c.name)}</b><div class="tiny muted">${fa(c.students)} نفر</div><div class="row center" style="gap:4px;margin-top:6px"><button class="btn ghost sm" data-ec="${c.id}" data-cname="${esc(c.name)}" data-cgrade="${c.grade}">${icon('edit', { size: 14 })} ویرایش</button>${c.students ? '' : `<button class="btn ghost sm" data-dc="${c.id}">حذف</button>`}</div></div>`).join('')}</div></div></div>
-    <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('calendar', { size: 18 })}</span>برنامه هفتگی کلاس<span class="row wrap more" style="gap:8px"><button type="button" class="btn sm soft" id="schedPhoto">${icon('image', { size: 16 })} ثبت از روی عکس برنامه</button><select class="input" id="schedSel" style="width:auto">${md.classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select></span></div><div id="sched"></div></div>`;
+    <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('calendar', { size: 18 })}</span>برنامه هفتگی کلاس<span class="row wrap more" style="gap:8px"><button type="button" class="btn sm soft" id="schedPhoto">${icon('camera', { size: 16 })} ثبت از روی عکس برنامه</button><select class="input" id="schedSel" style="width:auto">${md.classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select><button type="button" class="btn sm ghost" id="schedNewClass" title="افزودن کلاس جدید">${icon('plus', { size: 15 })} کلاس جدید</button></span></div><div id="sched"></div></div>`;
+  let allSubjects = [...new Set([...(md.subjects || []), 'ریاضی', 'علوم', 'فارسی', 'هوش و استعداد', 'زبان انگلیسی', 'عربی', 'فیزیک', 'شیمی', 'زیست'])];
+  let allRooms = [...new Set(md.classes.map((c) => `${gradeName(c.grade)} ${c.name}`))];
   const drawSched = async () => {
-    const list = await api(`/api/manager/schedule?class_id=${schedClass}`);
+    if (!schedClass) { $('#sched', el).innerHTML = empty('calendar', 'ابتدا یک کلاس ایجاد کنید'); return; }
+    const [list, ov] = await Promise.all([api(`/api/manager/schedule?class_id=${schedClass}`), api('/api/manager/schedule/overview').catch(() => [])]);
+    allSubjects = [...new Set([...allSubjects, ...ov.map((x) => x.subject).filter(Boolean), ...list.map((x) => x.subject).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fa'));
+    allRooms = [...new Set([...allRooms, ...ov.map((x) => x.room).filter(Boolean), ...list.map((x) => x.room).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fa'));
     $('#sched', el).innerHTML = `<div class="week-cal">${WEEKDAYS.map((w, i) => `<div class="day"><div class="dn">${w}</div>${list.filter((s) => s.weekday === i).map((s) => `<div class="ses"><b>${subjIcon(s.subject)} ${esc(s.subject)}</b>${fa(s.start)} تا ${fa(s.end)}<div class="tiny muted">${esc(s.teacher || '')}${s.room ? ' · ' + esc(s.room) : ''} · ${kindOf(s.kind).label}</div><button class="btn ghost sm" data-ds="${s.id}" style="padding:0 6px;margin-top:2px">حذف</button></div>`).join('')}</div>`).join('')}</div>
-      <form class="row wrap" id="schedForm" style="margin-top:12px"><select class="input" name="weekday" style="width:auto">${WEEKDAYS.map((w, i) => `<option value="${i}">${w}</option>`).join('')}</select><input class="input ltr" type="time" name="start" value="16:00" style="width:auto"><input class="input ltr" type="time" name="end" value="17:30" style="width:auto">
-      <input class="input" name="subject" placeholder="درس" style="width:140px"><input class="input" name="room" placeholder="مکان" style="width:140px"><select class="input" name="kind" style="width:auto" aria-label="نوع جلسه">${Object.entries(KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select><select class="input" name="teacher_id" style="width:auto"><option value="">معلم</option>${md.teachers.map((t) => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select><button class="btn sm">${icon('plus', { size: 16 })} افزودن جلسه</button></form>`;
-    $('#schedForm', el).onsubmit = (e) => { e.preventDefault(); busy(e.submitter, async () => { await post('/api/manager/schedule', { ...formData(e.target), class_id: schedClass }); drawSched(); }); };
+      <form class="row wrap" id="schedForm" style="margin-top:12px;gap:8px;align-items:center">
+        <select class="input" name="weekday" style="width:auto">${WEEKDAYS.map((w, i) => `<option value="${i}">${w}</option>`).join('')}</select>
+        <input class="input ltr" type="time" name="start" value="16:00" style="width:auto">
+        <input class="input ltr" type="time" name="end" value="17:30" style="width:auto">
+        <select class="input" name="subject_sel" id="sfSubjSel" style="width:auto">${allSubjects.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}<option value="__new__">➕ درس جدید...</option></select>
+        <input class="input" name="subject_new" id="sfSubjNew" placeholder="نام درس جدید" style="width:140px;display:none" maxlength="40">
+        <select class="input" name="room_sel" id="sfRoomSel" style="width:auto"><option value="">مکان (اختیاری)</option>${allRooms.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('')}<option value="__new__">➕ مکان جدید...</option></select>
+        <input class="input" name="room_new" id="sfRoomNew" placeholder="نام مکان جدید" style="width:140px;display:none" maxlength="30">
+        <select class="input" name="kind" style="width:auto" aria-label="نوع جلسه">${Object.entries(KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
+        <select class="input" name="teacher_id" style="width:auto"><option value="">معلم</option>${md.teachers.map((t) => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select>
+        <button class="btn sm">${icon('plus', { size: 16 })} افزودن جلسه</button>
+      </form>`;
+    const syncCustom = (selId, inpId) => {
+      const sel = $(selId, el), inp = $(inpId, el);
+      const toggle = () => { const isNew = sel.value === '__new__'; inp.style.display = isNew ? '' : 'none'; inp.required = isNew; if (isNew) inp.focus(); };
+      sel.onchange = toggle; toggle();
+    };
+    syncCustom('#sfSubjSel', '#sfSubjNew');
+    syncCustom('#sfRoomSel', '#sfRoomNew');
+    $('#schedForm', el).onsubmit = (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const subject = f.subject_sel.value === '__new__' ? f.subject_new.value.trim() : f.subject_sel.value;
+      const room = f.room_sel.value === '__new__' ? f.room_new.value.trim() : f.room_sel.value;
+      if (!subject) return toast('نام درس را وارد کنید', 'err');
+      busy(e.submitter, async () => {
+        await post('/api/manager/schedule', { weekday: f.weekday.value, start: f.start.value, end: f.end.value, subject, room, kind: f.kind.value, teacher_id: f.teacher_id.value, class_id: schedClass });
+        drawSched();
+      });
+    };
   };
   $('#schedSel', el).onchange = (e) => { schedClass = Number(e.target.value); drawSched(); };
+  $('#schedNewClass', el).onclick = () => modal({
+    title: 'افزودن کلاس جدید',
+    body: `<form id="sncForm" class="stack"><div class="field"><label for="sncGrade">پایه</label><select class="input" id="sncGrade" name="grade">${md.grades.map((g) => `<option value="${g}">${gradeName(g)}</option>`).join('')}</select></div><div class="field"><label for="sncName">نام کلاس (مثلاً الف، ب، تیزهوشان)</label><input class="input" id="sncName" name="name" maxlength="30" required></div></form>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ایجاد کلاس', onClick: async (m) => {
+      const d = formData($('#sncForm', m));
+      if (!d.name?.trim()) { toast('نام کلاس را وارد کنید', 'err'); return false; }
+      await post('/api/manager/classes', { grade: Number(d.grade), name: d.name.trim() });
+      metaCache = null; md = await meta();
+      const created = md.classes.find((c) => c.grade === Number(d.grade) && c.name === d.name.trim());
+      if (created) schedClass = created.id;
+      $('#schedSel', el).innerHTML = md.classes.map((c) => `<option value="${c.id}" ${c.id === schedClass ? 'selected' : ''}>${gradeName(c.grade)} ${esc(c.name)}</option>`).join('');
+      toast('کلاس ساخته شد', 'ok');
+      drawSched();
+    } }],
+  });
+  const compressScheduleImage = (file) => new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) return fileToData(file, 10).then(resolve, reject);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const maxDim = 1600;
+      let { width: w, height: h } = img;
+      if (w > maxDim || h > maxDim) {
+        if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); fileToData(file, 10).then(resolve, reject); };
+    img.src = url;
+  });
   $('#schedPhoto', el).onclick = () => {
     if (!schedClass) return toast('ابتدا یک کلاس ایجاد یا انتخاب کنید', 'err');
     const cls = md.classes.find((c) => c.id === schedClass);
@@ -397,11 +467,13 @@ async function staff(el) {
       wide: true,
       body: `<div class="stack">
         <div class="row wrap" style="gap:10px;align-items:center">
-          <input class="input grow" type="file" id="spFile" accept="image/png,image/jpeg,image/webp,application/pdf">
+          <input class="input grow" type="file" id="spFile" accept="image/*,application/pdf">
           <button type="button" class="btn" id="spParse" disabled>${icon('sparkles', { size: 16 })} تحلیل و استخراج برنامه</button>
         </div>
         <div id="spPreview" class="center" style="display:none"><img id="spImg" style="max-height:180px;border-radius:10px;border:1px solid var(--line)" alt="پیش‌نمایش برنامه"></div>
         <div id="spNote" class="small muted" style="display:none"></div>
+        <datalist id="spSubjList">${allSubjects.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+        <datalist id="spRoomList">${allRooms.map((r) => `<option value="${esc(r)}">`).join('')}</datalist>
         <div id="spBox" style="display:none">
           <div class="row between wrap" style="margin-bottom:8px;gap:8px">
             <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="spReplace"> <span class="small">جایگزینی با برنامه فعلی این کلاس</span></label>
@@ -411,8 +483,9 @@ async function staff(el) {
         </div>
       </div>`,
       actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'تایید و ثبت نهایی در برنامه', onClick: async (m) => {
-        if (!slots.length) { toast('ابتدا تصویر را تحلیل کنید یا ردیفی اضافه کنید', 'err'); return false; }
-        const readRows = [...m.querySelectorAll('#spRows tr')].map((tr) => ({
+        const rows = [...m.querySelectorAll('#spRows tr')];
+        if (!rows.length) { toast('ابتدا تصویر را تحلیل کنید یا ردیفی اضافه کنید', 'err'); return false; }
+        const readRows = rows.map((tr) => ({
           weekday: Number(tr.querySelector('[data-f="weekday"]').value),
           start: tr.querySelector('[data-f="start"]').value,
           end: tr.querySelector('[data-f="end"]').value,
@@ -433,9 +506,9 @@ async function staff(el) {
             <td><select class="input sm" data-f="weekday" style="width:95px">${WEEKDAYS.map((w, i) => `<option value="${i}" ${i === Number(s.weekday) ? 'selected' : ''}>${w}</option>`).join('')}</select></td>
             <td><input class="input sm ltr" type="time" data-f="start" value="${esc(s.start || '16:00')}" style="width:95px"></td>
             <td><input class="input sm ltr" type="time" data-f="end" value="${esc(s.end || '17:30')}" style="width:95px"></td>
-            <td><input class="input sm" data-f="subject" value="${esc(s.subject || '')}" placeholder="نام درس" style="width:120px"></td>
+            <td><input class="input sm" data-f="subject" list="spSubjList" value="${esc(s.subject || '')}" placeholder="نام درس" style="width:125px"></td>
             <td><select class="input sm" data-f="teacher_id" style="width:120px"><option value="">—</option>${md.teachers.map((t) => `<option value="${t.id}" ${Number(s.teacher_id) === t.id ? 'selected' : ''}>${esc(t.full_name)}</option>`).join('')}</select></td>
-            <td><input class="input sm" data-f="room" value="${esc(s.room || '')}" placeholder="مکان" style="width:85px"></td>
+            <td><input class="input sm" data-f="room" list="spRoomList" value="${esc(s.room || '')}" placeholder="مکان" style="width:95px"></td>
             <td><select class="input sm" data-f="kind" style="width:95px">${Object.entries(KINDS).map(([k, v]) => `<option value="${k}" ${s.kind === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select></td>
             <td><button type="button" class="btn sm ghost" data-rmrow="${idx}" aria-label="حذف">${icon('trash', { size: 14 })}</button></td>
           </tr>`).join('');
@@ -443,13 +516,17 @@ async function staff(el) {
         $('#spFile', m).onchange = async (e) => {
           const f = e.target.files[0];
           if (!f) return;
-          dataUrl = await fileToData(f);
-          $('#spParse', m).disabled = false;
-          if (f.type.startsWith('image/')) {
-            $('#spImg', m).src = dataUrl;
-            $('#spPreview', m).style.display = '';
-          } else {
-            $('#spPreview', m).style.display = 'none';
+          try {
+            dataUrl = await compressScheduleImage(f);
+            $('#spParse', m).disabled = false;
+            if (f.type.startsWith('image/')) {
+              $('#spImg', m).src = dataUrl;
+              $('#spPreview', m).style.display = '';
+            } else {
+              $('#spPreview', m).style.display = 'none';
+            }
+          } catch (err) {
+            toast(err.message || 'خطا در خواندن فایل', 'err');
           }
         };
         $('#spParse', m).onclick = (e) => busy(e.currentTarget, async () => {
