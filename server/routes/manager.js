@@ -12,6 +12,7 @@ import { sendSms, smsProvider } from '../sms.js';
 import { extractScheduleFromImage } from '../schedule-ocr.js';
 import { setSession } from './common.js';
 import { parseQuestions, examWithResults, performanceList, studentDetail } from './teacher.js';
+import { buildXlsx } from '../qb-xlsx.js';
 
 const M = { roles: ['manager'] };
 const GRADES = [4, 5, 6, 7, 8, 9];
@@ -257,7 +258,7 @@ export default function register(r) {
       grades: GRADES,
       classes: all(`SELECT c.*, (SELECT COUNT(*) FROM students s JOIN users u ON u.id=s.user_id WHERE s.class_id=c.id AND u.active=1) students FROM classes c WHERE center_id=? ORDER BY grade, name`, cid),
       schools: all(`SELECT DISTINCT s.school FROM students s JOIN users u ON u.id=s.user_id WHERE u.center_id=? AND s.school<>'' ORDER BY s.school`, cid).map((x) => x.school),
-      teachers: all(`SELECT u.id, u.full_name, u.username, u.mobile, u.active, (SELECT GROUP_CONCAT(c.grade || c.name || ':' || tc.subject, '، ') FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=u.id) classes
+      teachers: all(`SELECT u.id, u.full_name, u.username, u.mobile, u.active, u.is_counselor, u.counselor_grades_json, (SELECT GROUP_CONCAT(c.grade || c.name || ':' || tc.subject, '، ') FROM teacher_classes tc JOIN classes c ON c.id=tc.class_id WHERE tc.teacher_id=u.id) classes
         FROM users u WHERE u.center_id=? AND u.role='teacher' ORDER BY u.full_name`, cid),
     };
   });
@@ -315,6 +316,46 @@ export default function register(r) {
       student_user: r.national_code,
       student_pass: r.national_code,
     }));
+  });
+
+  r.get('/api/manager/students/export.xlsx', M, (ctx) => {
+    const q = clampStr(ctx.query.q, 60);
+    const grade = Number(ctx.query.grade) || 0;
+    const cls = Number(ctx.query.class_id) || 0;
+    const pay = ctx.query.pay || '';
+    const gender = ctx.query.gender || '';
+    const school = clampStr(ctx.query.school, 80);
+    const where = ['u.center_id=?', "u.role='student'", 'u.active=1'];
+    const p = [ctx.user.center_id];
+    if (grade) { where.push('s.grade=?'); p.push(grade); }
+    if (cls) { where.push('s.class_id=?'); p.push(cls); }
+    if (gender) { where.push('u.gender=?'); p.push(gender); }
+    if (school) { where.push('s.school=?'); p.push(school); }
+    if (q) { where.push('(u.full_name LIKE ? OR u.national_code LIKE ? OR s.parent_phone LIKE ?)'); p.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+
+    const rows = all(
+      `SELECT u.id, u.full_name, u.national_code, u.gender, s.grade, c.name class_name, s.school, s.parent_phone, s.birth_date, s.address
+       FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id
+       WHERE ${where.join(' AND ')} ORDER BY s.grade, u.full_name`,
+      ...p
+    );
+    const filtered = pay ? rows.filter((x) => feeStatus(x.id).state === pay) : rows;
+    const payFa = { paid: 'پرداخت‌شده', pending: 'در انتظار تأیید', unpaid: 'پرداخت‌نشده', locked: 'قفل‌شده' };
+    const sheet = [
+      ['نام و نام خانوادگی', 'کد ملی', 'جنسیت', 'پایه', 'کلاس', 'مدرسه', 'موبایل والدین', 'وضعیت شهریه', 'تاریخ تولد', 'نشانی'],
+      ...filtered.map((x) => [
+        x.full_name, x.national_code || '', x.gender === 'f' ? 'دختر' : 'پسر',
+        x.grade, x.class_name || '', x.school || '', x.parent_phone || '',
+        payFa[feeStatus(x.id).state] || 'نامشخص', x.birth_date || '', x.address || '',
+      ]),
+    ];
+    const buf = buildXlsx(sheet);
+    ctx.handled = true;
+    ctx.res.writeHead(200, {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="students-export.xlsx"',
+    });
+    ctx.res.end(buf);
   });
 
   r.get('/api/manager/students/:id', M, (ctx) => {
@@ -497,8 +538,10 @@ export default function register(r) {
     if (!full_name || !/^[a-z0-9_.]{3,40}$/.test(username)) fail(400, 'نام و نام کاربری لاتین (حداقل ۳ حرف) لازم است');
     if (!b.password || String(b.password).length < 6) fail(400, 'رمز عبور حداقل ۶ کاراکتر');
     if (get(`SELECT 1 FROM users WHERE role='teacher' AND username=?`, username)) fail(400, 'این نام کاربری تکراری است');
+    const isCounselor = b.is_counselor ? 1 : 0;
+    const cGrades = JSON.stringify(Array.isArray(b.counselor_grades) ? b.counselor_grades.map(Number).filter((g) => g >= 4 && g <= 9) : []);
     tx(() => {
-      const res = run(`INSERT INTO users (center_id, role, username, mobile, pass_hash, full_name) VALUES (?,?,?,?,?,?)`, ctx.user.center_id, 'teacher', username, clampStr(b.mobile, 11) || null, hashPassword(b.password), full_name);
+      const res = run(`INSERT INTO users (center_id, role, username, mobile, pass_hash, full_name, is_counselor, counselor_grades_json) VALUES (?,?,?,?,?,?,?,?)`, ctx.user.center_id, 'teacher', username, clampStr(b.mobile, 11) || null, hashPassword(b.password), full_name, isCounselor, cGrades);
       for (const a of b.assign || []) { ownClass(ctx, a.class_id); run('INSERT OR IGNORE INTO teacher_classes VALUES (?,?,?)', Number(res.lastInsertRowid), Number(a.class_id), clampStr(a.subject, 40)); }
     });
     return { ok: true };
@@ -509,6 +552,8 @@ export default function register(r) {
     tx(() => {
       if (ctx.body.full_name) run('UPDATE users SET full_name=? WHERE id=?', clampStr(ctx.body.full_name, 80), t.id);
       if (ctx.body.active !== undefined) run('UPDATE users SET active=? WHERE id=?', ctx.body.active ? 1 : 0, t.id);
+      if (ctx.body.is_counselor !== undefined) run('UPDATE users SET is_counselor=? WHERE id=?', ctx.body.is_counselor ? 1 : 0, t.id);
+      if (Array.isArray(ctx.body.counselor_grades)) run('UPDATE users SET counselor_grades_json=? WHERE id=?', JSON.stringify(ctx.body.counselor_grades.map(Number).filter((g) => g >= 4 && g <= 9)), t.id);
       if (ctx.body.password) { if (String(ctx.body.password).length < 6) fail(400, 'رمز عبور حداقل ۶ کاراکتر'); run('UPDATE users SET pass_hash=? WHERE id=?', hashPassword(ctx.body.password), t.id); }
       if (Array.isArray(ctx.body.assign)) {
         run('DELETE FROM teacher_classes WHERE teacher_id=?', t.id);
@@ -518,9 +563,10 @@ export default function register(r) {
     return { ok: true };
   });
   r.get('/api/manager/teachers/:id', M, (ctx) => {
-    const t = get(`SELECT id, full_name, username, mobile, active FROM users WHERE id=? AND center_id=? AND role='teacher'`, Number(ctx.params.id), ctx.user.center_id);
+    const t = get(`SELECT id, full_name, username, mobile, active, is_counselor, counselor_grades_json FROM users WHERE id=? AND center_id=? AND role='teacher'`, Number(ctx.params.id), ctx.user.center_id);
     if (!t) fail(404, 'معلم یافت نشد');
     t.assign = all('SELECT class_id, subject FROM teacher_classes WHERE teacher_id=?', t.id);
+    try { t.counselor_grades = JSON.parse(t.counselor_grades_json || '[]'); } catch { t.counselor_grades = []; }
     return t;
   });
   r.del('/api/manager/teachers/:id', M, (ctx) => {
@@ -1322,6 +1368,55 @@ export default function register(r) {
 
   r.post('/api/manager/barpa-exams/upload', { roles: ['manager', 'admin'] }, handleBarpaUpload);
 
+  // ---------- خروجی اکسل دانش‌آموزان (با اعمال تمام فیلترها) ----------
+  r.get('/api/manager/students/export.xlsx', M, (ctx) => {
+    const q = clampStr(ctx.query.q, 60);
+    const grade = Number(ctx.query.grade) || 0;
+    const cls = Number(ctx.query.class_id) || 0;
+    const pay = ctx.query.pay || '';
+    const gender = ctx.query.gender || '';
+    const school = clampStr(ctx.query.school, 80);
+    const where = ['u.center_id=?', "u.role='student'", 'u.active=1'];
+    const p = [ctx.user.center_id];
+    if (grade) { where.push('s.grade=?'); p.push(grade); }
+    if (cls) { where.push('s.class_id=?'); p.push(cls); }
+    if (gender) { where.push('u.gender=?'); p.push(gender); }
+    if (school) { where.push('s.school=?'); p.push(school); }
+    if (q) { where.push('(u.full_name LIKE ? OR u.national_code LIKE ? OR s.parent_phone LIKE ?)'); p.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+
+    const rows = all(
+      `SELECT u.id, u.full_name, u.national_code, u.gender, s.grade, c.name class_name, s.school, s.parent_phone, s.birth_date, s.address
+       FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id
+       WHERE ${where.join(' AND ')} ORDER BY s.grade, u.full_name`,
+      ...p
+    );
+    const filtered = pay ? rows.filter((x) => {
+      const fs = feeStatus(x.id);
+      if (pay === 'locked') return !!fs.locked;
+      if (pay === 'prev_unpaid') return !!fs.prev_unpaid;
+      return fs.status === pay;
+    }) : rows;
+    const payFa = { paid: 'پرداخت‌شده', pending: 'در انتظار تأیید', unpaid: 'پرداخت‌نشده', rejected: 'ردشده', free: 'معاف' };
+    const sheet = [
+      ['نام و نام خانوادگی', 'کد ملی', 'جنسیت', 'پایه', 'کلاس', 'مدرسه', 'موبایل والدین', 'وضعیت شهریه', 'تاریخ تولد', 'نشانی'],
+      ...filtered.map((x) => {
+        const fs = feeStatus(x.id);
+        return [
+          x.full_name, x.national_code || '', x.gender === 'f' ? 'دختر' : 'پسر',
+          x.grade, x.class_name || '', x.school || '', x.parent_phone || '',
+          fs.locked ? 'قفل‌شده' : (payFa[fs.status] || 'نامشخص'), x.birth_date || '', x.address || '',
+        ];
+      }),
+    ];
+    const buf = buildXlsx(sheet);
+    ctx.handled = true;
+    ctx.res.writeHead(200, {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="students-export.xlsx"',
+    });
+    ctx.res.end(buf);
+  });
+
   // ---------- مدیریت رکوردهای تطبیق‌نشده آزمون برپا ----------
   r.get('/api/manager/barpa-exams/unmatched', M, (ctx) => {
     const examId = ctx.query.exam_id;
@@ -1429,4 +1524,88 @@ export default function register(r) {
   });
 
   r.post('/api/manager/barpa-exams/upload', { roles: ['manager', 'admin'] }, handleBarpaUpload);
+
+  // ---------- خروجی اکسل دانش‌آموزان (با اعمال تمام فیلترها) ----------
+  r.get('/api/manager/students/export.xlsx', M, (ctx) => {
+    const q = clampStr(ctx.query.q, 60);
+    const grade = Number(ctx.query.grade) || 0;
+    const cls = Number(ctx.query.class_id) || 0;
+    const pay = ctx.query.pay || '';
+    const gender = ctx.query.gender || '';
+    const school = clampStr(ctx.query.school, 80);
+    const where = ['u.center_id=?', "u.role='student'", 'u.active=1'];
+    const p = [ctx.user.center_id];
+    if (grade) { where.push('s.grade=?'); p.push(grade); }
+    if (cls) { where.push('s.class_id=?'); p.push(cls); }
+    if (gender) { where.push('u.gender=?'); p.push(gender); }
+    if (school) { where.push('s.school=?'); p.push(school); }
+    if (q) { where.push('(u.full_name LIKE ? OR u.national_code LIKE ? OR s.parent_phone LIKE ?)'); p.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+
+    const rows = all(
+      `SELECT u.id, u.full_name, u.national_code, u.gender, s.grade, c.name class_name, s.school, s.parent_phone, s.birth_date, s.address
+       FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id
+       WHERE ${where.join(' AND ')} ORDER BY s.grade, u.full_name`,
+      ...p
+    );
+    const filtered = pay ? rows.filter((x) => {
+      const fs = feeStatus(x.id);
+      if (pay === 'locked') return !!fs.locked;
+      if (pay === 'prev_unpaid') return !!fs.prev_unpaid;
+      return fs.status === pay;
+    }) : rows;
+    const payFa = { paid: 'پرداخت‌شده', pending: 'در انتظار تأیید', unpaid: 'پرداخت‌نشده', rejected: 'ردشده', free: 'معاف' };
+    const sheet = [
+      ['نام و نام خانوادگی', 'کد ملی', 'جنسیت', 'پایه', 'کلاس', 'مدرسه', 'موبایل والدین', 'وضعیت شهریه', 'تاریخ تولد', 'نشانی'],
+      ...filtered.map((x) => {
+        const fs = feeStatus(x.id);
+        return [
+          x.full_name, x.national_code || '', x.gender === 'f' ? 'دختر' : 'پسر',
+          x.grade, x.class_name || '', x.school || '', x.parent_phone || '',
+          fs.locked ? 'قفل‌شده' : (payFa[fs.status] || 'نامشخص'), x.birth_date || '', x.address || '',
+        ];
+      }),
+    ];
+    const buf = buildXlsx(sheet);
+    ctx.handled = true;
+    ctx.res.writeHead(200, {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="students-export.xlsx"',
+    });
+    ctx.res.end(buf);
+  });
+
+  // ---------- مصوبات جلسات کانون ----------
+  r.get('/api/manager/meetings', M, (ctx) => {
+    return all('SELECT * FROM meeting_resolutions WHERE center_id=? ORDER BY meeting_date DESC, id DESC', ctx.user.center_id);
+  });
+  r.post('/api/manager/meetings', M, (ctx) => {
+    const b = ctx.body || {};
+    const title = clampStr(b.title, 150), decisions = clampStr(b.decisions, 4000);
+    const mDate = clampStr(b.meeting_date, 20) || ymd();
+    if (!title || !decisions) fail(400, 'عنوان جلسه و شرح مصوبات الزامی است');
+    const st = ['pending', 'in_progress', 'done'].includes(b.status) ? b.status : 'pending';
+    const res = run(
+      'INSERT INTO meeting_resolutions (center_id, title, meeting_date, attendees, agenda, decisions, owner_name, status, created_by) VALUES (?,?,?,?,?,?,?,?,?)',
+      ctx.user.center_id, title, mDate, clampStr(b.attendees, 500), clampStr(b.agenda, 1000), decisions, clampStr(b.owner_name, 100), st, ctx.user.id
+    );
+    return { id: Number(res.lastInsertRowid) };
+  });
+  r.put('/api/manager/meetings/:id', M, (ctx) => {
+    const row = get('SELECT * FROM meeting_resolutions WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id);
+    if (!row) fail(404, 'مصوبه یافت نشد');
+    const b = ctx.body || {};
+    const st = ['pending', 'in_progress', 'done'].includes(b.status) ? b.status : row.status;
+    run(
+      'UPDATE meeting_resolutions SET title=?, meeting_date=?, attendees=?, agenda=?, decisions=?, owner_name=?, status=? WHERE id=? AND center_id=?',
+      clampStr(b.title ?? row.title, 150), clampStr(b.meeting_date ?? row.meeting_date, 20),
+      clampStr(b.attendees ?? row.attendees, 500), clampStr(b.agenda ?? row.agenda, 1000),
+      clampStr(b.decisions ?? row.decisions, 4000), clampStr(b.owner_name ?? row.owner_name, 100),
+      st, row.id, ctx.user.center_id
+    );
+    return { ok: true };
+  });
+  r.del('/api/manager/meetings/:id', M, (ctx) => {
+    if (!run('DELETE FROM meeting_resolutions WHERE id=? AND center_id=?', Number(ctx.params.id), ctx.user.center_id).changes) fail(404, 'مصوبه یافت نشد');
+    return { ok: true };
+  });
 }

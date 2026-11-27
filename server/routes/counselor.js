@@ -3,8 +3,17 @@
 import { all, get, run, tx } from '../db.js';
 import { fail, clampStr, toEnDigits, normalizeIranianMobile, hashPasswordAsync, ymd, addDays } from '../util.js';
 
-const C = { roles: ['counselor'] };
+const C = { roles: ['counselor', 'teacher'] };
 const M = { roles: ['manager', 'admin'] };
+function ensureCounselor(ctx) {
+  if (ctx.user.role === 'teacher' && !ctx.user.is_counselor) fail(403, 'دسترسی مشاور برای شما فعال نشده است');
+}
+function counselorGrades(user) {
+  try {
+    const arr = JSON.parse(user.counselor_grades_json || '[]');
+    return Array.isArray(arr) ? arr.map(Number).filter((g) => g >= 4 && g <= 9) : [];
+  } catch { return []; }
+}
 const avg = (values) => values.length ? Math.round(values.reduce((n, x) => n + x, 0) / values.length * 10) / 10 : null;
 const count = (rows) => rows.length;
 const safeJson = (s) => { try { return JSON.parse(s || '[]'); } catch { return []; } };
@@ -14,10 +23,13 @@ function daysOf(q) {
   return days;
 }
 function ownStudent(ctx, id) {
+  ensureCounselor(ctx);
   const student = get(`SELECT u.id,u.full_name,u.mobile,s.grade,s.class_id,s.avatar,s.school,c.name class_name
     FROM users u JOIN students s ON s.user_id=u.id LEFT JOIN classes c ON c.id=s.class_id
     WHERE u.id=? AND u.center_id=? AND u.role='student' AND u.active=1`, Number(id), ctx.user.center_id);
   if (!student) fail(404, 'دانش‌آموز یافت نشد');
+  const grades = counselorGrades(ctx.user);
+  if (grades.length && !grades.includes(student.grade)) fail(403, 'این پایه در محدوده نظارت شما نیست');
   return student;
 }
 function dateOnly(value, label = 'تاریخ') {
@@ -32,14 +44,15 @@ export function counselorSessionStart(value) {
   if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(s)) fail(400, 'منطقه زمانی جلسه را مشخص کنید');
   return new Date(s).toISOString();
 }
-function examRows(cid) {
-  return all(`SELECT er.id,er.student_id,e.id exam_id,e.title,e.kind,COALESCE(e.subject,'عمومی') subject,er.percent,COALESCE(e.exam_date,er.created_at) date,'native' source
-    FROM exam_results er JOIN exams e ON e.id=er.exam_id JOIN users u ON u.id=er.student_id
+function examRows(cid, grades = []) {
+  const rows = all(`SELECT er.id,er.student_id,e.id exam_id,e.title,e.kind,COALESCE(e.subject,'عمومی') subject,er.percent,COALESCE(e.exam_date,er.created_at) date,'native' source,s.grade
+    FROM exam_results er JOIN exams e ON e.id=er.exam_id JOIN users u ON u.id=er.student_id JOIN students s ON s.user_id=u.id
     WHERE u.center_id=? AND e.center_id=? AND u.role='student' AND u.active=1
     UNION ALL
-    SELECT -r.id,r.student_id,r.exam_id,r.exam_title,'comprehensive','جامع',r.overall_percentage,r.created_at,'barpa'
-    FROM comprehensive_exam_reports r JOIN users u ON u.id=r.student_id
+    SELECT -r.id,r.student_id,r.exam_id,r.exam_title,'comprehensive','جامع',r.overall_percentage,r.created_at,'barpa',s.grade
+    FROM comprehensive_exam_reports r JOIN users u ON u.id=r.student_id JOIN students s ON s.user_id=u.id
     WHERE u.center_id=? AND r.center_id=? AND u.role='student' AND u.active=1 ORDER BY date`, cid, cid, cid, cid);
+  return grades.length ? rows.filter((r) => grades.includes(r.grade)) : rows;
 }
 function aggregateExams(rows) {
   const groups = new Map();
@@ -66,10 +79,13 @@ function studentRows(ctx) {
   });
 }
 function studyData(ctx) {
+  ensureCounselor(ctx);
+  const grades = counselorGrades(ctx.user);
   const days = daysOf(ctx.query), end = ymd(), start = addDays(end, 1 - days);
   let where = "u.center_id=? AND u.role='student' AND u.active=1 AND p.date>=? AND p.date<=?", params = [ctx.user.center_id, start, end];
+  if (grades.length) { where += ` AND s.grade IN (${grades.map(() => '?').join(',')})`; params.push(...grades); }
   if (ctx.query.student_id) { ownStudent(ctx, ctx.query.student_id); where += ' AND p.student_id=?'; params.push(Number(ctx.query.student_id)); }
-  const rows = all(`SELECT p.* FROM pomodoros p JOIN users u ON u.id=p.student_id WHERE ${where} ORDER BY p.date,p.id`, ...params);
+  const rows = all(`SELECT p.* FROM pomodoros p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id WHERE ${where} ORDER BY p.date,p.id`, ...params);
   const trend = Array.from({ length: days }, (_, i) => {
     const date = addDays(start, i), daily = rows.filter((p) => p.date === date);
     return { date, pomodoros: count(daily), minutes: daily.reduce((sum, p) => sum + p.minutes, 0) };
@@ -96,15 +112,22 @@ function managementCenter(ctx) {
 
 export default function register(r) {
   r.get('/api/counselor/students', C, (ctx) => {
+    ensureCounselor(ctx);
+    const grades = counselorGrades(ctx.user);
     let students = studentRows(ctx);
+    if (grades.length) students = students.filter((s) => grades.includes(s.grade));
     if (ctx.query.q) { const q = clampStr(ctx.query.q, 100); students = students.filter((s) => s.full_name.includes(q) || s.class_name?.includes(q)); }
     if (ctx.query.grade) students = students.filter((s) => s.grade === Number(ctx.query.grade));
     if (ctx.query.status && ctx.query.status !== 'all') students = students.filter((s) => s.status === ctx.query.status);
     return students;
   });
   r.get('/api/counselor/dashboard', C, (ctx) => {
-    const students = studentRows(ctx), study = studyData(ctx);
-    return { stats: overallStats(students, study), students, trend: study.trend, recent_exams: aggregateExams(examRows(ctx.user.center_id)).slice(0, 5), attention: students.filter((s) => ['attention','risk'].includes(s.status)), sessions: sessionRows(ctx).filter((s) => s.status === 'scheduled').slice(0, 5) };
+    ensureCounselor(ctx);
+    const grades = counselorGrades(ctx.user);
+    const rawStudents = studentRows(ctx);
+    const students = grades.length ? rawStudents.filter((s) => grades.includes(s.grade)) : rawStudents;
+    const study = studyData(ctx);
+    return { stats: overallStats(students, study), students, trend: study.trend, recent_exams: aggregateExams(examRows(ctx.user.center_id, grades)).slice(0, 5), attention: students.filter((s) => ['attention','risk'].includes(s.status)), sessions: sessionRows(ctx).filter((s) => s.status === 'scheduled').slice(0, 5) };
   });
   r.get('/api/counselor/study', C, studyData);
   r.get('/api/counselor/pomodoros', C, studyData);
@@ -126,12 +149,18 @@ export default function register(r) {
     return { ok: true, id: Number(result.lastInsertRowid) };
   });
   r.get('/api/counselor/exams', C, (ctx) => {
-    let exams = aggregateExams(examRows(ctx.user.center_id));
+    ensureCounselor(ctx);
+    const grades = counselorGrades(ctx.user);
+    let exams = aggregateExams(examRows(ctx.user.center_id, grades));
     if (ctx.query.kind && ctx.query.kind !== 'all') exams = exams.filter((e) => e.kind === ctx.query.kind);
     return exams;
   });
   r.get('/api/counselor/reports', C, (ctx) => {
-    const students = studentRows(ctx), study = studyData(ctx);
+    ensureCounselor(ctx);
+    const allowedGrades = counselorGrades(ctx.user);
+    const rawStudents = studentRows(ctx);
+    const students = allowedGrades.length ? rawStudents.filter((s) => allowedGrades.includes(s.grade)) : rawStudents;
+    const study = studyData(ctx);
     const studyByGrade = new Map(all(`SELECT s.grade,COUNT(*) pomodoros FROM pomodoros p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id WHERE u.center_id=? AND u.role='student' AND u.active=1 AND p.date>=? AND p.date<=? GROUP BY s.grade`, ctx.user.center_id,study.start,study.end).map((row) => [row.grade,row.pomodoros]));
     const grades = [...new Set(students.map((s) => s.grade))].map((grade) => {
       const rows = students.filter((s) => s.grade === grade);
@@ -140,7 +169,10 @@ export default function register(r) {
     return { stats: overallStats(students, study), grades, students, trend: study.trend };
   });
   r.get('/api/counselor/plans', C, (ctx) => {
+    ensureCounselor(ctx);
+    const allowedGrades = counselorGrades(ctx.user);
     const params = [ctx.user.center_id], filters = ["u.center_id=?", "u.active=1", "u.role='student'"];
+    if (allowedGrades.length) { filters.push(`s.grade IN (${allowedGrades.map(() => '?').join(',')})`); params.push(...allowedGrades); }
     if (ctx.query.student_id) { ownStudent(ctx, ctx.query.student_id); filters.push('p.student_id=?'); params.push(Number(ctx.query.student_id)); }
     if (ctx.query.week_start) { filters.push('p.week_start=?'); params.push(dateOnly(ctx.query.week_start)); }
     return all(`SELECT p.*,u.full_name,s.grade FROM counselor_plans p JOIN users u ON u.id=p.student_id JOIN students s ON s.user_id=u.id WHERE ${filters.join(' AND ')} ORDER BY p.week_start DESC,u.full_name`, ...params)
@@ -160,7 +192,7 @@ export default function register(r) {
       ON CONFLICT(student_id,week_start) DO UPDATE SET counselor_id=excluded.counselor_id,tasks_json=excluded.tasks_json,updated_at=datetime('now')`, student.id, ctx.user.id, week, JSON.stringify(tasks));
     return { ok: true };
   });
-  r.get('/api/counselor/sessions', C, sessionRows);
+  r.get('/api/counselor/sessions', C, (ctx) => { ensureCounselor(ctx); return sessionRows(ctx); });
   r.post('/api/counselor/sessions', C, (ctx) => {
     const student = ownStudent(ctx, ctx.body.student_id), title = clampStr(ctx.body.title, 200), start = counselorSessionStart(ctx.body.starts_at);
     if (!title) fail(400, 'عنوان جلسه را وارد کنید');
@@ -182,7 +214,7 @@ export default function register(r) {
   });
 
   // Managers can provision counselors in their own center. Admins must select one.
-  r.get('/api/manager/counselors', M, (ctx) => all(`SELECT id,full_name,username,mobile,active,created_at FROM users WHERE center_id=? AND role='counselor' ORDER BY full_name`, managementCenter(ctx)));
+  r.get('/api/manager/counselors', M, (ctx) => all(`SELECT id,full_name,username,mobile,active,counselor_grades_json,created_at FROM users WHERE center_id=? AND role='counselor' ORDER BY full_name`, managementCenter(ctx)).map((c) => ({ ...c, grades: safeJson(c.counselor_grades_json) })));
   r.post('/api/manager/counselors', M, async (ctx) => {
     const cid = managementCenter(ctx), b = ctx.body, username = toEnDigits(clampStr(b.username, 40)).toLowerCase(), name = clampStr(b.full_name, 80);
     if (!name || !/^[a-z0-9_.]{3,40}$/.test(username)) fail(400, 'نام و نام کاربری لاتین (حداقل سه حرف) لازم است');
@@ -191,9 +223,10 @@ export default function register(r) {
     const mobile = b.mobile ? normalizeIranianMobile(b.mobile) : null;
     if (b.mobile && !mobile) fail(400, 'شماره موبایل معتبر نیست');
     if (b.active !== undefined && ![true,false,0,1].includes(b.active)) fail(400, 'وضعیت حساب معتبر نیست');
+    const gradesJson = JSON.stringify(Array.isArray(b.grades) ? b.grades.map(Number).filter((g) => g >= 4 && g <= 9) : []);
     const hash = await hashPasswordAsync(b.password);
     if (get("SELECT id FROM users WHERE role='counselor' AND username=?", username)) fail(400, 'نام کاربری مشاور تکراری است');
-    const result = run("INSERT INTO users(center_id,role,username,full_name,mobile,pass_hash,active) VALUES (?,'counselor',?,?,?,?,?)", cid, username, name, mobile, hash, b.active == null ? 1 : Number(b.active));
+    const result = run("INSERT INTO users(center_id,role,username,full_name,mobile,pass_hash,active,counselor_grades_json) VALUES (?,'counselor',?,?,?,?,?,?)", cid, username, name, mobile, hash, b.active == null ? 1 : Number(b.active), gradesJson);
     return { ok: true, id: Number(result.lastInsertRowid) };
   });
   r.put('/api/manager/counselors/:id', M, async (ctx) => {
@@ -206,10 +239,11 @@ export default function register(r) {
     if (b.mobile && !mobile) fail(400, 'شماره موبایل معتبر نیست');
     if (b.active !== undefined && ![true,false,0,1].includes(b.active)) fail(400, 'وضعیت حساب معتبر نیست');
     if (b.password != null && String(b.password).length < 6) fail(400, 'رمز عبور حداقل شش کاراکتر است');
+    const gradesJson = b.grades !== undefined ? JSON.stringify(Array.isArray(b.grades) ? b.grades.map(Number).filter((g) => g >= 4 && g <= 9) : []) : (existing.counselor_grades_json || '[]');
     const hash = b.password == null ? existing.pass_hash : await hashPasswordAsync(b.password);
     tx(() => {
       if (get("SELECT id FROM users WHERE role='counselor' AND username=? AND id<>?", username, id)) fail(400, 'نام کاربری مشاور تکراری است');
-      run('UPDATE users SET full_name=?,username=?,mobile=?,active=?,pass_hash=? WHERE id=? AND center_id=?', name, username, mobile, b.active == null ? existing.active : Number(b.active), hash, id, cid);
+      run('UPDATE users SET full_name=?,username=?,mobile=?,active=?,pass_hash=?,counselor_grades_json=? WHERE id=? AND center_id=?', name, username, mobile, b.active == null ? existing.active : Number(b.active), hash, gradesJson, id, cid);
     });
     return { ok: true };
   });

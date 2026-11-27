@@ -526,31 +526,64 @@ export default function registerQuestionBank(r) {
     return { id: existing.id, status: st };
   });
 
+  r.del('/api/qb/questions/:id', staff, (ctx) => {
+    const existing = get('SELECT q.*, t.grade, t.subject_key FROM questions q JOIN textbooks t ON t.id=q.book_id WHERE q.id=?', Number(ctx.params.id));
+    if (!existing) fail(404, 'سؤال یافت نشد');
+    if (!canAccessBook(ctx.user, { id: existing.book_id, grade: existing.grade, subject_key: existing.subject_key, center_id: existing.center_id })) fail(403, 'دسترسی مجاز نیست');
+    const used = get('SELECT COUNT(*) c FROM qb_exam_questions WHERE question_id=?', existing.id)?.c || 0;
+    if (used > 0) {
+      run("UPDATE questions SET status='archived', updated_at=datetime('now') WHERE id=?", existing.id);
+      return { ok: true, id: existing.id, archived: true };
+    }
+    tx(() => {
+      run('DELETE FROM question_sources WHERE question_id=?', existing.id);
+      run('DELETE FROM question_versions WHERE question_id=?', existing.id);
+      run('DELETE FROM question_review_logs WHERE question_id=?', existing.id);
+      run('DELETE FROM questions WHERE id=?', existing.id);
+    });
+    return { ok: true, id: existing.id, deleted: true };
+  });
+
   r.post('/api/qb/questions/bulk', staff, (ctx) => {
     const ids = Array.isArray(ctx.body.ids) ? ctx.body.ids.map(Number).filter(Boolean) : [];
     const action = String(ctx.body.action || '');
     if (!ids.length) fail(400, 'هیچ سؤالی انتخاب نشده است');
+    const cid = ctx.user.center_id || 0;
+    const isAdmin = ctx.user.role === 'admin';
+    const allowedRows = [];
+    for (const id of ids) {
+      const q = get('SELECT q.*, t.grade, t.subject_key FROM questions q JOIN textbooks t ON t.id=q.book_id WHERE q.id=?', id);
+      if (!q) continue;
+      if (!isAdmin && q.center_id !== cid) continue;
+      if (!canAccessBook(ctx.user, { id: q.book_id, grade: q.grade, subject_key: q.subject_key, center_id: q.center_id })) continue;
+      allowedRows.push(q);
+    }
+    if (!allowedRows.length) fail(403, 'هیچ سؤال مجازی برای تغییر یافت نشد');
     const statusMap = { publish: 'published', archive: 'archived', approve: 'approved', draft: 'draft' };
     if (statusMap[action]) {
       const toStatus = statusMap[action];
       tx(() => {
-        for (const id of ids) {
-          const q = get('SELECT id, status FROM questions WHERE id=?', id);
-          if (!q) continue;
-          run("UPDATE questions SET status=?, reviewed_by=?, reviewed_at=datetime('now'), updated_at=datetime('now') WHERE id=?", toStatus, ctx.user.id, id);
-          run('INSERT INTO question_review_logs (question_id, from_status, to_status, actor_id, note) VALUES (?,?,?,?,?)', id, q.status, toStatus, ctx.user.id, 'تغییر گروهی');
+        for (const q of allowedRows) {
+          run("UPDATE questions SET status=?, reviewed_by=?, reviewed_at=datetime('now'), updated_at=datetime('now') WHERE id=?", toStatus, ctx.user.id, q.id);
+          run('INSERT INTO question_review_logs (question_id, from_status, to_status, actor_id, note) VALUES (?,?,?,?,?)', q.id, q.status, toStatus, ctx.user.id, 'تغییر گروهی');
         }
       });
-      return { updated: ids.length, status: toStatus };
+      return { updated: allowedRows.length, status: toStatus };
     }
     if (action === 'edit') {
+      const diff = ctx.body.difficulty != null ? Number(ctx.body.difficulty) : null;
+      if (diff != null && (!Number.isInteger(diff) || diff < 1 || diff > 5)) fail(400, 'سطح دشواری باید بین ۱ تا ۵ باشد');
+      const chId = ctx.body.chapter_id != null ? Number(ctx.body.chapter_id) : null;
       tx(() => {
-        for (const id of ids) {
-          if (ctx.body.difficulty) run('UPDATE questions SET difficulty=? WHERE id=?', Number(ctx.body.difficulty), id);
-          if (ctx.body.chapter_id) run('UPDATE questions SET chapter_id=? WHERE id=?', Number(ctx.body.chapter_id), id);
+        for (const q of allowedRows) {
+          if (diff != null) run('UPDATE questions SET difficulty=? WHERE id=?', diff, q.id);
+          if (chId != null) {
+            const validCh = get('SELECT id FROM textbook_chapters WHERE id=? AND edition_id=?', chId, q.edition_id);
+            if (validCh) run('UPDATE questions SET chapter_id=? WHERE id=?', chId, q.id);
+          }
         }
       });
-      return { updated: ids.length };
+      return { updated: allowedRows.length };
     }
     fail(400, 'عملیات گروهی نامعتبر است');
   });
@@ -748,7 +781,9 @@ export default function registerQuestionBank(r) {
   });
 
   r.get('/api/qb/import/:batchId/errors.csv', staff, (ctx) => {
-    const rows = all('SELECT row_index, external_id, field, message FROM question_import_errors WHERE batch_id=? ORDER BY id', Number(ctx.params.batchId));
+    const batch = get('SELECT id, center_id FROM question_import_batches WHERE id=?', Number(ctx.params.batchId));
+    if (!batch || (ctx.user.role !== 'admin' && batch.center_id && batch.center_id !== ctx.user.center_id)) fail(404, 'بسته یافت نشد');
+    const rows = all('SELECT row_index, external_id, field, message FROM question_import_errors WHERE batch_id=? ORDER BY id', batch.id);
     const csv = '\uFEFF' + [['ردیف', 'شناسه', 'فیلد', 'خطا'], ...rows.map((e) => [e.row_index, e.external_id, e.field, e.message])]
       .map((line) => line.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     ctx.handled = true;
@@ -776,7 +811,7 @@ export default function registerQuestionBank(r) {
     let shortage = 0;
 
     if (isStaff && Array.isArray(b.question_ids) && b.question_ids.length) {
-      const qs = all(`SELECT * FROM questions WHERE id IN (${b.question_ids.map(() => '?').join(',')}) AND status='published'`, ...b.question_ids.map(Number));
+      const qs = all(`SELECT * FROM questions WHERE id IN (${b.question_ids.map(() => '?').join(',')}) AND status='published' AND book_id=? AND (center_id IS NULL OR center_id=?)`, ...b.question_ids.map(Number), book.id, ctx.user.center_id || 0);
       picked = qs.map((q, idx) => ({ question: q, orderIndex: idx, optionOrder: JSON.parse(q.options_json || '[]').map((o) => o.id) }));
     } else if (b.special_mode === 'mistakes' && b.source_attempt_id) {
       const att = get('SELECT * FROM qb_exam_attempts WHERE id=? AND student_id=?', Number(b.source_attempt_id), ctx.user.id);
@@ -852,16 +887,16 @@ export default function registerQuestionBank(r) {
 
   r.get('/api/qb/exams', allRoles, (ctx) => {
     if (ctx.user.role === 'student') {
-      const st = get('SELECT class_id FROM students WHERE user_id=?', ctx.user.id);
+      const st = get('SELECT grade, class_id FROM students WHERE user_id=?', ctx.user.id);
       const rows = all(
         `SELECT e.*, t.title book_title,
                 (SELECT id FROM qb_exam_attempts a WHERE a.exam_id=e.id AND a.student_id=? ORDER BY a.id DESC LIMIT 1) attempt_id,
                 (SELECT status FROM qb_exam_attempts a WHERE a.exam_id=e.id AND a.student_id=? ORDER BY a.id DESC LIMIT 1) attempt_status,
                 (SELECT percent FROM qb_exam_attempts a WHERE a.exam_id=e.id AND a.student_id=? ORDER BY a.id DESC LIMIT 1) percent
          FROM qb_exams e JOIN textbooks t ON t.id=e.book_id
-         WHERE e.center_id=? AND ((e.mode='practice' AND e.creator_id=?) OR (e.mode='official' AND (e.class_id IS NULL OR e.class_id=?)))
+         WHERE e.center_id=? AND ((e.mode='practice' AND e.creator_id=?) OR (e.mode='official' AND t.grade=? AND (e.class_id IS NULL OR e.class_id=?)))
          ORDER BY e.id DESC LIMIT 100`,
-        ctx.user.id, ctx.user.id, ctx.user.id, ctx.user.center_id || 1, ctx.user.id, st?.class_id || -1
+        ctx.user.id, ctx.user.id, ctx.user.id, ctx.user.center_id || 1, ctx.user.id, st?.grade || 0, st?.class_id || -1
       );
       return rows;
     }
@@ -876,11 +911,14 @@ export default function registerQuestionBank(r) {
   });
 
   r.get('/api/qb/exams/:id', allRoles, (ctx) => {
-    const exam = get('SELECT e.*, t.title book_title FROM qb_exams e JOIN textbooks t ON t.id=e.book_id WHERE e.id=?', Number(ctx.params.id));
-    if (!exam || exam.center_id !== (ctx.user.center_id || 1)) fail(404, 'آزمون یافت نشد');
+    const exam = get('SELECT e.*, t.title book_title, t.grade FROM qb_exams e JOIN textbooks t ON t.id=e.book_id WHERE e.id=?', Number(ctx.params.id));
+    if (!exam || (ctx.user.role !== 'admin' && exam.center_id !== (ctx.user.center_id || 1))) fail(404, 'آزمون یافت نشد');
     const qRows = all('SELECT * FROM qb_exam_questions WHERE exam_id=? ORDER BY order_index', exam.id);
     let attempt = null;
     if (ctx.user.role === 'student') {
+      const st = get('SELECT grade, class_id FROM students WHERE user_id=?', ctx.user.id);
+      if (exam.mode === 'practice' && exam.creator_id !== ctx.user.id) fail(403, 'دسترسی به این آزمون مجاز نیست');
+      if (exam.mode === 'official' && (exam.grade !== st?.grade || (exam.class_id && exam.class_id !== st?.class_id))) fail(403, 'این آزمون مربوط به پایه یا کلاس شما نیست');
       attempt = get('SELECT * FROM qb_exam_attempts WHERE exam_id=? AND student_id=? ORDER BY id DESC LIMIT 1', exam.id, ctx.user.id);
       if (!attempt) {
         const maxScore = qRows.reduce((s, r) => s + Number(r.score || 1), 0);
@@ -1019,17 +1057,19 @@ export default function registerQuestionBank(r) {
   });
 
   r.get('/api/qb/exams/:id/submissions', staff, (ctx) => {
+    const exam = get('SELECT id, center_id FROM qb_exams WHERE id=?', Number(ctx.params.id));
+    if (!exam || (ctx.user.role !== 'admin' && exam.center_id !== (ctx.user.center_id || 1))) fail(404, 'آزمون یافت نشد');
     return all(
       `SELECT a.*, u.full_name student_name, u.national_code
        FROM qb_exam_attempts a JOIN users u ON u.id=a.student_id
        WHERE a.exam_id=? AND a.status IN ('submitted','graded') ORDER BY a.submitted_at DESC`,
-      Number(ctx.params.id)
+      exam.id
     );
   });
 
   r.post('/api/qb/attempts/:id/grade', staff, (ctx) => {
-    const att = get('SELECT * FROM qb_exam_attempts WHERE id=?', Number(ctx.params.id));
-    if (!att) fail(404, 'برگه یافت نشد');
+    const att = get('SELECT a.*, e.center_id FROM qb_exam_attempts a JOIN qb_exams e ON e.id=a.exam_id WHERE a.id=?', Number(ctx.params.id));
+    if (!att || (ctx.user.role !== 'admin' && att.center_id !== (ctx.user.center_id || 1))) fail(404, 'برگه یافت نشد');
     const grading = JSON.parse(att.grading_json || '{}');
     const manualScores = ctx.body.manual_scores || {};
     let manualTotal = 0;
@@ -1052,6 +1092,10 @@ export default function registerQuestionBank(r) {
   r.get('/api/qb/performance/pages', allRoles, (ctx) => {
     const studentId = ctx.user.role === 'student' ? ctx.user.id : Number(ctx.query.student_id || 0);
     if (studentId) {
+      if (ctx.user.role !== 'student' && ctx.user.role !== 'admin') {
+        const stu = get('SELECT center_id FROM users WHERE id=?', studentId);
+        if (!stu || stu.center_id !== ctx.user.center_id) fail(403, 'دسترسی مجاز نیست');
+      }
       return all(
         `SELECT spp.*, t.title book_title FROM student_page_performance spp JOIN textbooks t ON t.id=spp.book_id
          WHERE spp.student_id=? ${ctx.query.book_id ? 'AND spp.book_id=?' : ''} ORDER BY spp.page_number`,
@@ -1059,6 +1103,10 @@ export default function registerQuestionBank(r) {
       );
     }
     if (ctx.query.class_id && ctx.query.book_id) {
+      if (ctx.user.role !== 'admin') {
+        const cls = get('SELECT center_id FROM classes WHERE id=?', Number(ctx.query.class_id));
+        if (!cls || cls.center_id !== ctx.user.center_id) fail(403, 'دسترسی مجاز نیست');
+      }
       return all(
         `SELECT spp.page_number, COUNT(*) students_count, AVG(CAST(spp.correct_count AS REAL)/NULLIF(spp.attempts_count,0))*100 avg_pct
          FROM student_page_performance spp JOIN students s ON s.user_id=spp.student_id
@@ -1082,5 +1130,139 @@ export default function registerQuestionBank(r) {
     }
     run('UPDATE centers SET qb_mix_easy=?, qb_mix_medium=?, qb_mix_hard=? WHERE id=?', easy, medium, hard, ctx.user.center_id || 1);
     return { easy, medium, hard };
+  });
+
+  // ---------- مرکز آزمون یکپارچه ----------
+  r.get('/api/exam-center/student/home', { roles: ['student'] }, (ctx) => {
+    const stu = get('SELECT user_id, class_id, grade FROM students WHERE user_id=?', ctx.user.id);
+    const cid = ctx.user.center_id || 1;
+    const qb_exams = all(
+      `SELECT e.*, t.title book_title, a.id attempt_id, a.status attempt_status, a.percent
+       FROM qb_exams e
+       JOIN textbooks t ON t.id=e.book_id
+       LEFT JOIN qb_exam_attempts a ON a.exam_id=e.id AND a.student_id=?
+       WHERE (e.creator_id=? OR (e.mode='official' AND e.class_id=?))
+       ORDER BY e.id DESC LIMIT 20`,
+      ctx.user.id, ctx.user.id, stu?.class_id || 0
+    );
+    const legacy_exams = all(
+      `SELECT e.id, e.title, e.subject, e.kind, e.exam_date, r.percent
+       FROM exams e
+       LEFT JOIN exam_results r ON r.exam_id=e.id AND r.student_id=?
+       WHERE e.center_id=? AND (e.class_id IS NULL OR e.class_id=?) AND (e.grade IS NULL OR e.grade=?)
+       ORDER BY e.id DESC LIMIT 20`,
+      ctx.user.id, cid, stu?.class_id || 0, stu?.grade || 0
+    );
+    const weak_pages = all(
+      `SELECT spp.book_id, t.title book_title, spp.page_number,
+              ROUND(CAST(spp.correct_count AS REAL)/NULLIF(spp.attempts_count,0)*100) avg_pct
+       FROM student_page_performance spp
+       JOIN textbooks t ON t.id=spp.book_id
+       WHERE spp.student_id=? AND spp.attempts_count > 0
+       ORDER BY avg_pct ASC, spp.attempts_count DESC LIMIT 6`,
+      ctx.user.id
+    );
+    const agg = get(
+      `SELECT COUNT(*) completed_count,
+              COALESCE(AVG(percent), 0) avg_percent,
+              COALESCE(SUM(correct_count + wrong_count + blank_count), 0) questions_answered
+       FROM qb_exam_attempts WHERE student_id=? AND status='graded'`,
+      ctx.user.id
+    ) || {};
+    return {
+      stats: {
+        completed_count: Number(agg.completed_count || 0),
+        questions_answered: Number(agg.questions_answered || 0),
+        avg_percent: Math.round(Number(agg.avg_percent || 0)),
+      },
+      qb_exams,
+      legacy_exams,
+      weak_pages,
+    };
+  });
+
+  r.post('/api/exam-center/student/quick-practice', { roles: ['student'] }, (ctx) => {
+    const stu = get('SELECT user_id, grade FROM students WHERE user_id=?', ctx.user.id);
+    if (!stu) fail(404, 'پروفایل دانش‌آموز یافت نشد');
+    const cid = ctx.user.center_id || 1;
+    const books = all('SELECT id, title FROM textbooks WHERE grade=? AND published=1 ORDER BY id', stu.grade);
+    if (!books.length) fail(400, 'کتابی برای پایهٔ شما ثبت نشده است');
+    const bookIds = books.map((b) => b.id);
+    const placeholders = bookIds.map(() => '?').join(',');
+    const pool = all(
+      `SELECT q.*, e.id ed_id FROM questions q
+       JOIN textbook_editions e ON e.id=q.edition_id
+       WHERE q.book_id IN (${placeholders}) AND q.status='published' AND (q.center_id IS NULL OR q.center_id=?)
+       ORDER BY RANDOM() LIMIT 5`,
+      ...bookIds, cid
+    );
+    if (!pool.length) fail(400, 'هنوز سؤال منتشرشده‌ای برای پایهٔ شما در بانک سؤال موجود نیست');
+    const primaryBook = pool[0].book_id;
+    const primaryEd = pool[0].ed_id;
+    const exam_id = tx(() => {
+      const rIns = run(
+        `INSERT INTO qb_exams (center_id, creator_id, mode, title, book_id, edition_id, scope_type, scope_json, difficulty_mode, question_count, duration_minutes)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        cid, ctx.user.id, 'practice', 'تمرین سریع ۵ سؤالی',
+        primaryBook, primaryEd, 'book', '{}', 'mixed', pool.length, 0
+      );
+      const eid = Number(rIns.lastInsertRowid);
+      pool.forEach((q, idx) => {
+        run(
+          'INSERT INTO qb_exam_questions (exam_id, question_id, question_version, order_index, score, snapshot_json) VALUES (?,?,?,?,?,?)',
+          eid, q.id, q.version || 1, idx + 1, Number(q.score || 1), JSON.stringify(q)
+        );
+      });
+      return eid;
+    });
+    return { exam_id, question_count: pool.length };
+  });
+
+  r.get('/api/exam-center/student/mistakes', { roles: ['student'] }, (ctx) => {
+    const atts = all("SELECT exam_id, grading_json FROM qb_exam_attempts WHERE student_id=? AND status='graded' ORDER BY id DESC LIMIT 30", ctx.user.id);
+    const map = new Map();
+    for (const a of atts) {
+      let grading = {};
+      try { grading = JSON.parse(a.grading_json || '{}'); } catch {}
+      const qRows = all(
+        `SELECT eq.question_id, eq.snapshot_json, t.title book_title
+         FROM qb_exam_questions eq
+         JOIN qb_exams e ON e.id=eq.exam_id
+         JOIN textbooks t ON t.id=e.book_id
+         WHERE eq.exam_id=?`,
+        a.exam_id
+      );
+      for (const qr of qRows) {
+        const gr = grading[String(qr.question_id)];
+        if (!gr || gr.status !== 'wrong') continue;
+        let snap = {};
+        try { snap = JSON.parse(qr.snapshot_json || '{}'); } catch {}
+        const prev = map.get(qr.question_id);
+        if (prev) {
+          prev.wrong_times++;
+        } else {
+          const ch = snap.chapter_id ? get('SELECT number, title FROM textbook_chapters WHERE id=?', snap.chapter_id) : null;
+          map.set(qr.question_id, {
+            question_id: qr.question_id,
+            book_title: qr.book_title,
+            chapter_title: ch ? `فصل ${ch.number}: ${ch.title}` : null,
+            primary_page: snap.primary_page || 1,
+            wrong_times: 1,
+            stem: snap.stem || '',
+            explanation: snap.explanation || '',
+          });
+        }
+      }
+    }
+    return [...map.values()].sort((a, b) => b.wrong_times - a.wrong_times);
+  });
+
+  r.get('/api/exam-center/teacher/overview', staff, (ctx) => {
+    const cid = ctx.user.center_id || 1;
+    const books = all('SELECT * FROM textbooks WHERE (center_id IS NULL OR center_id=?)', cid)
+      .filter((b) => canAccessBook(ctx.user, b));
+    const qCount = get("SELECT COUNT(*) c FROM questions WHERE (center_id IS NULL OR center_id=?) AND status!='archived'", cid)?.c || 0;
+    const eCount = get('SELECT COUNT(*) c FROM qb_exams WHERE center_id=?', cid)?.c || 0;
+    return { books_count: books.length, questions_count: qCount, exams_count: eCount };
   });
 }

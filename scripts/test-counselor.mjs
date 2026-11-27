@@ -51,7 +51,15 @@ function migrationPreservesData() {
     const preserved = ['users', 'students', 'points', 'messages', 'teacher_classes', 'exams', 'exam_results', 'pomodoros'];
     const before = Object.fromEntries(preserved.map(table => [table, old.prepare(`SELECT * FROM ${table} ORDER BY 1`).all()]));
     migrate(old);
-    for (const table of preserved) assert.deepEqual(old.prepare(`SELECT * FROM ${table} ORDER BY 1`).all(), before[table], `${table} rows must survive the upgrade`);
+    for (const table of preserved) {
+      const after = old.prepare(`SELECT * FROM ${table} ORDER BY 1`).all();
+      assert.equal(after.length, before[table].length, `${table} row count must survive the upgrade`);
+      before[table].forEach((origRow, idx) => {
+        for (const col of Object.keys(origRow)) {
+          assert.deepEqual(after[idx][col], origRow[col], `${table}.${col} must survive the upgrade`);
+        }
+      });
+    }
     assert.equal(old.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
     assert.deepEqual(old.prepare('PRAGMA foreign_key_check').all(), []);
     old.exec("INSERT INTO users(id,center_id,role,username,pass_hash,full_name) VALUES(3,1,'counselor','new_counselor','h','New Counselor')");

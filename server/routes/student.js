@@ -66,24 +66,31 @@ export default function register(r) {
   r.get('/api/student/counselor-sessions', S, (ctx) => all(`
     SELECT cs.id,cs.title,cs.starts_at,cs.status,u.full_name counselor
     FROM counselor_sessions cs JOIN users u ON u.id=cs.counselor_id
-    WHERE cs.student_id=? AND u.center_id=? AND u.role='counselor' ORDER BY cs.starts_at DESC`,ctx.user.id,ctx.user.center_id));
+    WHERE cs.student_id=? AND u.center_id=? AND (u.role='counselor' OR (u.role='teacher' AND u.is_counselor=1)) ORDER BY cs.starts_at DESC`,ctx.user.id,ctx.user.center_id));
   r.post('/api/student/counselor-sessions', S, (ctx) => {
     const title=clampStr(ctx.body.title,200), start=counselorSessionStart(ctx.body.starts_at);
     if (!title) fail(400,'موضوع درخواست جلسه را وارد کنید');
-    const counselor=ctx.body.counselor_id == null
-      ? get("SELECT id FROM users WHERE center_id=? AND role='counselor' AND active=1 ORDER BY id LIMIT 1",ctx.user.center_id)
-      : get("SELECT id FROM users WHERE id=? AND center_id=? AND role='counselor' AND active=1",Number(ctx.body.counselor_id),ctx.user.center_id);
+    const st = studentInfo(ctx.user.id);
+    let counselor = ctx.body.counselor_id == null
+      ? null
+      : get("SELECT id FROM users WHERE id=? AND center_id=? AND (role='counselor' OR (role='teacher' AND is_counselor=1)) AND active=1",Number(ctx.body.counselor_id),ctx.user.center_id);
+    if (ctx.body.counselor_id == null) {
+      const candidates = all("SELECT id, role, counselor_grades_json FROM users WHERE center_id=? AND (role='counselor' OR (role='teacher' AND is_counselor=1)) AND active=1 ORDER BY CASE WHEN role='counselor' THEN 0 ELSE 1 END, id", ctx.user.center_id);
+      counselor = candidates.find((c) => {
+        try { const g = JSON.parse(c.counselor_grades_json || '[]'); return !g.length || (st && g.includes(st.grade)); } catch { return true; }
+      }) || candidates[0] || null;
+    }
     if (!counselor) fail(404,'مشاور فعال در کانون یافت نشد');
     const result=run("INSERT INTO counselor_sessions(student_id,counselor_id,title,starts_at,status,notes) VALUES (?,?,?,?,'requested','')",ctx.user.id,counselor.id,title,start);
     return {ok:true,id:Number(result.lastInsertRowid)};
   });
   // Personal plans from the counselor, separate from class-wide study targets.
   r.get('/api/student/counselor-plans', S, (ctx) => {
-    return all(`SELECT p.id,p.week_start,p.tasks_json,p.updated_at,u.full_name counselor FROM counselor_plans p JOIN users u ON u.id=p.counselor_id WHERE p.student_id=? AND u.center_id=? AND u.role='counselor' ORDER BY p.week_start DESC`, ctx.user.id,ctx.user.center_id)
+    return all(`SELECT p.id,p.week_start,p.tasks_json,p.updated_at,u.full_name counselor FROM counselor_plans p JOIN users u ON u.id=p.counselor_id WHERE p.student_id=? AND u.center_id=? AND (u.role='counselor' OR (u.role='teacher' AND u.is_counselor=1)) ORDER BY p.week_start DESC`, ctx.user.id,ctx.user.center_id)
       .map(({tasks_json,...plan}) => ({...plan,tasks:JSON.parse(tasks_json)}));
   });
   r.put('/api/student/counselor-plans/:id/tasks/:index', S, (ctx) => {
-    const plan=get(`SELECT p.* FROM counselor_plans p JOIN users u ON u.id=p.counselor_id WHERE p.id=? AND p.student_id=? AND u.center_id=? AND u.role='counselor'`, Number(ctx.params.id),ctx.user.id,ctx.user.center_id);
+    const plan=get(`SELECT p.* FROM counselor_plans p JOIN users u ON u.id=p.counselor_id WHERE p.id=? AND p.student_id=? AND u.center_id=? AND (u.role='counselor' OR (u.role='teacher' AND u.is_counselor=1))`, Number(ctx.params.id),ctx.user.id,ctx.user.center_id);
     if (!plan) fail(404,'برنامه یافت نشد');
     const tasks=JSON.parse(plan.tasks_json), index=Number(ctx.params.index);
     if (!Number.isInteger(index) || index<0 || index>=tasks.length || typeof ctx.body.done!=='boolean') fail(400,'فعالیت یا وضعیت معتبر نیست');

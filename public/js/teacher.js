@@ -10,6 +10,7 @@ import { openScanner, printSheet, MAX_Q } from './omr.js';
 import * as UI from './teacher-ui.js';
 import { lookModules } from './look.js';
 import { questionBankView, qbBookDetailView } from './qb-teacher.js';
+import { counselorViews } from './counselor.js';
 
 export const { nav, bottomNav } = UI;
 
@@ -507,8 +508,31 @@ async function materials(el) {
   });
 }
 
+async function teacherCounselorHub(el, _p, me) {
+  if (!me.is_counselor) { el.innerHTML = empty('lock', 'دسترسی مشاور برای حساب شما فعال نشده است'); return; }
+  const TABS = [
+    ['dashboard', 'داشبورد مشاور'],
+    ['studentsView', 'دانش‌آموزان'],
+    ['studyView', 'پومودورو و مطالعه'],
+    ['plansView', 'برنامه مطالعاتی'],
+    ['sessionsView', 'جلسات مشاوره'],
+    ['reportsView', 'گزارش‌های تحلیلی'],
+  ];
+  let tab = 'dashboard';
+  el.innerHTML = `<div class="chips" id="tcTabs" style="margin-bottom:14px">${TABS.map(([k, l]) => `<button type="button" class="chip ${k === tab ? 'on' : ''}" data-tct="${k}">${l}</button>`).join('')}</div><div id="tcBody"></div>`;
+  const renderTab = async () => {
+    $$('#tcTabs [data-tct]', el).forEach((b) => b.classList.toggle('on', b.dataset.tct === tab));
+    const box = $('#tcBody', el);
+    box.innerHTML = '';
+    await counselorViews[tab](box, {}, me);
+  };
+  on(el, 'click', '[data-tct]', (_e, b) => { tab = b.dataset.tct; renderTab(); });
+  await renderTab();
+}
+
 export const routes = [
   { path: '/home', view: (...args) => lookModules.look === 'new' ? lookModules.ui.home(...args) : UI.home(...args) },
+  { path: '/counselor', view: teacherCounselorHub },
   { path: '/timetable', view: teacherTimetable },
   { path: '/textbooks', view: textbooksView },
   { path: '/textbooks/:id', view: textbookView },

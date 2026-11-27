@@ -5,9 +5,9 @@ import { lookToggleHtml } from './look.js';
 const GROUPS = [
   { paths: ['/home', '/classes'] },
   { title: 'آموزش', paths: ['/attendance', '/assignments', '/exams', '/reports', '/materials', '/textbooks'] },
-  { title: 'برنامه‌ریزی و ارتباطات', paths: ['/timetable', '/plans', '/messages', '/more'] },
+  { title: 'برنامه‌ریزی و ارتباطات', paths: ['/timetable', '/plans', '/counselor', '/messages', '/more'] },
 ];
-const ICONS = { '/home': 'dashboard', '/classes': 'users', '/attendance': 'user-check', '/assignments': 'clipboard', '/exams': 'file-check', '/reports': 'chart', '/materials': 'book', '/textbooks': 'book', '/timetable': 'calendar', '/plans': 'timer', '/messages': 'message', '/more': 'grid', '/account': 'user' };
+const ICONS = { '/home': 'dashboard', '/classes': 'users', '/attendance': 'user-check', '/assignments': 'clipboard', '/exams': 'file-check', '/reports': 'chart', '/materials': 'book', '/textbooks': 'book', '/timetable': 'calendar', '/plans': 'timer', '/counselor': 'users', '/messages': 'message', '/more': 'grid', '/account': 'user' };
 const LABELS = { '/home': 'میز کار', '/plans': 'برنامه مطالعاتی', '/messages': 'پیام‌ها' };
 const navItem = (n) => `<a class="nav-item" href="#${n.path}" data-path="${n.path}"><span class="ni">${icon(ICONS[n.path] || n.icon, { size: 19 })}</span><span class="nl">${esc(LABELS[n.path] || n.label)}</span>${n.badge ? `<span class="cnt">${fa(n.badge)}</span>` : ''}</a>`;
 

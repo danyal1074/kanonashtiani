@@ -135,7 +135,7 @@ function parseTarget(a) {
 export function audienceMatcher(user) {
   if (user.role === 'student') {
     const s = get('SELECT grade, class_id FROM students WHERE user_id=?', user.id);
-    return (a) => a.target_type === 'all' || (a.target_type === 'grade' && parseTarget(a).includes(s.grade)) || (a.target_type === 'classes' && parseTarget(a).includes(s.class_id));
+    return (a) => a.target_type === 'all' || (a.target_type === 'grade' && parseTarget(a).includes(s?.grade)) || (a.target_type === 'classes' && parseTarget(a).includes(s?.class_id));
   }
   if (user.role === 'parent') {
     const kids = all('SELECT s.grade, s.class_id FROM parent_children pc JOIN students s ON s.user_id=pc.student_id WHERE pc.parent_id=?', user.id);

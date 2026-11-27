@@ -13,6 +13,7 @@ export const nav = (me) => [
   { path: '/students', icon: 'users', label: 'مدیریت دانش‌آموزان' },
   { path: '/staff', icon: 'board', label: 'معلمان، کلاس‌ها و برنامه' },
   { path: '/counselors', icon: 'users', label: 'مدیریت مشاوران' },
+  { path: '/meetings', icon: 'clipboard', label: 'مصوبات جلسات' },
   { path: '/timetable', icon: 'calendar', label: 'برنامه هفتگی کانون' },
   { path: '/fees', icon: 'card', label: 'حق عضویت و رسیدها' },
   { path: '/announcements', icon: 'megaphone', label: 'اطلاعیه‌رسانی' },
@@ -328,13 +329,14 @@ async function students(el) {
     toast(paid ? (r.unset ? 'پرداخت‌شده ثبت شد؛ مبلغ پایه هنوز تعیین نشده (بعداً در حسابداری کامل می‌شود)' : 'حق عضویت پرداخت‌شده ثبت شد و در حسابداری آمد') : 'پرداخت لغو شد', 'ok', 5000);
     load();
   }));
-  if ($('#exportStCsv')) $('#exportStCsv').onclick = async () => {
-    const r = await api(`/api/manager/students?${new URLSearchParams({ ...q, limit: 100, offset: 0 })}`);
-    if (!r.rows.length) return toast('دانش‌آموزی برای خروجی نیست', 'err');
-    downloadCsv(`students-${curPeriod || 'list'}.csv`,
-      ['نام و نام خانوادگی', 'کد ملی', 'پایه', 'کلاس', 'مدرسه', 'موبایل والدین', 'وضعیت ماه جاری', 'طلب ماه قبل'],
-      r.rows.map((s) => [s.full_name, s.national_code, gradeName(s.grade), s.class_name || '', s.school || '', s.parent_phone || '', PAY[s.pay]?.[0] || s.pay, s.prev_unpaid ? 'بله' : 'خیر']));
-    toast('فایل اکسل (CSV) آماده شد', 'ok');
+  if ($('#exportStCsv')) $('#exportStCsv').onclick = () => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v && k !== 'offset') params.set(k, v);
+    const a = document.createElement('a');
+    a.href = `/api/manager/students/export.xlsx?${params}`;
+    a.download = `students-${curPeriod || 'list'}.xlsx`;
+    a.click();
+    toast('فایل اکسل (XLSX) در حال دریافت است', 'ok');
   };
   if ($('#printStList')) $('#printStList').onclick = async () => {
     const r = await api(`/api/manager/students?${new URLSearchParams({ ...q, limit: 100, offset: 0 })}`);
@@ -517,7 +519,7 @@ async function staff(el) {
   let schedClass = md.classes[0]?.id;
   el.innerHTML = `<div class="grid c2"><div class="card"><div class="card-title"><span class="ib">${icon('board', { size: 18 })}</span>معلمان<input class="input sm more" id="tSearch" placeholder="جست‌وجوی معلم…" style="width:160px"></div><div class="list" id="tList">${md.teachers.map((t) => {
     const clsChips = t.classes ? String(t.classes).split('،').map((x) => `<span class="badge gray" style="font-size:10px;padding:1px 6px">${fa(esc(x.trim().replace(/:/g, ' · ')))}</span>`).join('') : '<span class="tiny muted">بدون کلاس</span>';
-    return `<div class="list-item" data-tname="${esc(t.full_name)}" style="align-items:flex-start">${nameAvatar(t.full_name)}<div class="grow"><div class="row wrap" style="gap:6px"><b class="small">${esc(t.full_name)}</b><span class="tiny muted" dir="ltr">@${esc(t.username)}</span>${t.active ? '' : '<span class="badge red">غیرفعال</span>'}</div><div class="row wrap" style="gap:4px;margin-top:5px">${clsChips}</div></div><button class="btn sm ghost" data-et="${t.id}" aria-label="ویرایش معلم" title="ویرایش معلم">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-delt="${t.id}" data-tname="${esc(t.full_name)}" aria-label="حذف معلم" title="حذف معلم" style="color:var(--red)">${icon('trash', { size: 15 })}</button></div>`;
+    return `<div class="list-item" data-tname="${esc(t.full_name)}" style="align-items:flex-start">${nameAvatar(t.full_name)}<div class="grow"><div class="row wrap" style="gap:6px"><b class="small">${esc(t.full_name)}</b><span class="tiny muted" dir="ltr">@${esc(t.username)}</span>${t.is_counselor ? '<span class="badge blue">مشاور</span>' : ''}${t.active ? '' : '<span class="badge red">غیرفعال</span>'}</div><div class="row wrap" style="gap:4px;margin-top:5px">${clsChips}</div></div><button class="btn sm ghost" data-et="${t.id}" aria-label="ویرایش معلم" title="ویرایش معلم">${icon('edit', { size: 16 })}</button><button class="icon-btn" data-delt="${t.id}" data-tname="${esc(t.full_name)}" aria-label="حذف معلم" title="حذف معلم" style="color:var(--red)">${icon('trash', { size: 15 })}</button></div>`;
   }).join('') || empty('users', 'هنوز معلمی ثبت نشده')}</div></div>
     <div class="card"><div class="card-title"><span class="ib">${icon('building', { size: 18 })}</span>کلاس‌ها</div><div class="grid c3">${md.classes.map((c) => `<div class="card flat center" style="padding:12px"><b>${gradeName(c.grade)} ${esc(c.name)}</b><div class="tiny muted">${fa(c.students)} نفر</div><div class="row center" style="gap:4px;margin-top:6px"><button class="btn ghost sm" data-ec="${c.id}" data-cname="${esc(c.name)}" data-cgrade="${c.grade}">${icon('edit', { size: 14 })} ویرایش</button>${c.students ? '' : `<button class="btn ghost sm" data-dc="${c.id}">حذف</button>`}</div></div>`).join('')}</div></div></div>
     <div class="card" style="margin-top:18px"><div class="card-title"><span class="ib">${icon('calendar', { size: 18 })}</span>برنامه هفتگی کلاس<span class="row wrap more" style="gap:8px"><a class="btn sm soft" href="#/timetable">${icon('calendar', { size: 15 })} جدول کل کانون (درگ و دراپ)</a><button type="button" class="btn sm soft" id="schedPhoto">${icon('camera', { size: 16 })} ثبت از روی عکس برنامه</button><select class="input" id="schedSel" style="width:auto">${md.classes.map((c) => `<option value="${c.id}">${gradeName(c.grade)} ${esc(c.name)}</option>`).join('')}</select><button type="button" class="btn sm ghost" id="schedNewClass" title="افزودن کلاس جدید">${icon('plus', { size: 15 })} کلاس جدید</button></span></div><div id="sched"></div></div>`;
@@ -713,13 +715,17 @@ async function staff(el) {
   // فهرست درس‌ها از تنظیمات کانون می‌آید و داخل همین پنجره قابل ویرایش است
   const SUBJECTS = [...(md.subjects || [])];
   const teacherModal = async (t) => {
-    const assign = t ? (await api(`/api/manager/teachers/${t.id}`)).assign : [];
+    const td = t ? await api(`/api/manager/teachers/${t.id}`) : null;
+    const assign = td ? td.assign : [];
+    const cGrades = new Set(td?.counselor_grades || []);
     modal({
       title: t ? `${icon('edit', { size: 16 })} ${esc(t.full_name)}` : ' معلم جدید', wide: true,
       body: `<form class="stack" id="tForm"><div class="form-grid"><div class="field"><label>نام و نام خانوادگی</label><input class="input" name="full_name" value="${esc(t?.full_name || '')}" required></div>
         <div class="field"><label>نام کاربری (لاتین)</label><input class="input ltr" name="username" value="${esc(t?.username || '')}" ${t ? 'disabled' : 'required'}></div>
         <div class="field"><label>${t ? 'رمز جدید (اختیاری)' : 'رمز عبور'}</label><input class="input ltr" name="password" type="password" ${t ? '' : 'required'} minlength="6"></div>
         ${t ? `<div class="field"><label>وضعیت</label><select class="input" name="active"><option value="1" ${t.active ? 'selected' : ''}>فعال</option><option value="0" ${t.active ? '' : 'selected'}>غیرفعال</option></select></div>` : ''}</div>
+        <div class="card flat" style="padding:10px 12px"><label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" id="tIsCo" ${td?.is_counselor ? 'checked' : ''}><b>دسترسی مشاور تحصیلی هم داشته باشد</b></label>
+          <div id="tCoGradesBox" style="margin-top:8px;${td?.is_counselor ? '' : 'display:none'}"><div class="tiny muted" style="margin-bottom:6px">پایه‌های مجاز مشاوره (خالی = همه پایه‌ها):</div><div class="row wrap" style="gap:8px">${md.grades.map((g) => `<label class="chip ${cGrades.has(g) ? 'on' : ''}" style="cursor:pointer"><input type="checkbox" data-tcg="${g}" ${cGrades.has(g) ? 'checked' : ''}> پایه ${gradeName(g)}</label>`).join('')}</div></div></div>
         <div class="label">درس‌های قابل انتخاب <span class="tiny muted">(نام را برای ویرایش تغییر دهید، با ✕ حذف کنید یا درس جدید اضافه کنید)</span></div>
         <div class="row wrap" id="subjChips" style="gap:6px"></div>
         <div class="row" style="gap:6px;margin-top:6px"><input class="input" id="newSubj" placeholder="درس جدید، مثلاً: قرآن" maxlength="40" style="max-width:220px" aria-label="نام درس جدید"><button type="button" class="btn soft sm" id="addSubj">${icon('plus', { size: 16 })} افزودن درس</button></div>
@@ -763,13 +769,17 @@ async function staff(el) {
           if (await persist(SUBJECTS.filter((_, j) => j !== i))) { for (const k of [...checked]) if (k.split('|')[1] === gone) checked.delete(k); drawSubjects(); }
         });
         drawSubjects();
+        $('#tIsCo', m).onchange = (e) => { $('#tCoGradesBox', m).style.display = e.target.checked ? '' : 'none'; };
+        $$('[data-tcg]', m).forEach((cb) => { cb.onchange = () => cb.closest('.chip')?.classList.toggle('on', cb.checked); });
       },
       actions: [{ label: 'انصراف', cls: 'ghost', value: false }, {
         label: ' ذخیره', onClick: async (m) => {
           const f = formData($('#tForm', m));
           const asg = $$('[data-as]:checked', m).map((c) => { const [class_id, subject] = c.dataset.as.split('|'); return { class_id: Number(class_id), subject }; });
-          if (t) await put(`/api/manager/teachers/${t.id}`, { full_name: f.full_name, password: f.password || undefined, active: f.active === '1', assign: asg });
-          else await post('/api/manager/teachers', { ...f, assign: asg });
+          const is_counselor = $('#tIsCo', m).checked;
+          const counselor_grades = $$('[data-tcg]:checked', m).map((c) => Number(c.dataset.tcg));
+          if (t) await put(`/api/manager/teachers/${t.id}`, { full_name: f.full_name, password: f.password || undefined, active: f.active === '1', is_counselor, counselor_grades, assign: asg });
+          else await post('/api/manager/teachers', { ...f, is_counselor, counselor_grades, assign: asg });
           toast('ذخیره شد', 'ok'); staff(el);
         },
       }],
@@ -1066,26 +1076,55 @@ async function shopAdmin(el, _p, me) {
 
 // حساب‌های مستقل مشاور؛ تنها مدیر کانون به ساخت و ویرایش دسترسی دارد.
 async function counselors(el, params, me) {
-  setHead('مدیریت مشاوران', 'ساخت حساب مشاور تحصیلی برای دانش‌آموزان کانون', '<button class="btn sm" id="newCounselor">مشاور جدید</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllCo" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ مشاوران…</button></div></details>');
+  setHead('مدیریت مشاوران', 'ساخت حساب مشاور تحصیلی و تعیین پایه‌های مجاز', '<button class="btn sm" id="newCounselor">مشاور جدید</button> <details class="ad-dd"><summary class="btn ghost sm" aria-label="امکانات بیشتر">' + icon('more', { size: 17 }) + '</summary><div class="ad-dd-menu"><button type="button" id="delAllCo" class="danger">' + icon('trash', { size: 16 }) + ' حذف همهٔ مشاوران…</button></div></details>');
   $('#delAllCo').onclick = () => deleteAll('counselors', 'مشاوران', () => counselors(el, params, me));
   const data = await api('/api/manager/counselors');
   const list = Array.isArray(data) ? data : data.counselors;
-  el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>مشاور</th><th>نام کاربری</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>${list.map(c => `<tr><td><div class="row">${nameAvatar(c.full_name)}<b>${esc(c.full_name)}</b></div></td><td><bdi>${esc(c.username || c.national_code || '—')}</bdi></td><td><span class="badge ${c.active ? 'green' : 'red'}">${c.active ? 'فعال' : 'غیرفعال'}</span></td><td><button class="btn sm ghost" data-edit-counselor="${c.id}">${icon('edit')} ویرایش</button></td></tr>`).join('') || `<tr><td colspan="4">${empty('users', 'هنوز مشاوری ثبت نشده؛ با «مشاور جدید» حساب بسازید.')}</td></tr>`}</tbody></table></div></div>`;
-  const edit = (c = {}) => modal({
-    title: c.id ? 'ویرایش مشاور' : 'مشاور جدید',
-    body: `<form class="stack" id="counselorForm"><div class="field"><label>نام و نام خانوادگی</label><input class="input" name="full_name" required maxlength="80" value="${esc(c.full_name || '')}"></div><div class="field"><label>نام کاربری</label><input class="input ltr" name="username" autocomplete="off" required maxlength="40" pattern="[a-zA-Z0-9_.]{3,40}" value="${esc(c.username || '')}" ${c.id ? 'readonly' : ''}></div><div class="field"><label>${c.id ? 'رمز جدید (برای حفظ رمز خالی بگذارید)' : 'رمز عبور (حداقل ۶ نویسه)'}</label><input class="input ltr" type="password" name="password" autocomplete="new-password" minlength="6" ${c.id ? '' : 'required'}></div><div class="field"><label>وضعیت حساب</label><select class="input" name="active"><option value="1">فعال</option><option value="0" ${c.active === 0 ? 'selected' : ''}>غیرفعال</option></select></div></form>`,
-    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ذخیره مشاور', onClick: async m => {
-      const form = $('#counselorForm', m);
-      if (!form.reportValidity()) return false;
-      const f = formData(form), body = { ...f, active: f.active === '1' };
-      if (!body.password) delete body.password;
-      if (c.id) await put(`/api/manager/counselors/${c.id}`, body); else await post('/api/manager/counselors', body);
-      toast('حساب مشاور ذخیره شد', 'ok');
-      await counselors(el, params, me);
-    } }],
-  });
+  const GRADES = [4, 5, 6, 7, 8, 9];
+  const gradeLabel = (c) => (c.grades?.length ? c.grades.map((g) => `<span class="badge blue" style="font-size:11px">پایه ${gradeName(g)}</span>`).join(' ') : '<span class="badge gray" style="font-size:11px">همه پایه‌ها</span>');
+  el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>مشاور</th><th>نام کاربری</th><th>پایه‌های مجاز</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>${list.map(c => `<tr><td><div class="row">${nameAvatar(c.full_name)}<b>${esc(c.full_name)}</b></div></td><td><bdi>${esc(c.username || c.national_code || '—')}</bdi></td><td><div class="row wrap" style="gap:4px">${gradeLabel(c)}</div></td><td><span class="badge ${c.active ? 'green' : 'red'}">${c.active ? 'فعال' : 'غیرفعال'}</span></td><td><button class="btn sm ghost" data-edit-counselor="${c.id}">${icon('edit')} ویرایش</button></td></tr>`).join('') || `<tr><td colspan="5">${empty('users', 'هنوز مشاوری ثبت نشده؛ با «مشاور جدید» حساب بسازید.')}</td></tr>`}</tbody></table></div></div>`;
+  const edit = (c = {}) => {
+    const selGrades = new Set(c.grades || []);
+    modal({
+      title: c.id ? 'ویرایش مشاور' : 'مشاور جدید',
+      body: `<form class="stack" id="counselorForm"><div class="field"><label>نام و نام خانوادگی</label><input class="input" name="full_name" required maxlength="80" value="${esc(c.full_name || '')}"></div><div class="field"><label>نام کاربری</label><input class="input ltr" name="username" autocomplete="off" required maxlength="40" pattern="[a-zA-Z0-9_.]{3,40}" value="${esc(c.username || '')}" ${c.id ? 'readonly' : ''}></div><div class="field"><label>${c.id ? 'رمز جدید (برای حفظ رمز خالی بگذارید)' : 'رمز عبور (حداقل ۶ نویسه)'}</label><input class="input ltr" type="password" name="password" autocomplete="new-password" minlength="6" ${c.id ? '' : 'required'}></div><div class="field"><label>پایه‌های مجاز نظارت (در صورت انتخاب‌نکردن، همه پایه‌ها مجاز است)</label><div class="row wrap" style="gap:8px">${GRADES.map((g) => `<label class="chip ${selGrades.has(g) ? 'on' : ''}" style="cursor:pointer"><input type="checkbox" data-cg="${g}" ${selGrades.has(g) ? 'checked' : ''}> پایه ${gradeName(g)}</label>`).join('')}</div></div><div class="field"><label>وضعیت حساب</label><select class="input" name="active"><option value="1">فعال</option><option value="0" ${c.active === 0 ? 'selected' : ''}>غیرفعال</option></select></div></form>`,
+      onOpen: (m) => { $$('[data-cg]', m).forEach((cb) => { cb.onchange = () => cb.closest('.chip')?.classList.toggle('on', cb.checked); }); },
+      actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ذخیره مشاور', onClick: async m => {
+        const form = $('#counselorForm', m);
+        if (!form.reportValidity()) return false;
+        const f = formData(form);
+        const grades = $$('[data-cg]:checked', m).map((cb) => Number(cb.dataset.cg));
+        const body = { ...f, active: f.active === '1', grades };
+        if (!body.password) delete body.password;
+        if (c.id) await put(`/api/manager/counselors/${c.id}`, body); else await post('/api/manager/counselors', body);
+        toast('حساب مشاور ذخیره شد', 'ok');
+        await counselors(el, params, me);
+      } }],
+    });
+  };
   $('#newCounselor').onclick = () => edit();
   on(el, 'click', '[data-edit-counselor]', (_e, b) => edit(list.find(c => c.id === Number(b.dataset.editCounselor))));
+}
+
+// ================= مصوبات جلسات کانون =================
+async function meetings(el, _p, me) {
+  setHead('مصوبات جلسات کانون', 'ثبت و پیگیری تصمیمات و مصوبات جلسات آموزشی و مدیریتی', `<button class="btn sm" id="newMeeting">${icon('plus', { size: 16 })} ثبت مصوبه جدید</button>`);
+  const ST = { pending: ['در انتظار اجرا', 'orange'], in_progress: ['در حال پیگیری', 'blue'], done: ['اجرا شده', 'green'] };
+  const list = await api('/api/manager/meetings');
+  el.innerHTML = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>تاریخ</th><th>عنوان جلسه</th><th>مسئول پیگیری</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>${list.map((m) => `<tr><td class="tiny">${jdate(m.meeting_date)}</td><td><b>${esc(m.title)}</b><div class="tiny muted">${esc(m.decisions).slice(0, 100)}${m.decisions.length > 100 ? '…' : ''}</div></td><td class="small">${esc(m.owner_name || '—')}</td><td><span class="badge ${ST[m.status]?.[1] || 'gray'}">${ST[m.status]?.[0] || m.status}</span></td><td><div class="row" style="gap:4px"><button class="btn sm ghost" data-em="${m.id}">${icon('edit', { size: 15 })} ویرایش</button><button class="icon-btn" data-dm="${m.id}" style="color:var(--red)" aria-label="حذف">${icon('trash', { size: 15 })}</button></div></td></tr>`).join('') || `<tr><td colspan="5">${empty('clipboard', 'هنوز مصوبه‌ای ثبت نشده است')}</td></tr>`}</tbody></table></div></div>`;
+  const openForm = (m = {}) => modal({
+    title: m.id ? 'ویرایش مصوبه جلسه' : 'ثبت مصوبه جدید', wide: true,
+    body: `<form class="stack" id="mtgForm"><div class="form-grid"><div class="field"><label>عنوان جلسه</label><input class="input" name="title" required maxlength="150" value="${esc(m.title || '')}"></div><div class="field"><label>تاریخ جلسه</label>${dateField('mDate', m.meeting_date || me.today, { minYear: 1403, maxYear: 1407 })}</div><div class="field"><label>مسئول پیگیری</label><input class="input" name="owner_name" maxlength="100" value="${esc(m.owner_name || '')}"></div><div class="field"><label>وضعیت</label><select class="input" name="status"><option value="pending" ${m.status === 'pending' ? 'selected' : ''}>در انتظار اجرا</option><option value="in_progress" ${m.status === 'in_progress' ? 'selected' : ''}>در حال پیگیری</option><option value="done" ${m.status === 'done' ? 'selected' : ''}>اجرا شده</option></select></div></div><div class="field"><label>حاضرین</label><input class="input" name="attendees" maxlength="500" value="${esc(m.attendees || '')}"></div><div class="field"><label>دستور جلسه</label><input class="input" name="agenda" maxlength="1000" value="${esc(m.agenda || '')}"></div><div class="field"><label>شرح مصوبات</label><textarea class="input" name="decisions" rows="4" required maxlength="4000">${esc(m.decisions || '')}</textarea></div></form>`,
+    actions: [{ label: 'انصراف', cls: 'ghost', value: false }, { label: 'ذخیره مصوبه', onClick: async (dlg) => {
+      const f = $('#mtgForm', dlg); if (!f.reportValidity()) return false;
+      const body = { ...formData(f), meeting_date: readDate(dlg, 'mDate') || me.today };
+      if (m.id) await put(`/api/manager/meetings/${m.id}`, body); else await post('/api/manager/meetings', body);
+      toast('مصوبه ذخیره شد', 'ok'); meetings(el, _p, me);
+    } }],
+  });
+  $('#newMeeting').onclick = () => openForm();
+  on(el, 'click', '[data-em]', (_e, b) => openForm(list.find((x) => x.id === Number(b.dataset.em))));
+  on(el, 'click', '[data-dm]', async (_e, b) => { if (await confirmBox('این مصوبه حذف شود؟', 'حذف مصوبه')) { await del(`/api/manager/meetings/${b.dataset.dm}`); toast('حذف شد', 'ok'); meetings(el, _p, me); } });
 }
 
 // ================= تنظیمات =================
@@ -1287,13 +1326,14 @@ async function studentsClassic(el) {
     toast(paid ? (r.unset ? 'پرداخت‌شده ثبت شد؛ مبلغ پایه هنوز تعیین نشده (بعداً در حسابداری کامل می‌شود)' : 'حق عضویت پرداخت‌شده ثبت شد و در حسابداری آمد') : 'پرداخت لغو شد', 'ok', 5000);
     load();
   }));
-  if ($('#exportStCsv')) $('#exportStCsv').onclick = async () => {
-    const r = await api(`/api/manager/students?${new URLSearchParams({ ...q, limit: 100, offset: 0 })}`);
-    if (!r.rows.length) return toast('دانش‌آموزی برای خروجی نیست', 'err');
-    downloadCsv(`students-${curPeriod || 'list'}.csv`,
-      ['نام و نام خانوادگی', 'کد ملی', 'پایه', 'کلاس', 'مدرسه', 'موبایل والدین', 'وضعیت ماه جاری', 'طلب ماه قبل'],
-      r.rows.map((s) => [s.full_name, s.national_code, gradeName(s.grade), s.class_name || '', s.school || '', s.parent_phone || '', PAY[s.pay]?.[0] || s.pay, s.prev_unpaid ? 'بله' : 'خیر']));
-    toast('فایل اکسل (CSV) آماده شد', 'ok');
+  if ($('#exportStCsv')) $('#exportStCsv').onclick = () => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v && k !== 'offset') params.set(k, v);
+    const a = document.createElement('a');
+    a.href = `/api/manager/students/export.xlsx?${params}`;
+    a.download = `students-${curPeriod || 'list'}.xlsx`;
+    a.click();
+    toast('فایل اکسل (XLSX) در حال دریافت است', 'ok');
   };
   if ($('#printStList')) $('#printStList').onclick = async () => {
     const r = await api(`/api/manager/students?${new URLSearchParams({ ...q, limit: 100, offset: 0 })}`);
@@ -1517,6 +1557,7 @@ async function accountingClassic(el, _p, me) {
 export const routes = [
   { path: '/home', view: home },
   { path: '/counselors', view: counselors },
+  { path: '/meetings', view: meetings },
   { path: '/students', view: (el, p, me) => (isNewLook() ? students : studentsClassic)(el, p, me) },
   { path: '/staff', view: staff },
   { path: '/timetable', view: managerTimetable },

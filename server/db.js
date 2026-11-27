@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { seedBuiltinQuestions } from './qb-builtin-seed.js';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DATA_DIR = process.env.ROSHD_DATA_DIR || path.join(ROOT, 'data');
@@ -962,6 +963,74 @@ CREATE TABLE IF NOT EXISTS fee_invoices (
         }
       }
     }
+  },
+  // نسخه ۲۳: ستون‌های معلم-مشاور، پایه‌های مشاور و جدول مصوبات جلسات کانون
+  (database) => {
+    const uCols = database.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    if (!uCols.includes('is_counselor')) database.exec('ALTER TABLE users ADD COLUMN is_counselor INTEGER NOT NULL DEFAULT 0');
+    if (!uCols.includes('counselor_grades_json')) database.exec("ALTER TABLE users ADD COLUMN counselor_grades_json TEXT DEFAULT '[]'");
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS meeting_resolutions (
+        id INTEGER PRIMARY KEY,
+        center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        meeting_date TEXT NOT NULL,
+        attendees TEXT DEFAULT '',
+        agenda TEXT DEFAULT '',
+        decisions TEXT NOT NULL,
+        owner_name TEXT DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_progress','done')),
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS ix_meetings_center ON meeting_resolutions(center_id, meeting_date);
+    `);
+  },
+  // نسخه ۲۴: جدول یادداشت‌ها و نقاشی‌های روی صفحات کتاب درسی
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS textbook_notes (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        book_id TEXT NOT NULL,
+        page INTEGER NOT NULL,
+        note_text TEXT DEFAULT '',
+        drawing_json TEXT DEFAULT '',
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(user_id, book_id, page)
+      );
+      CREATE INDEX IF NOT EXISTS ix_tb_notes_user ON textbook_notes(user_id, book_id);
+    `);
+    const libPath = path.join(ROOT, 'server', 'textbooks-library.json');
+    const catalogPath = fs.existsSync(libPath) ? libPath : path.join(ROOT, 'server', 'textbooks.json');
+    if (fs.existsSync(catalogPath)) {
+      const cat = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+      const insBook = database.prepare('INSERT OR IGNORE INTO textbooks (id, book_code, title, subject_key, grade, published) VALUES (?,?,?,?,?,1)');
+      const insEd = database.prepare('INSERT OR IGNORE INTO textbook_editions (book_id, edition_label, pub_year, printed_pages, pdf_offset, sha256, is_default, published) VALUES (?,?,?,?,?,?,1,1)');
+      const getEd = database.prepare('SELECT id FROM textbook_editions WHERE book_id=? AND edition_label=?');
+      const insCh = database.prepare('INSERT OR IGNORE INTO textbook_chapters (edition_id, number, title, printed_start, printed_end, pdf_start) VALUES (?,?,?,?,?,?)');
+      const getCh = database.prepare('SELECT id FROM textbook_chapters WHERE edition_id=? AND number=?');
+      const insPg = database.prepare('INSERT OR IGNORE INTO textbook_pages (edition_id, printed_page, pdf_page, chapter_id) VALUES (?,?,?,?)');
+      for (const b of cat) {
+        const code = `${(b.subject_key === 'ریاضی' ? 'MATH' : b.subject_key === 'علوم' ? 'SCI' : 'BOOK')}-${String(b.grade).padStart(2, '0')}`;
+        insBook.run(b.id, code, b.title, b.subject_key, b.grade);
+        insEd.run(b.id, '1405', 1405, b.printed_pages || 1, b.pdf_offset || 0, b.sha256 || null);
+        const ed = getEd.get(b.id, '1405');
+        if (!ed) continue;
+        const chMap = [];
+        for (const c of (b.chapters || [])) {
+          insCh.run(ed.id, c.number, c.title, c.printed_start, c.printed_end, c.pdf_start ?? null);
+          const cr = getCh.get(ed.id, c.number);
+          if (cr) chMap.push({ id: cr.id, start: c.printed_start, end: c.printed_end });
+        }
+        const offset = Number(b.pdf_offset || 0);
+        for (let p = 1; p <= (b.printed_pages || 0); p++) {
+          const ch = chMap.find((x) => p >= x.start && p <= x.end);
+          insPg.run(ed.id, p, p + offset, ch ? ch.id : null);
+        }
+      }
+    }
+    seedBuiltinQuestions(database);
   },
 ];
 

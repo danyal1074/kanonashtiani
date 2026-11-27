@@ -44,6 +44,7 @@ export const nav = (me) => [
   ...(me.textbooks_enabled ? [{ path: '/textbooks', icon: 'book', label: 'کتاب‌های درسی (دمو)' }] : []),
   { path: '/timetable', icon: 'calendar', label: 'برنامه هفتگی من' },
   { path: '/plans', icon: 'calendar', label: 'تقویم و برنامه' },
+  ...(me.is_counselor ? [{ path: '/counselor', icon: 'users', label: 'میز کار مشاور' }] : []),
   { path: '/more', icon: 'more', label: 'موارد بیشتر' },
 ];
 export const bottomNav = () => [
