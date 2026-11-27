@@ -34,8 +34,6 @@ export function tileIcon(r){
   return `<span class="ai">${base}</span>`;
 }
 
-const CORE_ICONS={book:'ic-lessons.png',clipboard:'ic-homework.png','file-check':'ic-exams.png','file-text':'ic-content.png',users:'ic-students.png',calendar:'ic-schedule.png',chart:'ic-progress.png',trend:'ic-growth.png',trophy:'ic-challenges.png',award:'md-gold.png',message:'ic-messages.png',settings:'ic-settings.png',graduation:'ic-myclass.png',cap:'ic-myclass.png',flask:'sm-flask.png',board:'ic-teachers.png',building:'ic-classes.png',wallet:'ic-fee.png',timer:'extra-study.webp',gamepad:'ic-games.png',user:'ic-profile.png',card:'ic-fee.png',bag:'extra-shop.webp',target:'ic-target.png',calculator:'ls-math.png',languages:'ls-english.png',globe:'ls-social.png',compass:'extra-learning-path.webp',coins:'ic-points.png',receipt:'ic-reports.png',sparkles:'ic-route.png'};
 export function elementaryIcon(name,{size=20,cls='',label=''}={}){
- const file=CORE_ICONS[name];if(!file)return null;const safe=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const n=Number.isFinite(Number(size))?Math.max(1,Math.min(512,Number(size))):20;
- return `<img class="ic icon-3d elementary-icon ${safe(cls)}" data-icon="${safe(name)}" src="${u(file)}" width="${n}" height="${n}" style="width:${n}px;height:${n}px;object-fit:contain" alt="${safe(label)}" ${label?'':'aria-hidden="true"'} decoding="async">`;
+ return null;
 }

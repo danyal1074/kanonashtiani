@@ -151,19 +151,25 @@ export function formData(form) {
 export async function busy(btn, fn) {
   if (btn?.disabled) return;
   const old = btn?.innerHTML;
-  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ لطفاً صبر کنید…'; }
-  try { return await fn(); } catch (e) { toast(e.message, 'err'); } finally { if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = old; } }
+  if (btn) { btn.disabled = true; btn.classList.add('is-busy'); btn.innerHTML = '<span class="btn-spin" aria-hidden="true"></span> در حال انجام…'; }
+  try { return await fn(); } catch (e) { toast(e.message, 'err'); } finally { if (btn && btn.isConnected) { btn.disabled = false; btn.classList.remove('is-busy'); btn.innerHTML = old; } }
 }
 
-export function toast(msg, type = '', ms = 3200) {
+export function toast(msg, type = '', ms = 3400) {
   let box = $('.toasts');
   if (!box) { box = document.createElement('div'); box.className = 'toasts'; document.body.append(box); }
   const t = document.createElement('div');
   t.className = `toast ${type}`;
   t.setAttribute('role', type === 'err' ? 'alert' : 'status');
-  t.innerHTML = `${icon(type === 'ok' ? 'check-circle' : type === 'err' ? 'alert' : 'info', { size: 18 })} <span>${esc(String(msg).trim())}</span>`;
+  t.innerHTML = `${icon(type === 'ok' ? 'check-circle' : type === 'err' ? 'alert' : 'info', { size: 18 })} <span class="toast-msg">${esc(String(msg).trim())}</span><button type="button" class="toast-x" aria-label="بستن اعلان">${icon('x', { size: 14 })}</button>`;
+  const dismiss = () => {
+    if (t.classList.contains('is-leaving')) return;
+    t.classList.add('is-leaving');
+    setTimeout(() => t.remove(), 220);
+  };
+  t.querySelector('.toast-x').onclick = dismiss;
   box.append(t);
-  setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, ms);
+  setTimeout(dismiss, ms);
 }
 
 export function modal({ title, body, wide = false, actions = [], onOpen }) {

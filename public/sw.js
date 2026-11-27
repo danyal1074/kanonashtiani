@@ -1,5 +1,5 @@
 // کارگر سرویس محافظه‌کار: فقط دارایی‌های ایستا. HTML، ورود و API کش نمی‌شوند.
-const CACHE = 'roshd-static-v1';
+const CACHE = 'roshd-static-v2';
 const PRECACHE = [
   '/manifest.webmanifest',
   '/icons/icon-192.png',

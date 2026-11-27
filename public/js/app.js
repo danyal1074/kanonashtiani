@@ -127,6 +127,7 @@ async function render() {
   document.body.classList.toggle('counselor-ui', !pub && path !== '/login' && state.me?.user.role === 'counselor');
   document.body.classList.toggle('teacher-ui', !pub && path !== '/login' && state.me?.user.role === 'teacher');
   if (pub || path === '/login' || state.me?.user.role !== 'teacher') document.body.classList.remove('teacher-minimal', 'teacher-home');
+  if (pub || path === '/login' || !state.me || state.me?.user?.role !== 'student') document.querySelector('.profile-hint')?.remove();
   if (pub) { const box = document.createElement('div'); root.replaceChildren(box); return pub.r.view(box, pub.params); }
   if (path === '/login' || !state.me) {
     if (state.me) { location.hash = '#/home'; return; }
@@ -186,14 +187,15 @@ function fullscreen(html, onReady) {
 // یادآوری غیراجباری: اطلاعات پروفایل که ثبت نشده‌اند را دانش‌آموز هر وقت خواست پر می‌کند
 function profileBanner(me) {
   document.querySelector('.profile-hint')?.remove();
-  const miss = me.student?.missing || [];
-  if (me.user.role !== 'student' || !miss.length) return;
+  const miss = me?.student?.missing || [];
+  if (me?.user?.role !== 'student' || !miss.length) return;
   try { if (sessionStorage.getItem('roshd-info-hint')) return; } catch { /* */ }
+  const target = document.querySelector('.main .topbar') || document.querySelector('#view');
+  if (!target) return;
   const bar = document.createElement('div');
   bar.className = 'profile-hint'; bar.setAttribute('role', 'status');
-  bar.style.cssText = 'position:fixed;inset-inline:12px;bottom:84px;z-index:60;max-width:520px;margin-inline:auto;background:#fff;color:#1c2a4a;border:1px solid #c7d7f5;border-radius:16px;box-shadow:0 8px 24px #1b3a7a2b;padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px';
-  bar.innerHTML = `<span class="grow" style="flex:1 1 200px">اطلاعات پروفایلت هنوز کامل نیست (${esc(miss.map((m) => m.label).join('، '))}). هر وقت خواستی تکمیلش کن.</span><button class="btn sm" data-fill>تکمیل اطلاعات</button><button class="btn sm ghost" data-later>بعداً</button>`;
-  document.body.append(bar);
+  bar.innerHTML = `<span class="grow">اطلاعات پروفایلت هنوز کامل نیست (${esc(miss.map((m) => m.label).join('، '))}). هر وقت خواستی تکمیلش کن.</span><div class="row" style="gap:8px;flex:none"><button class="btn sm" data-fill>تکمیل اطلاعات</button><button class="btn sm ghost" data-later>بعداً</button></div>`;
+  target.insertAdjacentElement('afterend', bar);
   const hide = () => { try { sessionStorage.setItem('roshd-info-hint', '1'); } catch { /* */ } bar.remove(); };
   bar.querySelector('[data-later]').onclick = hide;
   bar.querySelector('[data-fill]').onclick = () => { hide(); openInfoForm(me); };
@@ -228,7 +230,7 @@ async function passwordHint(me) {
 }
 
 async function showBirthday(me) {
-  if (!me.student?.birthday) return;
+  if (!me?.student?.birthday) return;
   const key = `roshd-bday-${me.user.id}-${me.today}`;
   try { if (localStorage.getItem(key)) return; } catch { /* حافظه در دسترس نیست */ }
   confetti(160);
@@ -239,7 +241,7 @@ async function showBirthday(me) {
   });
 }
 async function showAnnouncements(me) {
-  const list = me.unseen || [];
+  const list = me?.unseen || [];
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
     await fullscreen(`<div class="fs-card" role="dialog" aria-modal="true" aria-labelledby="anT${i}"><div class="fs-dots" aria-hidden="true">${list.map((_, j) => `<i class="${j === i ? 'on' : ''}"></i>`).join('')}</div>

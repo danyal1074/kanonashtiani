@@ -87,7 +87,7 @@ export async function loginView(root, onDone) {
   // نمونهٔ نمایشی (دمو): حساب‌های ساختگی را معرفی می‌کند؛ در نسخهٔ واقعی چیزی نشان داده نمی‌شود
   api('/api/public/mode').then((m) => {
     if (!m?.demo || !$('#loginForm', root)) return;
-    $('#loginForm', root).insertAdjacentHTML('afterend', `<div role="note" style="margin-top:14px;padding:12px;border-radius:14px;background:#fff7e0;border:1px solid #f2d27a;color:#5b4300;font-size:13px;line-height:1.9"><b>نسخهٔ نمایشی — همهٔ اطلاعات ساختگی است.</b><br>دانش‌آموز: student ، دبستان: student5 ، معلم: teacher ، مشاور: counselor ، مدیر کانون: manager ، مدیر سامانه: admin<br>رمز همه: 123456</div>`);
+    $('#loginForm', root).insertAdjacentHTML('afterend', `<div class="lg-demo-note" role="note"><b>نسخهٔ نمایشی — همهٔ اطلاعات ساختگی است.</b><br>دانش‌آموز: <code>student</code> • دبستان: <code>student5</code> • معلم: <code>teacher</code> • مشاور: <code>counselor</code> • مدیر کانون: <code>manager</code> • مدیر سامانه: <code>admin</code><br>رمز عبور همه: <code>123456</code></div>`);
   }).catch(() => {});
   $('#loginForm', root).onsubmit = async (e) => {
     e.preventDefault();

@@ -17,7 +17,7 @@ function loadCss(href) {
 
 export async function applyLook(me) {
   const role = me.user.role;
-  const look = me.ui_look === 'new' ? 'new' : me.ui_look === 'classic' ? 'classic' : role === 'teacher' ? 'classic' : 'new';
+  const look = me.ui_look === 'new' ? 'new' : me.ui_look === 'classic' ? 'classic' : 'new';
   document.body.classList.remove('look-new', 'look-classic');
   document.body.classList.add(`look-${look}`);
   document.body.classList.toggle('teacher-minimal', role === 'teacher' && look === 'new');
