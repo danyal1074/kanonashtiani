@@ -1,5 +1,7 @@
 import { OUTLINE } from './outline-icons.js';
 import { managerIcon } from './manager-icons.js';
+import { elementaryIcon } from './elementary-art.js';
+import { studentIcon } from './student-icons.js';
 
 const ALIASES = {
   books: 'book',
@@ -24,6 +26,11 @@ export function icon(name, { size = 20, cls = '', label = '' } = {}) {
     const html = managerIcon(name, { size, cls, label });
     if (html) return html;
   }
+  if (globalThis.document?.body?.classList?.contains('student-elementary')) {
+    const el = elementaryIcon(name, { size, cls, label });
+    if (el) return el;
+  }
+  if (globalThis.document?.body?.classList?.contains('student-ui')) return studentIcon(name, { size, cls, label });
   const key = ALIASES[name] || name;
   const resolved = Object.hasOwn(OUTLINE, key) ? key : 'info';
   const body = OUTLINE[resolved];
